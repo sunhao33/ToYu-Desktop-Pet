@@ -38,22 +38,6 @@ media/
 # Backup files
 *.bak
 
-# Promo text (root)
-/steam_bilibili_promo.txt
-
-# Screenshots (root)
-/泳道图.png
-/*.jpg
-
-# Test screenshots / temp files (desktop-pet root)
-/desktop-pet/auto_home_test.png
-/desktop-pet/bead_editor_live.png
-/desktop-pet/bead_editor_live2.png
-/desktop-pet/bead_editor_test.png
-/desktop-pet/bead_editor_test2.png
-/desktop-pet/tab1_pet.png
-/desktop-pet/tab2_features.png
-/desktop-pet/tab3_tools.png
-/desktop-pet/test_bead.png
-/desktop-pet/test_output.png
-/desktop-pet/test_result.png
+# Screenshots
+*.png
+*.jpg
