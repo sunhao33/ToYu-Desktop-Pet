@@ -1,0 +1,38 @@
+ToYu 打包规范
+=============
+
+## 版本号
+- 每次功能更新 +0.01，命名格式：YoTu0.XX.zip（例：YoTu0.30.zip）
+- 满 10 个版本时，创建文件夹（如 0.21-0.30）并将这 10 个 zip 移入归档
+
+## 输出位置
+- zip 文件放到 C:\Users\34338\Desktop\003\ 目录下（003 根目录）
+
+## 打包步骤
+
+### 1. 更新资源列表
+- 检查 ToYu.spec 的 datas 列表，确保所有新资源文件都加入：
+  - resources/ 下的所有图片、音频等
+
+### 2. 构建
+```bash
+cd "C:\Users\34338\Desktop\003\desktop-pet"
+python -m PyInstaller ToYu.spec --noconfirm
+```
+
+### 3. 创建 zip
+- 根目录放：ToYu.exe、changelog.txt
+- desktop-pet/ 子目录放完整源码：
+  - main.py
+  - requirements.txt
+  - changelog.txt
+  - image_processor/
+  - pet_engine/
+  - resources/
+  - ui/
+- 格式参考上次成功的打包（如 v0.29），用 zipfile.ZIP_DEFLATED 压缩
+
+### 4. 验证
+- 确认 zip 内 ToYu.exe 在根目录
+- 确认 changelog.txt 在根目录
+- 确认 desktop-pet/ 下有完整源码

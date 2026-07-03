@@ -1,0 +1,59 @@
+# Build / Packaging
+desktop-pet/build/
+desktop-pet/dist/
+*.spec.bak
+__pycache__/
+*.pyc
+*.pyo
+
+# Archives / Zips
+*.zip
+archive/
+
+# IDE
+.idea/
+.vscode/
+*.iml
+
+# OS
+Thumbs.db
+.DS_Store
+
+# Sensitive / Runtime data
+ai_config.json
+ai_chat_history.json
+weather_cache.json
+calendar_events.json
+
+# Temp / Media
+temp/
+media/
+
+# Claude local config
+.claude/
+
+# PDFs
+*.pdf
+
+# Backup files
+*.bak
+
+# Promo text (root)
+/steam_bilibili_promo.txt
+
+# Screenshots (root)
+/泳道图.png
+/*.jpg
+
+# Test screenshots / temp files (desktop-pet root)
+/desktop-pet/auto_home_test.png
+/desktop-pet/bead_editor_live.png
+/desktop-pet/bead_editor_live2.png
+/desktop-pet/bead_editor_test.png
+/desktop-pet/bead_editor_test2.png
+/desktop-pet/tab1_pet.png
+/desktop-pet/tab2_features.png
+/desktop-pet/tab3_tools.png
+/desktop-pet/test_bead.png
+/desktop-pet/test_output.png
+/desktop-pet/test_result.png

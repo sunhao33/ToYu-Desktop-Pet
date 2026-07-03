@@ -1,0 +1,145 @@
+ToYu 项目规范总集
+==================
+
+═══════════════════════════════════
+一、打包规范
+═══════════════════════════════════
+
+1. 版本号：每次功能更新 +0.01，命名 YoTu0.XX.zip（如 YoTu0.31.zip）
+2. 输出位置：C:\Users\34338\Desktop\003\
+3. 每满 10 个版本，创建文件夹（如 0.21-0.30）归档
+
+打包步骤：
+  a. 检查 ToYu.spec 的 datas，确保新资源已加入
+  b. cd desktop-pet && python -m PyInstaller ToYu.spec --noconfirm
+  c. 创建 zip：
+     - 根目录：ToYu.exe、changelog.txt
+     - desktop-pet/ 子目录：main.py、requirements.txt、changelog.txt、
+       image_processor/、pet_engine/、resources/、ui/
+  d. 放到 C:\Users\34338\Desktop\003\
+
+═══════════════════════════════════
+二、代码规范
+═══════════════════════════════════
+
+1. 默认不加注释，只在 WHY 不明显时加简短注释
+2. 不加多行 docstring，不加规划/决策/分析文档
+3. 优先编辑已有文件，不新建不必要的新文件
+4. 不过度抽象，三行重复代码好过一个过早的抽象
+5. 不为不可能发生的场景加错误处理/回退/验证
+6. 不用 feature flags 或向后兼容 shim
+7. 不加当前 PR/任务/调用方相关的注释
+8. 小批量迭代，每完成一个功能就打包
+
+═══════════════════════════════════
+三、项目架构
+═══════════════════════════════════
+
+desktop-pet/
+├── main.py                    入口
+├── ToYu.spec                  PyInstaller 配置
+├── changelog.txt              版本记录
+├── PACKAGING.txt              打包说明
+├── image_processor/           图片处理
+│   └── processor.py           路径辅助 + 图像处理
+├── pet_engine/                宠物引擎
+│   ├── pet_window.py          主窗口（游戏循环、渲染、交互）
+│   ├── pet_state_machine.py   状态机（IDLE/WALK/FALL/SIT/HOP 等）
+│   ├── pet_animation.py       动画系统（呼吸、跳跃、交互弹跳）
+│   ├── pet_physics.py         物理（重力、地面检测）
+│   ├── pet_affection.py       好感度（上限100、3分钟-1衰减）
+│   ├── pet_bubble.py          右键气泡（pet模式=状态 / house模式=设置）
+│   ├── pet_food.py            喂食动画（食物 + 飘字）
+│   └── pet_house.py           像素小房子窗口
+├── resources/                 资源文件
+│   ├── toyu_pet.png / tv_pet.png / house.png
+│   ├── knock.wav
+│   └── generate_*.py          资源生成脚本
+└── ui/                        界面
+    ├── main_window.py         主控制窗口
+    ├── settings_manager.py    QSettings 持久化
+    ├── bead_editor.py         拼豆编辑器
+    ├── import_dialog.py       导入对话框
+    └── tray_icon.py           系统托盘
+
+═══════════════════════════════════
+四、SettingsManager 属性清单
+═══════════════════════════════════
+
+pet_image_path         str     宠物图片路径
+pet_position           QPoint  宠物窗口位置
+walking_speed_min/max  float   行走速度范围
+idle_time_min/max      int     空闲时间范围(ms)
+animation_scale        float   动画缩放
+always_on_top          bool    始终置顶
+auto_start             bool    开机自启
+favorites              list    收藏夹
+interaction_mode       str     free/follow/stay
+bead_creations         list    拼豆作品
+pomodoro_enabled       bool    番茄钟开关
+pomodoro_interval      int     番茄钟间隔(分钟)
+pomodoro_last_fired    float   上次番茄钟触发时间戳
+affection_level        int     好感度(0-100)
+affection_last_decay   float   上次衰减时间戳
+feed_last_used         float   上次喂食时间戳
+time_awareness_enabled bool    时间感知开关
+house_enabled          bool    小房子开关
+house_position         QPoint  房子位置
+
+═══════════════════════════════════
+五、PetState / AnimationType
+═══════════════════════════════════
+
+状态：IDLE → WALKING / HOPPING / INTERACTING / FALLING → SITTING → IDLE
+      随时可进入 DRAGGED
+
+动画：IDLE(呼吸眨眼) / WALK(摇摆) / FALL(旋转) / SIT(下压0.3s)
+      INTERACT(弹跳0.3s→IDLE) / HOP(三阶段0.5s→IDLE)
+
+三阶段跳跃：0-30%蹲下 → 30-60%起跳 → 60-100%落地
+
+═══════════════════════════════════
+六、添加新功能的模式
+═══════════════════════════════════
+
+新增气泡按钮：
+  1. PetFunctionBubble 加 pyqtSignal()
+  2. _init_ui 加按钮（_make_btn / _make_small_btn）
+  3. 如有状态切换逻辑，加 set_xxx() 公开方法
+  4. PetWindow._show_function_bubble 连接信号
+  5. HouseWindow._show_function_bubble 转发信号
+
+新增动画：
+  1. AnimationType 枚举加成员
+  2. set_animation() 初始化
+  3. update() 加 elif 块，用 elapsed 计算 transform
+  4. 一次性动画末尾 auto-transition → IDLE
+
+新增状态：
+  1. PetState 枚举加成员
+  2. transition_to() 加 entry 逻辑
+  3. update() 加处理块（放在 IDLE/WALKING 之前）
+  4. on_mouse_click() 加排除条件
+
+新增设置：
+  1. settings_manager.py 加 property getter/setter
+  2. 布尔值用 isinstance(val, str) → val.lower() == "true" 兼容 QSettings
+
+═══════════════════════════════════
+七、时间感知时段
+═══════════════════════════════════
+
+NIGHT   22:00-06:00  速度x0.5  空闲x2.0  跳跃5%   精灵65%透明  房子暖光
+MORNING 06:00-10:00  速度x1.3  空闲x0.5  跳跃50%  正常
+DAY     10:00-18:00  速度x1.0  空闲x1.0  跳跃30%  正常
+EVENING 18:00-22:00  速度x0.8  空闲x1.3  跳跃20%  正常
+
+═══════════════════════════════════
+八、时刻注意
+═══════════════════════════════════
+
+1. 打包前先读 PACKAGING.txt
+2. zip 放到 003 根目录，不是 desktop-pet 目录
+3. 满 10 个版本归档到文件夹
+4. changelog.txt 每次更新写在最上面
+5. 每次功能完成主动提醒打包
