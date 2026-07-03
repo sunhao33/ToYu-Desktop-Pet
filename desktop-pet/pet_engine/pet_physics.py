@@ -10,10 +10,6 @@ sprite_bottom_offset from visible-bounds detection to align precisely.
 
 from PyQt6.QtCore import QRect
 
-
-# ── Constants ────────────────────────────────────────────────
-
-
 class PetPhysics:
     """Frame-based physics with gravity, terminal velocity, and edge bouncing.
 
@@ -90,13 +86,11 @@ class PetPhysics:
         new_x = x + self.vx
         new_y = y + self.vy
 
-        # ── Screen bounds ──
         min_x = self.screen.x()
         max_x = self.screen.x() + self.screen.width() - self.pet_width
         min_y = self.screen.y()
         ground_y = self._ground_y
 
-        # ── Left/right collision ──
         if new_x < min_x:
             new_x = min_x
             self.vx = abs(self.vx) * self.BOUNCE_DAMPING
@@ -104,12 +98,10 @@ class PetPhysics:
             new_x = max_x
             self.vx = -abs(self.vx) * self.BOUNCE_DAMPING
 
-        # ── Ceiling collision ──
         if new_y < min_y:
             new_y = min_y
             self.vy = abs(self.vy) * self.BOUNCE_DAMPING
 
-        # ── Ground collision ──
         if new_y >= ground_y:
             new_y = ground_y
             self.vy = 0
@@ -118,7 +110,6 @@ class PetPhysics:
             # Only unground when moving downward (vy > 0)
             self.grounded = False if self.vy > 0 else self.grounded
 
-        # ── Horizontal friction ──
         if self.grounded:
             self.vx *= self.FRICTION
             # Dead zone: stop micro-drift when nearly stationary

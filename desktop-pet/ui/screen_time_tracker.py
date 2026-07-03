@@ -23,17 +23,13 @@ except ImportError:
 DATA_DIR = os.path.join(os.path.expanduser("~"), ".desktop_pet")
 SCREEN_TIME_FILE = os.path.join(DATA_DIR, "screen_time.json")
 
-# System windows to ignore
 IGNORE_TITLES = {"", "Default IME", "MSCTFIME UI", "CiceroUIWndFrame"}
 IGNORE_APPS = {"explorer.exe", "SearchHost.exe", "SearchUI.exe",
                "StartMenuExperienceHost.exe", "LockApp.exe",
                "TextInputHost.exe", "ShellExperienceHost.exe"}
 
-# Poll interval in seconds
 POLL_INTERVAL = 5
-# Save interval in seconds
 SAVE_INTERVAL = 60
-
 
 class ScreenTimeTracker:
     """Tracks foreground window time in a background thread."""
@@ -42,12 +38,9 @@ class ScreenTimeTracker:
         self._running = False
         self._thread = None
         self._lock = threading.Lock()
-        # Current session buffer: {date: {app: seconds}}
         self._buffer = defaultdict(lambda: defaultdict(float))
-        # Current foreground info
         self._current_app = ""
         self._current_start = 0.0
-        # Persistent data
         self._data = {}
         self._load_data()
 
@@ -117,7 +110,6 @@ class ScreenTimeTracker:
                 except (psutil.NoSuchProcess, psutil.AccessDenied):
                     pass
             else:
-                # Fallback: use ctypes to get process name
                 try:
                     import ctypes
                     from ctypes import wintypes
@@ -146,16 +138,13 @@ class ScreenTimeTracker:
             hwnd = win32gui.GetForegroundWindow()
             if not hwnd:
                 return False
-            # Get window rect
             rect = win32gui.GetWindowRect(hwnd)
-            # Get screen size
             import ctypes
             user32 = ctypes.windll.user32
             sw = user32.GetSystemMetrics(0)
             sh = user32.GetSystemMetrics(1)
             w = rect[2] - rect[0]
             h = rect[3] - rect[1]
-            # Fullscreen if window covers entire screen
             return w >= sw and h >= sh
         except Exception:
             return False
@@ -173,12 +162,10 @@ class ScreenTimeTracker:
     def _run(self):
         """Main tracking loop."""
         last_save = time.time()
-        # Skip first detection to avoid startup noise
         time.sleep(2)
 
         while self._running:
             try:
-                # Skip if fullscreen (game) detected
                 if self._is_fullscreen_game():
                     if self._current_app:
                         self._flush_current()
@@ -191,18 +178,15 @@ class ScreenTimeTracker:
 
                 if app:
                     if app != self._current_app:
-                        # App changed, flush previous
                         self._flush_current()
                         self._current_app = app
                         self._current_start = time.time()
                 else:
-                    # No valid foreground (locked, desktop, etc.)
                     if self._current_app:
                         self._flush_current()
                         self._current_app = ""
                         self._current_start = 0.0
 
-                # Periodic save
                 now = time.time()
                 if now - last_save >= SAVE_INTERVAL:
                     self._flush_current()
@@ -217,12 +201,9 @@ class ScreenTimeTracker:
     def get_today_data(self):
         """Get today's screen time data, sorted by duration desc."""
         today = datetime.now().strftime("%Y-%m-%d")
-        # Merge buffer + saved data
         merged = defaultdict(float)
-        # Saved
         for app, secs in self._data.get(today, {}).items():
             merged[app] += secs
-        # Buffer (not yet saved)
         with self._lock:
             for app, secs in self._buffer.get(today, {}).items():
                 merged[app] += secs
@@ -235,7 +216,6 @@ class ScreenTimeTracker:
         merged = defaultdict(float)
         for app, secs in self._data.get(date_str, {}).items():
             merged[app] += secs
-        # Only include buffer for today
         today = datetime.now().strftime("%Y-%m-%d")
         if date_str == today:
             with self._lock:
@@ -272,6 +252,4 @@ class ScreenTimeTracker:
         Note: Current implementation returns daily app totals distributed evenly.
         For accurate hourly tracking, the buffer would need to store timestamps.
         """
-        # We store daily totals, so we approximate with available data
-        # For now return empty - will be enhanced with timestamp tracking
         return [0.0] * 24

@@ -13,8 +13,6 @@ import urllib.request
 from datetime import datetime
 from typing import Optional, Callable
 
-
-# ── Weather conditions ──
 WEATHER_REACTIONS = {
     "sunny": [
         "今天天气真好！☀️",
@@ -63,7 +61,6 @@ WEATHER_REACTIONS = {
     ],
 }
 
-# ── Time-based greetings ──
 TIME_GREETINGS = {
     "morning": [
         "早安！新的一天开始了～",
@@ -105,7 +102,6 @@ TIME_GREETINGS = {
     ],
 }
 
-# ── Periodic check-in messages ──
 CHECKIN_MESSAGES = [
     "（偷偷看你一眼）",
     "还在忙吗？",
@@ -117,7 +113,6 @@ CHECKIN_MESSAGES = [
     "你看起来很专注！",
 ]
 
-
 class WeatherInfo:
     """Simple weather data."""
     def __init__(self, condition: str = "", temp: int = 0, description: str = ""):
@@ -128,7 +123,6 @@ class WeatherInfo:
     @property
     def is_valid(self):
         return bool(self.condition)
-
 
 class ProactiveSystem:
     """Manages proactive pet behaviors — greetings, weather, check-ins."""
@@ -159,7 +153,6 @@ class ProactiveSystem:
         now = datetime.now()
         hour = now.hour
 
-        # Pick time-appropriate greeting
         if 6 <= hour < 12:
             period = "morning"
         elif 12 <= hour < 14:
@@ -175,7 +168,6 @@ class ProactiveSystem:
 
         greeting = random.choice(TIME_GREETINGS[period])
 
-        # If AI is available, use it for a personalized greeting
         if self._ai and self._ai.is_available():
             self._ai.inject_context(extra="刚开机，请用一句话打招呼，简短可爱")
             def on_response(text):
@@ -191,17 +183,14 @@ class ProactiveSystem:
         """Called periodically (e.g., every minute) to check for proactive actions."""
         now = time.time()
 
-        # Periodic check-in
         if now - self._last_checkin > self._checkin_interval:
             self._last_checkin = now
             self._do_checkin()
 
-        # Weather fetch
         if now - self._last_weather_fetch > self._weather_interval:
             self._last_weather_fetch = now
             self._fetch_weather_async()
 
-        # Night reminder
         hour = datetime.now().hour
         if (hour == 23 or hour == 0) and not self._night_reminded:
             self._night_reminded = True
@@ -211,18 +200,15 @@ class ProactiveSystem:
 
     def _do_checkin(self):
         """Send a periodic check-in message."""
-        # 30% chance to check in (avoid being too chatty)
         if random.random() > 0.3:
             return
 
-        # If weather is interesting, mention it
         if self._weather.is_valid and random.random() < 0.4:
             msg = self._get_weather_message()
             if msg:
                 self._send(msg)
                 return
 
-        # Otherwise, generic check-in
         self._send(random.choice(CHECKIN_MESSAGES))
 
     def _fetch_weather_async(self):
@@ -252,7 +238,6 @@ class ProactiveSystem:
             if not weather_desc:
                 weather_desc = current.get("weatherDesc", [{}])[0].get("value", "")
 
-            # Map to condition category
             desc_lower = weather_desc.lower()
             if any(w in desc_lower for w in ["rain", "drizzle", "shower", "雨"]):
                 condition = "rainy"
@@ -269,7 +254,6 @@ class ProactiveSystem:
             else:
                 condition = "cloudy"
 
-            # Temperature extremes
             if temp_c >= 35:
                 condition = "hot"
             elif temp_c <= 0:

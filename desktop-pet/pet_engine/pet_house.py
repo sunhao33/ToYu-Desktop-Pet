@@ -10,7 +10,6 @@ from PyQt6.QtWidgets import QMainWindow, QApplication
 from image_processor.processor import get_house_path, get_knock_path
 from .pet_bubble import PetFunctionBubble
 
-
 class HouseWindow(QMainWindow):
     """A draggable pixel-art house that the pet can enter and exit."""
 
@@ -80,8 +79,6 @@ class HouseWindow(QMainWindow):
         self._night_glow = enabled
         self.update()
 
-    # ── Door region detection ──
-
     def _door_rect(self):
         """Door area in local coordinates (cols 13-18, rows 22-26 at 5x scale)."""
         return QRect(65, 110, 30, 25)
@@ -100,8 +97,6 @@ class HouseWindow(QMainWindow):
         )
         expanded = door_screen.adjusted(-20, -15, 20, 25)
         return expanded.contains(sprite_bottom_center)
-
-    # ── Mouse events ──
 
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.RightButton:
@@ -126,29 +121,23 @@ class HouseWindow(QMainWindow):
             self.setCursor(Qt.CursorShape.ArrowCursor)
             self.settings.house_position = QPoint(self.x(), self.y())
 
-    # ── Door knock ──
-
     def _on_door_knock(self):
-        # Play knock sound
         if sys.platform == "win32":
             import winsound
             winsound.PlaySound(self._knock_path, winsound.SND_ASYNC)
 
-        # Shake animation
         self._knock_phase = 0
         if not hasattr(self, '_shake_timer') or self._shake_timer is None:
             self._shake_timer = QTimer(self)
             self._shake_timer.timeout.connect(self._shake_tick)
         self._shake_timer.start(16)
 
-        # Release pet
         self._pet_inside = False
         if self._pet_window:
             new_x = self.x() + self.width() + 12
             new_y = self.y() + self.height() - 40
             self._pet_window.move_to(new_x, new_y)
             self._pet_window.show()
-            # Show come-out popup
             self._pet_window._show_come_out_popup()
 
     def _shake_tick(self):
@@ -165,8 +154,6 @@ class HouseWindow(QMainWindow):
             self._shake_timer.stop()
             self._knock_phase = -1
         self.update()
-
-    # ── Rendering ──
 
     def paintEvent(self, event):
         if not self._house_pixmap:
@@ -192,8 +179,6 @@ class HouseWindow(QMainWindow):
             painter.setOpacity(1.0)
 
         painter.end()
-
-    # ── Function bubble ──
 
     def _show_function_bubble(self, global_pos):
         if self._bubble is None:
@@ -229,8 +214,6 @@ class HouseWindow(QMainWindow):
             if remaining > 0 and not self._pet_window._feed_cooldown_timer.isActive():
                 self._pet_window._feed_cooldown_timer.start(1000)
         self._bubble.show_at(global_pos)
-
-    # ── Window management ──
 
     def closeEvent(self, event):
         self.settings.house_position = QPoint(self.x(), self.y())

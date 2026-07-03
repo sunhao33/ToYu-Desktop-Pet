@@ -3,7 +3,6 @@
 from PIL import Image
 import os
 
-# ── Pixel art color palette ──
 C = {
     '.': (0, 0, 0, 0),           # transparent
     'O': (0x5C, 0x3D, 0x1E, 255),  # dark outline
@@ -18,11 +17,7 @@ C = {
     'S': (0x9E, 0x7A, 0x40, 255),  # potato spots/texture
 }
 
-# ── ToYu pixel art (32 columns x 32 rows) ──
-# Each character = 1 "big pixel" which maps to 4x4 real pixels
 TOYU_32 = [
-    #  0         1         2         3
-    #  01234567890123456789012345678901
     "................................",  # 0
     "................................",  # 1
     "............OOOO................",  # 2
@@ -57,10 +52,7 @@ TOYU_32 = [
     "................................",  # 31
 ]
 
-# ToYu pixel art with full coloring (32x32, 4px per cell = 128x128 final)
 TOYU_COLOR = [
-    #  0         1         2         3
-    #  01234567890123456789012345678901
     "................................",  # 0
     "............OOOO................",  # 1
     "..........OOBBBBOO..............",  # 2
@@ -95,7 +87,6 @@ TOYU_COLOR = [
     "................................",  # 31
 ]
 
-
 def render_pixel_art(art, palette, scale=4):
     """Render a pixel art grid to a PIL Image.
 
@@ -121,29 +112,24 @@ def render_pixel_art(art, palette, scale=4):
 
     return img
 
-
 def main():
     output_dir = os.path.dirname(os.path.abspath(__file__))
     scale = 5  # 32×5 = 160px
 
-    # Generate ToYu pet image
     toyu = render_pixel_art(TOYU_COLOR, C, scale=scale)
     pet_path = os.path.join(output_dir, "toyu_pet.png")
     toyu.save(pet_path, "PNG")
     print(f"ToYu pet: {pet_path} ({toyu.width}×{toyu.height})")
 
-    # Generate icon (64x64)
     icon_img = render_pixel_art(TOYU_COLOR, C, scale=2)  # 32×2 = 64px
     icon_path = os.path.join(output_dir, "toyu_icon.ico")
     icon_img.save(icon_path, format="ICO", sizes=[(64, 64)])
     print(f"ToYu icon: {icon_path}")
 
-    # Also generate a 128x128 version
     large = render_pixel_art(TOYU_COLOR, C, scale=4)
     large_path = os.path.join(output_dir, "toyu_128.png")
     large.save(large_path, "PNG")
     print(f"ToYu large: {large_path} ({large.width}×{large.height})")
-
 
 if __name__ == "__main__":
     main()

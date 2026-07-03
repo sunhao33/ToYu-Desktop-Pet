@@ -8,7 +8,6 @@ import random
 import time
 from enum import Enum
 
-
 class PetMood(Enum):
     """Pet's current emotional state."""
     HAPPY = "happy"          # 开心 - 高好感度，用户互动频繁
@@ -24,7 +23,6 @@ class PetMood(Enum):
     EATING = "eating"        # 吃东西中
     DRAGGED = "dragged"      # 被拖拽
 
-
 class WorkState(Enum):
     """What the user is currently doing."""
     IDLE = "idle"            # 空闲
@@ -32,11 +30,9 @@ class WorkState(Enum):
     BREAK = "break"          # 休息中
     AWAY = "away"            # 离开
 
-
 class CompanionSystem:
     """Manages pet's companion behavior and reactions."""
 
-    # ── Mood messages ──
     MOOD_MESSAGES = {
         PetMood.HAPPY: [
             "今天心情真好～",
@@ -123,7 +119,6 @@ class CompanionSystem:
         ],
     }
 
-    # ── Context-aware reactions ──
     EVENT_REACTIONS = {
         "feed": [
             "好好吃！谢谢～",
@@ -255,38 +250,28 @@ class CompanionSystem:
         affection = self.settings.affection_level
         time_since_interact = now - self._last_interaction
 
-        # Determine time period
         from datetime import datetime
         hour = datetime.now().hour
 
-        # Priority-based mood selection
         new_mood = self._mood
 
-        # 1. Sleepy at night (highest priority)
         if 0 <= hour < 6:
             new_mood = PetMood.SLEEPY
-        # 2. Working state
         elif self._work_state == WorkState.WORKING:
             if self._consecutive_work_minutes > 45:
                 new_mood = PetMood.TIRED
             else:
                 new_mood = PetMood.FOCUSED
-        # 3. Break state
         elif self._work_state == WorkState.BREAK:
             new_mood = PetMood.PLAYFUL
-        # 4. Lonely if no interaction for a while
         elif time_since_interact > 600:  # 10 minutes
             new_mood = PetMood.LONELY
-        # 5. Sad if low affection
         elif affection < 20:
             new_mood = PetMood.SAD
-        # 6. Excited if very high affection and recent interaction
         elif affection > 80 and time_since_interact < 60:
             new_mood = PetMood.EXCITED
-        # 7. Happy if high affection
         elif affection > 60:
             new_mood = PetMood.HAPPY
-        # 8. Curious if moderate affection and user is around
         else:
             new_mood = PetMood.CURIOUS
 
@@ -299,11 +284,9 @@ class CompanionSystem:
         self._last_interaction = time.time()
         self._interaction_count += 1
 
-        # Get reaction message
         reactions = self.EVENT_REACTIONS.get(interaction_type, ["..."])
         message = random.choice(reactions)
 
-        # Format with context
         message = self._format_message(message)
 
         return message
@@ -333,7 +316,6 @@ class CompanionSystem:
         self._pomodoro_remaining = remaining_minutes
         self._consecutive_work_minutes += 1
 
-        # Warn if working too long
         if self._consecutive_work_minutes > 0 and self._consecutive_work_minutes % 30 == 0:
             reactions = self.EVENT_REACTIONS["long_work"]
             message = random.choice(reactions)
@@ -381,15 +363,12 @@ class CompanionSystem:
         affection = self.settings.affection_level
         time_since_interact = now - self._last_interaction
 
-        # High affection
         if affection > 80 and random.random() < 0.3:
             return random.choice(self.EVENT_REACTIONS["high_affection"])
 
-        # Low affection
         if affection < 20 and random.random() < 0.3:
             return random.choice(self.EVENT_REACTIONS["low_affection"])
 
-        # Long time no interaction
         if time_since_interact > 300 and random.random() < 0.4:
             return random.choice(self.EVENT_REACTIONS["idle_chat"])
 

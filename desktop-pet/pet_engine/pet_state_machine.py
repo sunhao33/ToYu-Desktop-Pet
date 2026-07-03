@@ -18,9 +18,6 @@ import random
 import time
 from enum import Enum, auto
 
-
-# ── Enums ────────────────────────────────────────────────────
-
 class PetState(Enum):
     IDLE = auto()
     WALKING = auto()
@@ -30,12 +27,10 @@ class PetState(Enum):
     INTERACTING = auto()
     HOPPING = auto()
 
-
 class InteractionMode(Enum):
     FREE = "free"
     FOLLOW = "follow"
     STAY = "stay"
-
 
 class PetStateMachine:
     def __init__(self, settings):
@@ -130,11 +125,9 @@ class PetStateMachine:
         """
         state = self.current_state
 
-        # Don't auto-transition from DRAGGED
         if state == PetState.DRAGGED:
             return {"state": state, "walk_speed": 0, "walk_direction": 0}
 
-        # INTERACTING → IDLE after animation completes (~0.4s)
         if state == PetState.INTERACTING:
             self._interact_timer += dt
             if self._interact_timer >= 0.4:
@@ -143,7 +136,6 @@ class PetStateMachine:
                 return {"state": PetState.IDLE, "walk_speed": 0, "walk_direction": 0}
             return {"state": state, "walk_speed": 0, "walk_direction": 0}
 
-        # HOPPING → IDLE after hop animation completes
         if state == PetState.HOPPING:
             self._hop_timer += dt
             if self._hop_timer >= 0.5:
@@ -151,21 +143,18 @@ class PetStateMachine:
                 return {"state": PetState.IDLE, "walk_speed": 0, "walk_direction": 0}
             return {"state": state, "walk_speed": 0, "walk_direction": 0}
 
-        # FALLING → SITTING when grounded
         if state == PetState.FALLING:
             if grounded:
                 self.transition_to(PetState.SITTING)
                 return {"state": PetState.SITTING, "walk_speed": 0, "walk_direction": 0}
             return {"state": state, "walk_speed": 0, "walk_direction": 0}
 
-        # SITTING → IDLE after brief pause
         if state == PetState.SITTING:
             if time.time() - self._idle_timer > 1.0:
                 self.transition_to(PetState.IDLE)
                 return {"state": PetState.IDLE, "walk_speed": 0, "walk_direction": 0}
             return {"state": state, "walk_speed": 0, "walk_direction": 0}
 
-        # IDLE → random action when timer fires (FREE mode only)
         if state == PetState.IDLE:
             if self.interaction_mode == InteractionMode.FREE and time.time() >= self._next_action_time:
                 if grounded and random.random() < self._hop_probability:
@@ -180,7 +169,6 @@ class PetStateMachine:
                     }
             return {"state": state, "walk_speed": 0, "walk_direction": 0}
 
-        # WALKING → IDLE when duration expires
         if state == PetState.WALKING:
             self._walk_timer += dt
             if self._walk_timer >= self._walk_duration:

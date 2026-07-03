@@ -2,10 +2,6 @@
 
 from PyQt6.QtCore import QSettings, QPoint
 
-
-# ── Settings Manager ─────────────────────────────────────────
-
-
 class SettingsManager:
     def __init__(self):
         self._settings = QSettings("DesktopPet", "DesktopPet")
@@ -107,7 +103,6 @@ class SettingsManager:
     def _path_to_name(path):
         import os
         basename = os.path.basename(path)
-        # Strip known suffixes
         for suf in ("_pet.png", ".png", "_processed", "_bead"):
             basename = basename.replace(suf, "")
         return basename or "未命名"

@@ -5,9 +5,6 @@ from PyQt6.QtCore import Qt, QTimer, QRectF
 from PyQt6.QtGui import QPainter, QColor, QFont
 from PyQt6.QtWidgets import QWidget
 
-
-# ── Particle ─────────────────────────────────────────────────
-
 class Particle:
     """A single floating particle with smooth fade-out."""
     def __init__(self, x, y, char, color, vx=0, vy=-1.5, life=60, size=14):
@@ -30,7 +27,6 @@ class Particle:
         return self.life > 0
 
     def paint(self, painter: QPainter):
-        # Smooth ease-out fade: stays visible, then gently fades
         t = self.life / self.max_life
         alpha = max(0, min(255, int(255 * t * (2 - t))))  # ease-out curve
         if alpha < 3:
@@ -45,11 +41,8 @@ class Particle:
                         Qt.AlignmentFlag.AlignCenter, self.char)
         painter.restore()
 
-
-# Fixed overlay size: 400x500 — big enough for particles to float around
 OVERLAY_W = 400
 OVERLAY_H = 500
-
 
 class ParticleSystem(QWidget):
     """Standalone floating overlay that renders particles near the pet."""
@@ -72,12 +65,9 @@ class ParticleSystem(QWidget):
 
     def emit_at(self, pet_global_x, pet_global_y, chars, colors, count=5, **kwargs):
         """Position overlay centered on pet, spawn particles at center."""
-        # Place overlay so pet center is at (OVERLAY_W/2, OVERLAY_H * 0.7)
-        # This gives particles room to float up ~350px
         ox = pet_global_x - OVERLAY_W // 2
         oy = pet_global_y - int(OVERLAY_H * 0.7)
         self.setGeometry(ox, oy, OVERLAY_W, OVERLAY_H)
-        # Spawn at center-x, near bottom (pet center area)
         sx = OVERLAY_W // 2
         sy = int(OVERLAY_H * 0.7)
         for _ in range(count):

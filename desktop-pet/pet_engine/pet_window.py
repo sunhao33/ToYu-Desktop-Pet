@@ -26,13 +26,11 @@ from .pet_ai import AICompanion, AIConfig
 from image_processor.processor import get_default_pet_path, _resource_path
 from pet_engine.sprite_bounds import get_visible_bounds, get_content_ratio
 
-
 class TimePeriod(_Enum):
     NIGHT = "night"
     MORNING = "morning"
     DAY = "day"
     EVENING = "evening"
-
 
 class PetWindow(QMainWindow):
     FRAME_RATE = 60  # fps
@@ -52,16 +50,12 @@ class PetWindow(QMainWindow):
         self._load_pet_image()
         self._restore_position()
 
-        # Game loop
         self._last_tick = time.time()
         self._game_timer = QTimer(self)
         self._game_timer.timeout.connect(self._game_tick)
         self._game_timer.start(int(1000 / self.FRAME_RATE))
 
-        # Apply initial time period
         self.state_machine.set_time_period(self._current_time_period)
-
-    # ── Initialization helpers ────────────────────────────────
 
     def _init_core(self):
         """Initialize pixmap, physics, state machine, animation, and affection."""
@@ -108,32 +102,26 @@ class PetWindow(QMainWindow):
 
     def _init_timers(self):
         """Initialize all periodic timers."""
-        # Pomodoro (checks every 1s)
         self._pomodoro_timer = QTimer(self)
         self._pomodoro_timer.timeout.connect(self._check_pomodoro)
         self._pomodoro_timer.start(1000)
 
-        # Affection decay (every 30s)
         self._decay_timer = QTimer(self)
         self._decay_timer.timeout.connect(self.affection.tick_decay)
         self._decay_timer.start(30000)
 
-        # Daily first-login bonus
         self.affection.add(itype='first_daily')
 
-        # Feed cooldown
         self._feed_cooldown_end = max(0, self.settings.feed_last_used + 30 - time.time())
         self._feed_cooldown_timer = QTimer(self)
         self._feed_cooldown_timer.timeout.connect(self._tick_feed_cooldown)
 
-        # Time awareness check (every 60s)
         self._time_awareness_enabled = self.settings.time_awareness_enabled
         self._current_time_period = self._get_time_period()
         self._time_check_timer = QTimer(self)
         self._time_check_timer.timeout.connect(self._on_time_check)
         self._time_check_timer.start(60000)
 
-        # Auto-go-home
         self._auto_home_timeout_ms = self.settings.auto_home_timeout * 60 * 1000
         self._auto_home_timer = QTimer(self)
         self._auto_home_timer.timeout.connect(self._on_auto_home)
@@ -191,7 +179,6 @@ class PetWindow(QMainWindow):
         self.setAcceptDrops(True)
         self.resize(150, 150)
 
-        # Disable IME for this window (prevents input method toggle on click)
         self._disable_ime()
 
     def _disable_ime(self):
@@ -222,8 +209,6 @@ class PetWindow(QMainWindow):
         self.physics.stop()
         self.state_machine.transition_to(PetState.IDLE)
         self._clamp_to_screen()
-
-    # ── Time Awareness ──────────────────────────────────────────
 
     @staticmethod
     def _get_time_period():
@@ -258,8 +243,6 @@ class PetWindow(QMainWindow):
             if self._house:
                 self._house.set_night_glow(period == TimePeriod.NIGHT)
 
-    # ── Feeding ─────────────────────────────────────────────────
-
     def _tick_feed_cooldown(self):
         remaining = max(0, int(self._feed_cooldown_end - time.time()))
         if self._bubble:
@@ -286,12 +269,10 @@ class PetWindow(QMainWindow):
         if self._bubble:
             self._bubble.set_feed_cooldown(30)
 
-        # Start tracking the food
         self._current_food = food
         self._food_tracking_timer = QTimer(self)
         self._food_tracking_timer.timeout.connect(self._track_food)
         self._food_tracking_timer.start(50)  # Track every 50ms
-
 
     def _on_food_moved(self, pos):
         """Called when food is dragged to a new position."""
@@ -325,7 +306,6 @@ class PetWindow(QMainWindow):
         dy = food_cy - pet_cy
         dist = (dx * dx + dy * dy) ** 0.5
 
-        # Close enough — eat and complete
         if dist < 40:
             self._complete_feed(food)
             self._food_tracking_timer.stop()
@@ -336,16 +316,13 @@ class PetWindow(QMainWindow):
             direction = 1 if dx > 0 else -1
             walk_speed = self.settings.walking_speed_max * 1.2
 
-            # Food is significantly above — jump toward it
             if dy < -50:
                 self.physics.set_jump_velocity(-12)
                 self.state_machine.transition_to(PetState.HOPPING)
-            # Food is below — fall/glide down
             elif dy > 50:
                 self.physics.set_fall_velocity(2)
                 self.state_machine.transition_to(PetState.FALLING)
             else:
-                # Walk toward food on the ground
                 self.state_machine._walk_direction = direction
                 self.state_machine._walk_duration = 0.5
                 self.state_machine.transition_to(PetState.WALKING)
@@ -360,17 +337,12 @@ class PetWindow(QMainWindow):
         self._update_affection_tooltip()
         ft = FloatingText()
         ft.show_near(self)
-        # Heart particles!
         center = self.geometry().center()
         self._effects.add_hearts(center.x(), center.y() - 30, count=6)
-        # Notify companion
         message = self.companion.on_interaction("feed")
         self._show_companion_bubble(message)
-        # Return to idle
         self.state_machine.transition_to(PetState.IDLE)
         self._reset_auto_home_timer()
-
-    # ── Expression Triggers (Layer 1 + 2) ──────────────────
 
     def trigger_dance(self, duration=5.0):
         """Pet dances — bounce + sway + music notes."""
@@ -426,8 +398,6 @@ class PetWindow(QMainWindow):
         self._effects.add_snow(center.x(), center.y() - 20, count=10)
         self._expression_end_timer.start(int(duration * 1000))
 
-    # -- Accessory Triggers (Layer 3) --------------------------
-
     _ACCESSORY_REGISTRY = {
         "hat":      (_resource_path('resources/acc_hat.png'),      "TOP",        0.8, -5,  False, True),
         "umbrella": (_resource_path('resources/acc_umbrella.png'),  "TOP",        0.7, -10, True,  False),
@@ -473,7 +443,6 @@ class PetWindow(QMainWindow):
             AnimationType.SLEEP, AnimationType.CELEBRATE,
             AnimationType.BOUNCE_LAND, AnimationType.DIZZY
         ):
-            # If mouse is still in proximity, resume lean instead of idle
             if self._mouse_in_proximity and not self.state_machine.is_dragged:
                 self._lean_active = True
                 self.animation.set_animation(AnimationType.LEAN)
@@ -494,7 +463,6 @@ class PetWindow(QMainWindow):
         # Don't go home if being dragged
         if self._is_dragging:
             return
-        # Show message and go home
         self._show_companion_bubble("我先回去休息啦~")
         QTimer.singleShot(2000, self._do_auto_home)
 
@@ -537,7 +505,6 @@ class PetWindow(QMainWindow):
             w = int(self._pet_pixmap.width() * self._scale * 1.6) + padding
             h = int(self._pet_pixmap.height() * self._scale * 1.6) + padding
             self.resize(w, h)
-            # Recalculate sprite bottom offset for taskbar positioning
             margin = 10
             avail_h = h - margin * 2
             sprite_cy_in_window = margin + avail_h // 2
@@ -568,7 +535,6 @@ class PetWindow(QMainWindow):
         taskbar_h = self._taskbar_info['height'] if self._taskbar_info else 0
         geo = self.geometry()
         x = max(screen.x(), min(geo.x(), screen.x() + screen.width() - geo.width()))
-        # Bottom boundary: sprite feet should be at taskbar top
         max_y = screen.y() + screen.height() - taskbar_h - geo.height() + self._sprite_bottom_offset
         y = max(screen.y(), min(geo.y(), max_y))
         if x != geo.x() or y != geo.y():
@@ -597,8 +563,6 @@ class PetWindow(QMainWindow):
         self._clamp_to_screen()
         self.update()
 
-    # ── Game Loop ──────────────────────────────────────────────
-
     def _game_tick(self):
         """Main update loop — runs at FRAME_RATE (60fps).
 
@@ -617,7 +581,6 @@ class PetWindow(QMainWindow):
         current_pos = QPoint(self.x(), self.y())
         grounded = self.physics.grounded
 
-        # Landing bounce — pet just touched ground after falling
         if grounded and not self._was_grounded_last_tick and not self.state_machine.is_dragged:
             if not self._expression_active:
                 fall_speed = abs(self.physics.vy)
@@ -626,7 +589,6 @@ class PetWindow(QMainWindow):
                     self._expression_active = True
                     self._pending_bounce_land = False
                     self._expression_end_timer.start(700)
-        # Also trigger if pet lands while already grounded (drag release on ground)
         if grounded and self._pending_bounce_land and not self.state_machine.is_dragged:
             if not self._expression_active:
                 self.animation.set_animation(AnimationType.BOUNCE_LAND)
@@ -635,11 +597,9 @@ class PetWindow(QMainWindow):
                 self._expression_end_timer.start(700)
         self._was_grounded_last_tick = grounded
 
-        # State machine update
         cmd = self.state_machine.update(dt, grounded)
         state = cmd["state"]
 
-        # ── Follow-mouse mode ──
         if (self.state_machine.interaction_mode == InteractionMode.FOLLOW
                 and state == PetState.IDLE
                 and grounded
@@ -661,16 +621,13 @@ class PetWindow(QMainWindow):
                        "walk_speed": walk_speed,
                        "walk_direction": direction}
 
-        # Map state to animation (skip if expression is active)
         if not self._expression_active:
             anim_type = self._anim_type_map.get(state, AnimationType.IDLE)
             self.animation.set_animation(anim_type)
 
-        # Apply walking velocity
         if state == PetState.WALKING:
             walk_speed = cmd.get("walk_speed", 0)
             walk_dir = cmd.get("walk_direction", 0)
-            # Time awareness speed modifier
             if self._time_awareness_enabled:
                 period = self._current_time_period
                 if period == TimePeriod.NIGHT:
@@ -681,32 +638,24 @@ class PetWindow(QMainWindow):
                     walk_speed *= 0.8
             self.physics.set_walk_velocity(walk_speed * walk_dir)
 
-        # Physics step (skip when dragged)
         if not self.state_machine.is_dragged:
             new_x, new_y = self.physics.step(
                 float(current_pos.x()), float(current_pos.y())
             )
             self._position = QPoint(int(new_x), int(new_y))
             self.move(self._position)
-            # Keep companion bubble stuck to pet
             if self._companion_bubble and self._companion_bubble._is_showing:
                 self._companion_bubble.update_position()
-            # Keep chat bubble following pet
             self._chat_bubble.update_position()
 
-        # Update animation
         self.animation.update(dt, self.physics.vx)
 
-        # Update lean direction based on cursor position
         self._update_lean()
 
-        # Transition SITTING → IDLE after animation completes
         if state == PetState.SITTING and self.animation.sit_finished:
             self.state_machine.transition_to(PetState.IDLE)
 
         self.update()
-
-    # ── Mouse Events ───────────────────────────────────────────
 
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.RightButton:
@@ -722,10 +671,8 @@ class PetWindow(QMainWindow):
             self.state_machine.on_mouse_press()
             self.physics.stop()
             self._reset_auto_home_timer()
-            # Track drag velocity for shake detection
             self._drag_positions = [(time.time(), event.globalPosition().toPoint().x())]
             self._shake_detected = False
-            # Stop lean during drag
             if self._lean_active:
                 self._lean_active = False
                 self.animation.set_animation(AnimationType.NONE)
@@ -736,28 +683,21 @@ class PetWindow(QMainWindow):
             new_pos = global_pos - self._drag_offset
             self._position = new_pos
             self.move(new_pos)
-            # Keep companion bubble stuck to pet during drag
             if self._companion_bubble and self._companion_bubble._is_showing:
                 self._companion_bubble.update_position()
-            # Keep chat bubble following pet
             self._chat_bubble.update_position()
-            # Track drag positions for shake detection
             now = time.time()
             self._drag_positions.append((now, global_pos.x()))
-            # Keep only last 0.5s of positions
             cutoff = now - 0.5
             self._drag_positions = [(t, x) for t, x in self._drag_positions if t > cutoff]
-            # Detect rapid direction changes (shake)
             if len(self._drag_positions) >= 4:
                 self._detect_shake()
 
     def mouseReleaseEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:
-            # If pet was actually dragged (moved), give drag interaction
             if self.state_machine.is_dragged:
                 self.affection.add(itype='drag')
 
-                # Shake detection: trigger dizzy animation + stars
                 if self._shake_detected:
                     self.animation.set_animation(AnimationType.DIZZY)
                     self._expression_active = True
@@ -766,13 +706,11 @@ class PetWindow(QMainWindow):
                     self._expression_end_timer.start(2200)
                     self._shake_detected = False
                 else:
-                    # Mark bounce to trigger when pet actually lands
                     self._pending_bounce_land = True
 
             self._update_affection_tooltip()
             self._drag_positions = []
 
-            # Check if pet was dragged onto the house door
             if self._house and self._house.isVisible():
                 sprite_cx = self.x() + self.width() // 2
                 sprite_bottom = self.y() + self.height() // 2 + int(self._pet_pixmap.height() * self._scale) // 2
@@ -803,7 +741,6 @@ class PetWindow(QMainWindow):
         """Double-click: open AI chat if enabled, otherwise add affection."""
         if event.button() == Qt.MouseButton.LeftButton:
             if self._ai.is_available():
-                # Load history when opening
                 self._chat_bubble.load_history(self._ai.get_history())
                 self._chat_bubble.toggle()
                 event.accept()
@@ -815,8 +752,6 @@ class PetWindow(QMainWindow):
     def contextMenuEvent(self, event):
         # Already handled in mousePressEvent; prevent double-fire
         event.accept()
-
-    # ── Shake Detection ────────────────────────────────────────
 
     def _detect_shake(self):
         """Detect rapid left-right shaking during drag.
@@ -837,8 +772,6 @@ class PetWindow(QMainWindow):
             prev_dx = dx
         if reversals >= 3:
             self._shake_detected = True
-
-    # ── Mouse Proximity (Lean) ─────────────────────────────────
 
     def enterEvent(self, event):
         """Mouse entered pet area — start lean animation."""
@@ -908,8 +841,6 @@ class PetWindow(QMainWindow):
             self._feed_cooldown_timer.start(1000)
         self._bubble.show_at(global_pos)
 
-    # ── Drag & Drop (file delete to recycle bin) ───────────────
-
     def dragEnterEvent(self, event):
         if event.mimeData().hasUrls():
             event.acceptProposedAction()
@@ -968,8 +899,6 @@ class PetWindow(QMainWindow):
                 f"删除失败: {os.path.basename(file_path)}\n{str(e)[:80]}"
             )
 
-    # ── Pomodoro Timer ────────────────────────────────────────
-
     def _check_pomodoro(self):
         if not self.settings.pomodoro_enabled:
             return
@@ -983,10 +912,8 @@ class PetWindow(QMainWindow):
 
     def _fire_pomodoro(self):
         self.settings.pomodoro_last_fired = time.time()
-        # Add affection for completing a pomodoro
         self.affection.add(itype='pomodoro')
         self._update_affection_tooltip()
-        # Notify companion system
         message = self.companion.on_pomodoro_end()
         notification = PomodoroNotificationBubble(
             self,
@@ -1000,7 +927,6 @@ class PetWindow(QMainWindow):
 
     def _go_home(self):
         """Pet goes into the house."""
-        # Show going-home popup first
         self._show_go_home_popup()
         if self._house:
             self._house.set_pet_inside(True)
@@ -1089,14 +1015,12 @@ class PetWindow(QMainWindow):
         hour = time.localtime().tm_hour
         lv = self.affection.level
 
-        # Time greeting
         time_msg = ""
         for start, end, pool in config['time_pools']:
             if (start <= hour < end) or (start > end and (hour >= start or hour < end)):
                 time_msg = random.choice(pool)
                 break
 
-        # Weather overlay
         weather_msg = ""
         try:
             weather = self._proactive.get_weather_status()
@@ -1108,7 +1032,6 @@ class PetWindow(QMainWindow):
         except Exception:
             pass
 
-        # Affection message + side effects
         affection_msg = ""
         affection_pools = config.get('affection_pools', [])
         effects = config.get('affection_effects', {})
@@ -1119,7 +1042,6 @@ class PetWindow(QMainWindow):
                     effects[min_lv]()
                 break
 
-        # Build message
         parts = [time_msg]
         if weather_msg:
             parts.append(weather_msg)
@@ -1130,7 +1052,6 @@ class PetWindow(QMainWindow):
         parts.append(affection_msg)
         self._show_companion_bubble("\n".join(parts))
 
-        # Final effect or sparkle
         if 'final_effect' in config:
             config['final_effect']()
         threshold = config.get('sparkle_threshold')
@@ -1179,13 +1100,10 @@ class PetWindow(QMainWindow):
                 ("acc_crown", "戴上小皇冠~👑"),
                 ("acc_bow", "系了个蝴蝶结~🎀"),
             ]
-            # 40% chance to wear an accessory
             if random.random() < 0.4:
                 choice = random.choice(accessories)
-                # Use the accessory brain's method if available
                 if hasattr(self, '_accessory_brain') and self._accessory_brain:
                     acc_id = choice[0]
-                    # Try to add the accessory
                     from .pet_accessories import Accessory, Anchor
                     acc = Accessory(
                         acc_id=acc_id,
@@ -1211,34 +1129,27 @@ class PetWindow(QMainWindow):
         if self._bubble:
             self._bubble.set_pomodoro_active(self.settings.pomodoro_enabled)
 
-    # ── Companion System ──────────────────────────────────────
-
     def _update_companion(self):
         """Update companion mood and show messages."""
         try:
             self.companion.update()
             now = time.time()
 
-            # Proactive behavior (startup greeting, weather, check-ins)
             if not self._proactive._greeted:
                 self._proactive.on_startup()
             self._proactive.update()
 
-            # Zzz particles when sleepy
             if self.companion._mood.name == "SLEEPY" and random.random() < 0.3:
                 center = self.geometry().center()
                 self._effects.add_zzz(center.x() + 30, center.y() - 40, count=2)
 
-            # Show mood-based message occasionally (every 3-6 minutes)
             if now - self._last_companion_message_time > random.randint(180, 360):
                 message = self.companion.get_mood_message()
-                # Only show if pet is idle and no function bubble is open
                 if self.state_machine._state in (PetState.IDLE, PetState.SITTING):
                     if not self._bubble or not self._bubble.isVisible():
                         self._show_companion_bubble(message)
                         self._last_companion_message_time = now
 
-            # Update tooltip with mood
             mood_emoji = self.companion.get_mood_emoji()
             status = self.companion.get_status_text()
             affection_text = self.affection.display_text
@@ -1261,9 +1172,7 @@ class PetWindow(QMainWindow):
 
     def _on_milestone_reached(self, title, emoji, desc):
         """Called when a new milestone is reached."""
-        # Show celebration
         self.trigger_celebrate()
-        # Show companion bubble with milestone message
         msg = f"{emoji} {title}！\n{desc}"
         try:
             self._show_companion_bubble(msg)
@@ -1272,11 +1181,9 @@ class PetWindow(QMainWindow):
 
     def _on_ai_message(self, user_text: str):
         """Handle user chat message — send to AI and show response."""
-        # Add affection for chatting
         self.affection.add(itype='chat')
         self._update_affection_tooltip()
 
-        # Inject real-time context
         time_map = {
             TimePeriod.MORNING: "早上", TimePeriod.DAY: "白天",
             TimePeriod.EVENING: "傍晚", TimePeriod.NIGHT: "深夜"
@@ -1308,17 +1215,12 @@ class PetWindow(QMainWindow):
         self._update_affection_tooltip()
         message = self.companion.on_task_complete()
         self._show_companion_bubble(message)
-        # Star particles!
         center = self.geometry().center()
         self._effects.add_stars(center.x(), center.y() - 30, count=8)
         self._reset_auto_home_timer()
 
-    # ── Affection Tooltip ─────────────────────────────────────
-
     def _update_affection_tooltip(self):
         self.setToolTip(f"ToYu  {self.affection.display_text}")
-
-    # ── Rendering ──────────────────────────────────────────────
 
     def moveEvent(self, event):
         super().moveEvent(event)
@@ -1368,7 +1270,6 @@ class PetWindow(QMainWindow):
         sw = pix.width() * self._scale
         sh = pix.height() * self._scale
 
-        # Build transform: center → scale → rotate → offset
         transform = QTransform()
         transform.translate(center_x + anim.offset_x, center_y + anim.offset_y)
         transform.rotate(anim.rotation)
@@ -1385,8 +1286,6 @@ class PetWindow(QMainWindow):
             painter.setOpacity(1.0)
 
         painter.end()
-
-    # ── Window Management ──────────────────────────────────────
 
     def toggle_visibility(self):
         if self.isVisible():
@@ -1466,7 +1365,6 @@ class PetWindow(QMainWindow):
         self._companion_update_timer.stop()
         if hasattr(self, '_accessory_brain') and self._accessory_brain:
             self._accessory_brain.stop()
-        # Clean up overlay windows
         if self._chat_bubble:
             self._chat_bubble.close()
         if self._companion_bubble:

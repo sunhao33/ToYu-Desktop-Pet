@@ -2,10 +2,6 @@
 
 from PyQt6.QtWidgets import QApplication
 
-
-# ── Taskbar Detection ────────────────────────────────────────
-
-
 def get_taskbar_info():
     """Get taskbar info using Qt's screen geometry (automatically DPI-aware).
     
@@ -18,10 +14,7 @@ def get_taskbar_info():
     full = screen.geometry()
     avail = screen.availableGeometry()
     
-    # Taskbar height = difference between full and available
-    # Check which edge the taskbar is on
     if avail.y() > full.y():
-        # Taskbar on top
         return {
             'height': avail.y() - full.y(),
             'position': 'top',
@@ -29,7 +22,6 @@ def get_taskbar_info():
             'bottom_edge': avail.y(),
         }
     elif avail.y() + avail.height() < full.y() + full.height():
-        # Taskbar on bottom (most common)
         taskbar_h = (full.y() + full.height()) - (avail.y() + avail.height())
         return {
             'height': taskbar_h,
@@ -38,13 +30,11 @@ def get_taskbar_info():
             'bottom_edge': full.y() + full.height(),
         }
     elif avail.x() > full.x():
-        # Taskbar on left
         return {
             'height': avail.x() - full.x(),
             'position': 'left',
         }
     elif avail.x() + avail.width() < full.x() + full.width():
-        # Taskbar on right
         taskbar_w = (full.x() + full.width()) - (avail.x() + avail.width())
         return {
             'height': taskbar_w,
@@ -52,7 +42,6 @@ def get_taskbar_info():
         }
     
     return None
-
 
 def get_taskbar_height():
     """Return taskbar height in logical pixels, or 0."""

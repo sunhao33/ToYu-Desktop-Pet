@@ -54,8 +54,6 @@ class _ScaledLabel(QLabel):
             scaled = self._src_pixmap.scaledToWidth(w, Qt.TransformationMode.SmoothTransformation)
             super().setPixmap(scaled)
 
-
-# ── Theme colors (ToYu potato warm palette) ┦─
 ACCENT = "#C49A3C"        # potato gold
 ACCENT_HOVER = "#D4AE50"  # lighter gold
 DARK = "#3E2723"          # dark brown
@@ -68,7 +66,6 @@ BORDER = "#E8D5C0"        # warm beige border
 SUCCESS = "#6B9B37"       # earthy green
 DANGER = "#C0392B"        # red
 
-# ── Dark mode colors ──
 DARK_BG = "#2A1F14"       # warm dark brown background
 DARK_CARD = "#3A2A1A"     # warm card background
 DARK_TEXT = "#E8D5C0"     # warm light text
@@ -76,7 +73,6 @@ DARK_TEXT_SEC = "#A08B6E" # warm secondary text
 DARK_BORDER = "#4A3525"   # warm dark border
 DARK_HEADER = "#1E150D"   # warm dark header
 
-# Checkerboard pattern for transparency preview
 CHECKER_SVG = """
 <svg width="16" height="16" xmlns="http://www.w3.org/2000/svg">
   <rect width="16" height="16" fill="#f0f0f0"/>
@@ -84,7 +80,6 @@ CHECKER_SVG = """
   <rect x="8" y="8" width="8" height="8" fill="#d0d0d0"/>
 </svg>
 """
-
 
 class DropZone(QLabel):
     """Clickable drop zone with transparency checkerboard background."""
@@ -159,7 +154,6 @@ class DropZone(QLabel):
             path = url.toLocalFile()
             if path and self._callback:
                 self._callback(path)
-                # 添加成功反馈 - 绿色边框闪烁
                 self._flash_success()
 
     def _flash_success(self):
@@ -188,12 +182,10 @@ class DropZone(QLabel):
             """)
         QTimer.singleShot(500, lambda: self.setStyleSheet(original_style))
 
-
 class Toggle(QCheckBox):
     """Styled toggle switch."""
     def __init__(self, text="", parent=None):
         super().__init__(text, parent)
-
 
 class MainWindow(QMainWindow):
     def __init__(self):
@@ -217,7 +209,6 @@ class MainWindow(QMainWindow):
         self._init_tray()
         self._restore_state()
 
-        # Screen time tracker
         self._screen_tracker = ScreenTimeTracker()
         self._screen_tracker.start()
 
@@ -271,10 +262,6 @@ class MainWindow(QMainWindow):
             self._first_launch = False
             self._on_start_pet()
 
-    # ═══════════════════════════════════════════════
-    #  Color helpers
-    # ═══════════════════════════════════════════════
-
     def _c(self, key):
         """Return color for current mode. Keys: bg, card, text, text2, border, header, accent, accent_h, mid, success, danger"""
         m = {
@@ -314,10 +301,6 @@ class MainWindow(QMainWindow):
         colors.update(extra)
         return template.format(c=colors)
 
-    # ═══════════════════════════════════════════════
-    #  UI Construction
-    # ═══════════════════════════════════════════════
-
     def _init_ui(self):
         self.setWindowTitle("ToYu · 桌面土豆宠物")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "toyu_icon.ico")))
@@ -331,25 +314,21 @@ class MainWindow(QMainWindow):
         root.setSpacing(0)
         root.setContentsMargins(0, 0, 0, 0)
 
-        # ── Header ──
         header = QWidget()
         header.setObjectName("header")
         header.setFixedHeight(80)
         header_layout = QHBoxLayout(header)
         header_layout.setContentsMargins(24, 14, 24, 14)
 
-        # Logo area with icon
         logo_layout = QHBoxLayout()
         logo_layout.setSpacing(12)
         
-        # 添加 logo 图标
         logo_icon = QLabel("🥔")
         logo_icon.setStyleSheet("font-size: 32px; background: transparent;")
         logo_icon.setFixedSize(48, 48)
         logo_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
         logo_layout.addWidget(logo_icon)
         
-        # 标题和副标题
         title_layout = QVBoxLayout()
         title_layout.setSpacing(0)
         title = QLabel("ToYu")
@@ -363,7 +342,6 @@ class MainWindow(QMainWindow):
         header_layout.addLayout(logo_layout)
         header_layout.addStretch()
 
-        # Dark mode toggle button
         self._dark_mode_btn = QPushButton("🌙 浅色")
         self._dark_mode_btn.setObjectName("darkModeBtn")
         self._dark_mode_btn.setFixedHeight(32)
@@ -387,7 +365,6 @@ class MainWindow(QMainWindow):
         self._dark_mode_btn.clicked.connect(self._toggle_dark_mode)
         header_layout.addWidget(self._dark_mode_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
-        # Settings button in header
         self._settings_btn = QPushButton("⚙️ 设置")
         self._settings_btn.setFixedHeight(32)
         self._settings_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -410,7 +387,6 @@ class MainWindow(QMainWindow):
         self._settings_btn.clicked.connect(self._on_open_settings)
         header_layout.addWidget(self._settings_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
-        # Quick start button in header
         self._start_btn = QPushButton("启动 ToYu")
         self._start_btn.setObjectName("startBtn")
         self._start_btn.setEnabled(False)
@@ -421,10 +397,8 @@ class MainWindow(QMainWindow):
 
         root.addWidget(header)
 
-        # Separator
         root.addWidget(self._h_separator())
 
-        # ── Page tabs ──
         tab_row = QHBoxLayout()
         tab_row.setContentsMargins(24, 10, 24, 0)
         tab_row.setSpacing(0)
@@ -467,7 +441,6 @@ class MainWindow(QMainWindow):
         tab_row.addStretch()
         root.addLayout(tab_row)
 
-        # ── Page 1: Pet ──
         pet_page = QScrollArea()
         pet_page.setWidgetResizable(True)
         pet_page.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -486,7 +459,6 @@ class MainWindow(QMainWindow):
         pet_layout.setSpacing(0)
         pet_layout.setContentsMargins(20, 16, 20, 14)
 
-        # -- Left column --
         pet_left = QVBoxLayout()
         pet_left.setSpacing(10)
 
@@ -624,7 +596,6 @@ class MainWindow(QMainWindow):
         pet_layout.addWidget(divider)
         pet_layout.addSpacing(24)
 
-        # -- Right column (pet page) --
         pet_right = QVBoxLayout()
         pet_right.setSpacing(12)
 
@@ -655,7 +626,6 @@ class MainWindow(QMainWindow):
         self._showcase_card_ref = self._showcase_card
         pet_right.addWidget(self._showcase_card)
 
-        # House section - bottom-right corner
         house_row = QHBoxLayout()
         house_row.setSpacing(10)
 
@@ -685,12 +655,10 @@ class MainWindow(QMainWindow):
 
         pet_right.addLayout(house_row)
 
-        # Pet status card - 显示宠物当前状态
         status_card = self._make_card("🐾 宠物状态")
         status_card_layout = status_card.layout()
         status_card_layout.setSpacing(8)
 
-        # 当前动作
         action_row = QHBoxLayout()
         action_label = QLabel("当前动作:")
         action_label.setStyleSheet(f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
@@ -701,7 +669,6 @@ class MainWindow(QMainWindow):
         action_row.addStretch()
         status_card_layout.addLayout(action_row)
 
-        # 心情状态
         mood_row = QHBoxLayout()
         mood_label = QLabel("心情:")
         mood_label.setStyleSheet(f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
@@ -712,7 +679,6 @@ class MainWindow(QMainWindow):
         mood_row.addStretch()
         status_card_layout.addLayout(mood_row)
 
-        # 好感度
         affection_row = QHBoxLayout()
         affection_label = QLabel("好感度:")
         affection_label.setStyleSheet(f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
@@ -725,7 +691,6 @@ class MainWindow(QMainWindow):
 
         pet_right.addWidget(status_card)
 
-        # Auto-go-home card
         auto_home_card = self._make_card("🏠 自动回家")
         auto_home_layout = auto_home_card.layout()
         auto_home_layout.setSpacing(10)
@@ -735,7 +700,6 @@ class MainWindow(QMainWindow):
         auto_home_desc.setWordWrap(True)
         auto_home_layout.addWidget(auto_home_desc)
 
-        # Timeout selector row
         timeout_row = QHBoxLayout()
         timeout_row.setSpacing(8)
         timeout_label = QLabel("无互动")
@@ -770,7 +734,6 @@ class MainWindow(QMainWindow):
         timeout_row.addStretch()
         auto_home_layout.addLayout(timeout_row)
 
-        # Preset buttons
         preset_row = QHBoxLayout()
         preset_row.setSpacing(6)
         self._auto_home_presets = []
@@ -814,7 +777,6 @@ class MainWindow(QMainWindow):
         pet_page.setWidget(pet_widget)
         self._page_stack.addWidget(pet_page)
 
-        # ── Page 2: Features ──
         feat_page = QScrollArea()
         feat_page.setWidgetResizable(True)
         feat_page.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
@@ -833,7 +795,6 @@ class MainWindow(QMainWindow):
         feat_layout.setContentsMargins(20, 16, 20, 14)
         feat_layout.setSpacing(12)
 
-        # Processing card
         proc_card = self._make_card("图片处理设置")
         proc_layout = proc_card.layout()
         proc_layout.setSpacing(10)
@@ -851,7 +812,6 @@ class MainWindow(QMainWindow):
         proc_layout.addLayout(ai_row)
         feat_layout.addWidget(proc_card, 0, 0)  # 左上
 
-        # Behavior card
         behav_card = self._make_card("宠物行为")
         behav_layout = behav_card.layout()
         behav_layout.setSpacing(10)
@@ -911,7 +871,6 @@ class MainWindow(QMainWindow):
         behav_layout.addWidget(self._time_aware_check)
         feat_layout.addWidget(behav_card, 0, 1)  # 右上
 
-        # Pomodoro card
         pomodoro_card = self._make_card("番茄钟 · 休息提醒")
         pomodoro_layout = pomodoro_card.layout()
         pomodoro_layout.setSpacing(10)
@@ -956,21 +915,18 @@ class MainWindow(QMainWindow):
         self._update_pomodoro_status()
         feat_layout.addWidget(pomodoro_card, 1, 0, 1, 2)  # 底部跨两列
 
-        # 添加弹性空间
         spacer = QWidget()
         spacer.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         feat_layout.addWidget(spacer, 2, 0, 1, 2)
         feat_page.setWidget(feat_widget)
         self._page_stack.addWidget(feat_page)
 
-        # ── Page 3: Tools ──
         tools_page = QWidget()
         tools_page.setStyleSheet("background: transparent;")
         tools_main_layout = QVBoxLayout(tools_page)
         tools_main_layout.setContentsMargins(0, 0, 0, 0)
         tools_main_layout.setSpacing(0)
 
-        # Sub-tab bar for tools pages
         tools_tab_bar = QWidget()
         tools_tab_bar.setFixedHeight(36)
         tools_tab_layout = QHBoxLayout(tools_tab_bar)
@@ -1002,14 +958,12 @@ class MainWindow(QMainWindow):
         tools_tab_layout.addStretch()
         tools_main_layout.addWidget(tools_tab_bar)
 
-        # ── Tools Page 1: Todo + Timer ──
         tools_p1 = QWidget()
         tools_p1.setStyleSheet("background: transparent;")
         tools_layout = QHBoxLayout(tools_p1)
         tools_layout.setSpacing(16)
         tools_layout.setContentsMargins(20, 16, 20, 14)
 
-        # Left: Todo list
         todo_card = self._make_card("📝 待办事项")
         todo_card_layout = todo_card.layout()
         todo_card_layout.setSpacing(8)
@@ -1021,7 +975,6 @@ class MainWindow(QMainWindow):
         todo_card_layout.addWidget(self._todo_widget)
         tools_layout.addWidget(todo_card, 1)  # stretch=1
 
-        # Right: Timer
         timer_card = self._make_card("⏱ 倒计时器")
         timer_card_layout = timer_card.layout()
         timer_card_layout.setSpacing(8)
@@ -1034,14 +987,12 @@ class MainWindow(QMainWindow):
 
         self._tools_stack.addWidget(tools_p1)
 
-        # ── Tools Page 2: Data Panel ──
         tools_p2 = QWidget()
         tools_p2.setStyleSheet("background: transparent;")
         tools_p2_layout = QHBoxLayout(tools_p2)
         tools_p2_layout.setSpacing(12)
         tools_p2_layout.setContentsMargins(20, 16, 20, 14)
 
-        # Left half: two 1/4 blocks stacked vertically
         left_col = QVBoxLayout()
         left_col.setSpacing(12)
 
@@ -1049,7 +1000,6 @@ class MainWindow(QMainWindow):
         left_top_layout = left_top_card.layout()
         left_top_layout.setSpacing(6)
 
-        # Tab buttons
         stat_tabs = QHBoxLayout()
         stat_tabs.setSpacing(6)
         self._stat_tab_study = QPushButton("学习统计")
@@ -1070,11 +1020,9 @@ class MainWindow(QMainWindow):
         stat_tabs.addStretch()
         left_top_layout.addLayout(stat_tabs)
 
-        # Stacked content
         self._stat_stack = QStackedWidget()
         left_top_layout.addWidget(self._stat_stack, 1)
 
-        # Page 0: Charts
         charts_widget = QWidget()
         charts_widget.setStyleSheet("background: transparent;")
         charts_row = QHBoxLayout(charts_widget)
@@ -1088,7 +1036,6 @@ class MainWindow(QMainWindow):
         charts_row.addWidget(self._bar_label, 1)
         self._stat_stack.addWidget(charts_widget)
 
-        # Page 1: Screen time
         screen_widget = QWidget()
         screen_widget.setStyleSheet("background: transparent;")
         screen_layout = QVBoxLayout(screen_widget)
@@ -1110,7 +1057,6 @@ class MainWindow(QMainWindow):
         left_bot_layout = left_bot_card.layout()
         left_bot_layout.setSpacing(8)
 
-        # Task history list for selected date
         self._history_scroll = QScrollArea()
         self._history_scroll.setWidgetResizable(True)
         self._history_scroll.setStyleSheet(
@@ -1118,7 +1064,6 @@ class MainWindow(QMainWindow):
             "QScrollBar:vertical { width: 4px; background: transparent; }"
             "QScrollBar::handle:vertical { background: #E8D5C0; border-radius: 2px; }"
         )
-        # Initial empty state
         init_container = QWidget()
         init_container.setStyleSheet("background: transparent;")
         init_layout = QVBoxLayout(init_container)
@@ -1138,7 +1083,6 @@ class MainWindow(QMainWindow):
 
         tools_p2_layout.addLayout(left_col, 1)  # left half = 1/2
 
-        # Right half: calendar (1/2)
         right_card = self._make_card("📅 日历")
         right_card_layout = right_card.layout()
         right_card_layout.setSpacing(8)
@@ -1152,25 +1096,21 @@ class MainWindow(QMainWindow):
 
         self._tools_stack.addWidget(tools_p2)
 
-        # Set default
         self._tools_tab_btns[0].setChecked(True)
         tools_main_layout.addWidget(self._tools_stack, 1)
 
         self._page_stack.addWidget(tools_page)
 
-        # ── Page 4: AI ──
         ai_page = QWidget()
         ai_page.setStyleSheet("background: transparent;")
         ai_layout = QVBoxLayout(ai_page)
         ai_layout.setSpacing(12)
         ai_layout.setContentsMargins(20, 16, 20, 14)
 
-        # AI config
         from pet_engine.pet_ai import AIConfig, PERSONALITIES
         self._ai_config = AIConfig()
         self._ai_config.load()
 
-        # Enable card
         ai_enable_card = self._make_card("🤖 AI 伴侣")
         ai_enable_layout = ai_enable_card.layout()
         self._ai_enabled_check = QCheckBox("启用 AI 伴侣功能")
@@ -1183,12 +1123,10 @@ class MainWindow(QMainWindow):
         ai_enable_layout.addWidget(hint)
         ai_layout.addWidget(ai_enable_card)
 
-        # API config card
         api_card = self._make_card("🔗 API 配置")
         api_layout = api_card.layout()
         api_layout.setSpacing(8)
 
-        # API Base URL
         api_layout.addWidget(QLabel("API 地址:"))
         self._ai_api_base_input = QLineEdit(self._ai_config.api_base)
         self._ai_api_base_input.setPlaceholderText("https://api.deepseek.com/v1")
@@ -1201,7 +1139,6 @@ class MainWindow(QMainWindow):
         """)
         api_layout.addWidget(self._ai_api_base_input)
 
-        # API Key
         api_layout.addWidget(QLabel("API Key:"))
         self._ai_api_key_input = QLineEdit(self._ai_config.api_key)
         self._ai_api_key_input.setEchoMode(QLineEdit.EchoMode.Password)
@@ -1215,7 +1152,6 @@ class MainWindow(QMainWindow):
         """)
         api_layout.addWidget(self._ai_api_key_input)
 
-        # Model
         api_layout.addWidget(QLabel("模型名称:"))
         self._ai_model_input = QLineEdit(self._ai_config.model)
         self._ai_model_input.setPlaceholderText("deepseek-chat")
@@ -1230,12 +1166,10 @@ class MainWindow(QMainWindow):
 
         ai_layout.addWidget(api_card)
 
-        # Personality card
         persona_card = self._make_card("💕 性格设置")
         persona_layout = persona_card.layout()
         persona_layout.setSpacing(8)
 
-        # Pet name
         persona_layout.addWidget(QLabel("宠物名字:"))
         self._ai_name_input = QLineEdit(self._ai_config.name)
         self._ai_name_input.setStyleSheet(f"""
@@ -1247,7 +1181,6 @@ class MainWindow(QMainWindow):
         """)
         persona_layout.addWidget(self._ai_name_input)
 
-        # Personality
         persona_layout.addWidget(QLabel("性格:"))
         self._ai_personality_combo = QComboBox()
         for name, desc in PERSONALITIES.items():
@@ -1261,7 +1194,6 @@ class MainWindow(QMainWindow):
         )
         persona_layout.addWidget(self._ai_personality_combo)
 
-        # Temperature
         temp_row = QHBoxLayout()
         temp_row.addWidget(QLabel("创造力:"))
         self._ai_temp_spin = QDoubleSpinBox()
@@ -1280,7 +1212,6 @@ class MainWindow(QMainWindow):
 
         ai_layout.addWidget(persona_card)
 
-        # Save button
         save_ai_btn = QPushButton("💾 保存 AI 设置")
         save_ai_btn.setStyleSheet(f"""
             QPushButton {{
@@ -1301,13 +1232,11 @@ class MainWindow(QMainWindow):
         ai_layout.addStretch()
         self._page_stack.addWidget(ai_page)
 
-        # Activate first tab
         self._page_btns["宠物"].setChecked(True)
         self._page_stack.setCurrentIndex(0)
 
         root.addWidget(self._page_stack, 1)  # stretch=1 to fill available space
 
-        # ── Status bar ──
         root.addWidget(self._h_separator())
         status_bar = QWidget()
         status_bar.setObjectName("statusBar")
@@ -1330,7 +1259,6 @@ class MainWindow(QMainWindow):
 
         status_layout.addStretch()
 
-        # 好感度进度条
         affection_bar, affection_bg, affection_fill, affection_value = self._create_affection_bar()
         status_layout.addWidget(affection_bar)
         self._affection_bar = affection_fill
@@ -1396,12 +1324,10 @@ class MainWindow(QMainWindow):
         bar_layout.setContentsMargins(0, 0, 0, 0)
         bar_layout.setSpacing(8)
 
-        # 图标
         icon_label = QLabel("❤")
         icon_label.setStyleSheet("font-size: 14px; background: transparent;")
         bar_layout.addWidget(icon_label)
 
-        # 进度条背景
         bar_bg = QWidget()
         bar_bg.setFixedHeight(8)
         bar_bg.setMinimumWidth(100)
@@ -1412,7 +1338,6 @@ class MainWindow(QMainWindow):
             }}
         """)
 
-        # 进度条填充
         bar_fill = QWidget(bar_bg)
         bar_fill.setGeometry(0, 0, 0, 8)
         bar_fill.setStyleSheet("""
@@ -1425,7 +1350,6 @@ class MainWindow(QMainWindow):
 
         bar_layout.addWidget(bar_bg)
 
-        # 数值标签
         value_label = QLabel("0/100")
         value_label.setStyleSheet(f"color: {ACCENT}; font-size: 11px; font-weight: bold; background: transparent;")
         bar_layout.addWidget(value_label)
@@ -1435,12 +1359,10 @@ class MainWindow(QMainWindow):
     def _update_affection_display(self, value):
         """更新好感度进度条显示"""
         if hasattr(self, '_affection_bar') and hasattr(self, '_affection_value'):
-            # 计算进度条宽度 (最大 100px)
             bar_width = min(value, 100)
             self._affection_bar.setFixedWidth(bar_width)
             self._affection_value.setText(f"{value}/100")
 
-            # 根据好感度改变颜色
             if value >= 100:
                 color = "#FF69B4"  # 粉色 - 满好感
             elif value >= 50:
@@ -1457,10 +1379,6 @@ class MainWindow(QMainWindow):
                 }}
             """)
 
-    # ═══════════════════════════════════════════════
-    #  Tray
-    # ═══════════════════════════════════════════════
-
     def _init_tray(self):
         self._tray = TrayIcon(None, self.settings)
         self._tray._on_change_pet = self._on_select_image
@@ -1471,10 +1389,6 @@ class MainWindow(QMainWindow):
         if reason == QSystemTrayIcon.ActivationReason.DoubleClick:
             self.show()
             self.activateWindow()
-
-    # ═══════════════════════════════════════════════
-    #  Actions
-    # ═══════════════════════════════════════════════
 
     def _on_select_image(self, path=None):
         if not path:
@@ -1509,8 +1423,6 @@ class MainWindow(QMainWindow):
     def _on_speed_change(self, value):
         self._speed_label.setText(str(value))
 
-    # ── Auto-start ──
-
     def _on_auto_start_toggle(self, checked):
         self.settings.auto_start = checked
         link = os.path.join(
@@ -1532,8 +1444,6 @@ class MainWindow(QMainWindow):
                     os.remove(link)
             except Exception:
                 pass
-
-    # ── Favorites ──
 
     MAX_FAVORITES = 10
     MAX_BEAD_CREATIONS = 20
@@ -1563,20 +1473,16 @@ class MainWindow(QMainWindow):
         cleaned = []
         for f in favs:
             path = f.get("path", "")
-            # Skip PyInstaller temp directory paths
             if "_MEI" in path:
                 continue
-            # Skip non-existent files
             if not os.path.exists(path):
                 continue
-            # Skip duplicates (by normalized path)
             norm = os.path.normcase(os.path.abspath(path))
             if norm in seen:
                 continue
             seen.add(norm)
             cleaned.append(f)
 
-        # Enforce MAX_FAVORITES
         if len(cleaned) > self.MAX_FAVORITES:
             cleaned = cleaned[:self.MAX_FAVORITES]
 
@@ -1584,10 +1490,8 @@ class MainWindow(QMainWindow):
             self.settings.favorites = cleaned
 
     def _refresh_favorites(self):
-        # Remove item widgets (keep add_btn and placeholder)
         for btn in list(self._fav_thumb_group.buttons()):
             self._fav_thumb_group.removeButton(btn)
-            # Find the parent wrapper widget and remove it
             pw = btn.parent()
             if pw and pw is not self._fav_container:
                 idx = self._fav_layout.indexOf(pw)
@@ -1600,7 +1504,6 @@ class MainWindow(QMainWindow):
                     self._fav_layout.takeAt(idx)
                     btn.deleteLater()
 
-        # Remove leftover stretch items
         for i in reversed(range(self._fav_layout.count())):
             item = self._fav_layout.itemAt(i)
             if item.widget() is None and item.spacerItem() is not None:
@@ -1625,7 +1528,6 @@ class MainWindow(QMainWindow):
                 scaled = pix.scaled(42, 42, Qt.AspectRatioMode.KeepAspectRatio,
                                     Qt.TransformationMode.SmoothTransformation)
 
-                # Wrapper widget: button + name label
                 wrapper = QWidget()
                 wrapper.setStyleSheet("background: transparent;")
                 wrap_layout = QVBoxLayout(wrapper)
@@ -1661,7 +1563,6 @@ class MainWindow(QMainWindow):
                 if p == current_path:
                     btn.setChecked(True)
 
-        # Ensure stretch, add_btn, placeholder are at the end
         for w in (self._fav_add_btn, self._fav_placeholder):
             if self._fav_layout.indexOf(w) == -1:
                 self._fav_layout.addWidget(w)
@@ -1677,7 +1578,6 @@ class MainWindow(QMainWindow):
             else:
                 self._fav_layout.addStretch()
 
-        # Increase scroll area height to accommodate name labels
         self._fav_scroll.setFixedHeight(72)
 
     def _on_favorite_thumb_click(self, path):
@@ -1689,7 +1589,6 @@ class MainWindow(QMainWindow):
             if not pix.isNull():
                 self._drop_zone.show_pixmap(pix)
             self._status.setText(f"已切换: {os.path.basename(path)}")
-            # Highlight the clicked thumbnail
             for btn in self._fav_thumb_group.buttons():
                 btn.setChecked(False)
             sender = self.sender()
@@ -1756,8 +1655,6 @@ class MainWindow(QMainWindow):
         self._refresh_favorites()
         self._status.setText(f"已收藏: {name}")
 
-    # ── 作品集 (Showcase) ──
-
     def _make_showcase_card(self):
         card = QFrame()
         card.setObjectName("card")
@@ -1815,7 +1712,6 @@ class MainWindow(QMainWindow):
         return card
 
     def _refresh_bead_creations(self):
-        # Remove item widgets
         for btn in list(self._bead_thumb_group.buttons()):
             self._bead_thumb_group.removeButton(btn)
             pw = btn.parent()
@@ -1830,14 +1726,12 @@ class MainWindow(QMainWindow):
                     self._showcase_layout.takeAt(idx)
                     btn.deleteLater()
 
-        # Remove leftover spacer items
         for i in reversed(range(self._showcase_layout.count())):
             item = self._showcase_layout.itemAt(i)
             if item.widget() is None and item.spacerItem() is not None:
                 self._showcase_layout.takeAt(i)
 
         creations = self.settings.bead_creations
-        # Clean orphaned entries
         valid = []
         for c in creations:
             png = c.get("png_path", "")
@@ -1901,7 +1795,6 @@ class MainWindow(QMainWindow):
                 if png_path == current_path:
                     btn.setChecked(True)
 
-        # Ensure stretch, add_btn, placeholder at end
         for w in (self._showcase_add_btn, self._showcase_placeholder):
             if self._showcase_layout.indexOf(w) == -1:
                 self._showcase_layout.addWidget(w)
@@ -2052,8 +1945,6 @@ class MainWindow(QMainWindow):
             self._refresh_bead_creations()
             self._status.setText(f"已删除: {name}")
 
-    # ── Interaction Mode ──
-
     def _switch_tools_page(self, idx):
         """Switch between tools sub-pages."""
         self._tools_stack.setCurrentIndex(idx)
@@ -2062,12 +1953,10 @@ class MainWindow(QMainWindow):
 
     def _on_page_switch(self, idx, label):
         """Switch page and enforce mutually exclusive tab highlighting."""
-        # 添加淡入动画效果
         current_widget = self._page_stack.currentWidget()
         new_widget = self._page_stack.widget(idx)
 
         if current_widget != new_widget:
-            # 设置新 widget 的初始透明度
             new_widget.setGraphicsEffect(None)
             from PyQt6.QtWidgets import QGraphicsOpacityEffect
             from PyQt6.QtCore import QPropertyAnimation
@@ -2076,14 +1965,12 @@ class MainWindow(QMainWindow):
             opacity_effect.setOpacity(0.0)
             new_widget.setGraphicsEffect(opacity_effect)
 
-            # 创建淡入动画
             animation = QPropertyAnimation(opacity_effect, b"opacity", self)
             animation.setDuration(200)  # 200ms
             animation.setStartValue(0.0)
             animation.setEndValue(1.0)
             animation.start()
 
-            # 动画完成后清理
             animation.finished.connect(lambda: new_widget.setGraphicsEffect(None))
 
         self._page_stack.setCurrentIndex(idx)
@@ -2100,8 +1987,6 @@ class MainWindow(QMainWindow):
                         "stay": InteractionMode.STAY}
             self._pet.state_machine.set_mode(mode_map.get(mode_val, InteractionMode.FREE))
 
-    # ── Start Pet ──
-
     def _on_start_pet(self):
         if not self._input_path:
             QMessageBox.warning(self, "提示", "请先选择一张图片!")
@@ -2112,11 +1997,9 @@ class MainWindow(QMainWindow):
         QApplication.processEvents()
 
         try:
-            # Save previous state for recovery
             prev_pet_path = self.settings.pet_image_path
             prev_pet = self._pet
 
-            # Skip re-processing if image was already processed (e.g. bead import)
             if getattr(self, '_bead_import_mode', False):
                 processed_path = self._input_path
             else:
@@ -2167,7 +2050,6 @@ class MainWindow(QMainWindow):
             self._pulse_phase = 0.0
             self._pulse_timer.start(50)
 
-            # Auto-add to favorites
             favs = self.settings.favorites
             if not any(f["path"] == processed_path for f in favs):
                 if len(favs) < self.MAX_FAVORITES:
@@ -2175,7 +2057,6 @@ class MainWindow(QMainWindow):
                     self.settings.favorites = favs
             self._refresh_favorites()
 
-            # Apply saved interaction mode
             mode_val = self.settings.interaction_mode
             mode_map = {"free": InteractionMode.FREE,
                         "follow": InteractionMode.FOLLOW,
@@ -2184,7 +2065,6 @@ class MainWindow(QMainWindow):
             self._pet.set_time_awareness(self.settings.time_awareness_enabled)
 
         except Exception as e:
-            # Restore previous pet state on failure
             if prev_pet:
                 try:
                     self._pet = prev_pet
@@ -2220,7 +2100,6 @@ class MainWindow(QMainWindow):
             affection_level = self._pet.affection.level
             self._affection_label.setText(self._pet.affection.display_text)
             self._affection_status.setText(f"{affection_level}/100")
-            # 更新好感度进度条
             self._update_affection_display(affection_level)
         else:
             self._affection_label.setText("")
@@ -2239,7 +2118,6 @@ class MainWindow(QMainWindow):
         pix = QPixmap(default)
         if not pix.isNull():
             self._drop_zone.show_pixmap(pix)
-        # Reset sliders
         self._start_btn.setEnabled(True)
         self._status.setText("已恢复 ToYu - 默认土豆宠物")
         self._pulse_timer.stop()
@@ -2335,7 +2213,6 @@ class MainWindow(QMainWindow):
     def _on_timer_complete(self):
         """Handle timer completion with pet bubble notification."""
         self._status.setText("⏰ 倒计时结束!")
-        # Show pet bubble notification
         if self._pet:
             from pet_engine.pet_bubble import PomodoroNotificationBubble
             self._timer_notif = PomodoroNotificationBubble(
@@ -2343,7 +2220,6 @@ class MainWindow(QMainWindow):
                 subtitle="倒计时结束啦~"
             )
             self._timer_notif.show_near(self._pet)
-        # Refresh charts
         date = getattr(self, '_selected_chart_date', '')
         if date:
             self._refresh_charts_for_date(date)
@@ -2355,7 +2231,6 @@ class MainWindow(QMainWindow):
                 self._pet.on_task_complete()
         except Exception as e:
             print(f"Task completed error: {e}")
-        # Refresh charts if a date is selected
         date = getattr(self, '_selected_chart_date', '')
         if date:
             self._refresh_charts_for_date(date)
@@ -2372,7 +2247,6 @@ class MainWindow(QMainWindow):
     def _on_calendar_date_selected(self, date_str):
         """Show completed tasks for the selected calendar date."""
         self._selected_chart_date = date_str
-        # Replace the entire container widget (safest approach)
         old = self._history_scroll.takeWidget()
         if old:
             old.deleteLater()
@@ -2383,7 +2257,6 @@ class MainWindow(QMainWindow):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(4)
 
-        # Load history
         import json, os
         history_file = os.path.join(os.path.expanduser("~"), ".desktop_pet", "task_history.json")
         history = {}
@@ -2418,7 +2291,6 @@ class MainWindow(QMainWindow):
             tm = t.get("time", "")
             dur = t.get("duration", 0)
 
-            # Format duration
             if dur >= 3600:
                 h = dur // 3600
                 m = (dur % 3600) // 60
@@ -2464,7 +2336,6 @@ class MainWindow(QMainWindow):
         layout.addStretch()
         self._history_scroll.setWidget(container)
 
-        # Update charts (protected)
         try:
             self._update_charts(date_str, tasks)
         except Exception as e:
@@ -2503,7 +2374,6 @@ class MainWindow(QMainWindow):
             self._screen_time_list.setWidget(container)
             return
 
-        # ── Summary card ──
         summary = QFrame()
         summary.setStyleSheet(
             "QFrame { background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
@@ -2520,7 +2390,6 @@ class MainWindow(QMainWindow):
         )
         summary_layout.addWidget(total_lbl)
 
-        # Today vs Yesterday comparison
         today_s, yesterday_s = self._screen_tracker.get_today_vs_yesterday()
         if yesterday_s > 0:
             diff = today_s - yesterday_s
@@ -2545,7 +2414,6 @@ class MainWindow(QMainWindow):
 
         layout.addWidget(summary)
 
-        # ── App list ──
         list_title = QLabel("应用排行")
         list_title.setStyleSheet(
             "color: #2C1810; font-size: 12px; font-weight: bold; padding: 4px 0;"
@@ -2556,7 +2424,6 @@ class MainWindow(QMainWindow):
         colors = ['#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7', '#FF6B6B',
                   '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9']
 
-        # App icon emoji mapping
         app_icons = {
             'chrome': '🌐', 'firefox': '🌐', 'edge': '🌐', 'brave': '🌐',
             'code': '💻', 'pycharm': '💻', 'idea': '💻', 'vscode': '💻',
@@ -2573,7 +2440,6 @@ class MainWindow(QMainWindow):
             clr = colors[i % len(colors)]
             clean_name = app.replace(".exe", "").lower()
 
-            # Find matching icon
             icon = "📱"
             for key, emoji in app_icons.items():
                 if key in clean_name:
@@ -2590,7 +2456,6 @@ class MainWindow(QMainWindow):
             card_layout.setContentsMargins(10, 6, 10, 6)
             card_layout.setSpacing(3)
 
-            # Top row: rank + icon + name + time
             top_row = QHBoxLayout()
             rank_lbl = QLabel(f"{i+1}")
             rank_lbl.setFixedWidth(20)
@@ -2616,7 +2481,6 @@ class MainWindow(QMainWindow):
             top_row.addWidget(pct_lbl)
             card_layout.addLayout(top_row)
 
-            # Progress bar
             bar_bg = QFrame()
             bar_bg.setFixedHeight(5)
             bar_bg.setStyleSheet(
@@ -2681,7 +2545,6 @@ class MainWindow(QMainWindow):
         plt.rcParams['axes.unicode_minus'] = False
 
         CARD_W = max(self._pie_label.width(), 130)
-        # Modern vibrant palette
         pie_colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
                       '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9']
         bar_color_active = '#4ECDC4'
@@ -2697,7 +2560,6 @@ class MainWindow(QMainWindow):
             self._bar_label.setText("")
             return
 
-        # Aggregate
         task_time = defaultdict(int)
         for t in tasks:
             task_time[t.get('text', '未知')] += t.get('duration', 0)
@@ -2705,7 +2567,6 @@ class MainWindow(QMainWindow):
         times = [task_time[n] for n in names]
         clrs = [pie_colors[i % len(pie_colors)] for i in range(len(names))]
 
-        # --- Donut Chart ---
         fig1, ax1 = plt.subplots(figsize=(4.0, 3.2), dpi=300)
         fig1.patch.set_alpha(0)
         ax1.set_facecolor('none')
@@ -2735,7 +2596,6 @@ class MainWindow(QMainWindow):
         buf1.seek(0)
         self._pie_label.setRawPixmap(QPixmap.fromImage(QImage.fromData(buf1.getvalue())))
 
-        # --- Bar Chart ---
         fig2, ax2 = plt.subplots(figsize=(4.0, 3.2), dpi=300)
         fig2.patch.set_alpha(0)
         ax2.set_facecolor('none')
@@ -2798,7 +2658,6 @@ class MainWindow(QMainWindow):
 
     def _on_bead_showcase_save(self, json_path, png_path, name):
         creations = self.settings.bead_creations
-        # Avoid duplicate entries
         if not any(c.get("name") == name for c in creations):
             creations.append({
                 "name": name,
@@ -2857,7 +2716,6 @@ class MainWindow(QMainWindow):
             os.makedirs(out_dir, exist_ok=True)
             out_path = os.path.join(out_dir, "bead_import.png")
             img.save(out_path, "PNG")
-            # Also save the final processed version so _on_start_pet won't re-process it
             final_path = os.path.join(out_dir, "bead_import_final.png")
             img.save(final_path, "PNG")
             self._input_path = final_path
@@ -2875,10 +2733,6 @@ class MainWindow(QMainWindow):
     def closeEvent(self, event):
         event.ignore()
         self.hide()
-
-    # ═══════════════════════════════════════════════
-    #  Stylesheet
-    # ═══════════════════════════════════════════════
 
     @staticmethod
     def _global_stylesheet():
@@ -3162,13 +3016,11 @@ class MainWindow(QMainWindow):
         from ui.settings_dialog import SettingsDialog
         dialog = SettingsDialog(self.settings, self)
 
-        # Connect live preview signals
         dialog.scale_changed.connect(self._on_settings_scale_change)
         dialog.speed_changed.connect(self._on_settings_speed_change)
         dialog.dark_mode_changed.connect(self._on_settings_dark_mode)
 
         if dialog.exec():
-            # Apply settings after dialog closes
             self._apply_settings(dialog)
 
     def _on_settings_scale_change(self, scale):
@@ -3195,11 +3047,9 @@ class MainWindow(QMainWindow):
     def _on_auto_home_changed(self, value):
         """自动回家时间变更"""
         self.settings.auto_home_timeout = value
-        # Update preset button highlights
         for btn in self._auto_home_presets:
             mins = btn.property("_mins")
             btn.setChecked(mins == value)
-        # Update pet timer if running
         if self._pet and hasattr(self._pet, '_auto_home_timer'):
             if value > 0:
                 self._pet._auto_home_timer.start(value * 60 * 1000)
@@ -3212,12 +3062,10 @@ class MainWindow(QMainWindow):
 
     def _apply_settings(self, dialog):
         """应用设置"""
-        # Apply to pet window if running
         if self._pet:
             self._pet.set_scale(self.settings.animation_scale)
             self._pet.set_time_awareness(self.settings.time_awareness_enabled)
 
-            # Apply interaction mode
             from pet_engine.pet_state_machine import InteractionMode
             mode_map = {"free": InteractionMode.FREE,
                         "follow": InteractionMode.FOLLOW,
@@ -3226,7 +3074,6 @@ class MainWindow(QMainWindow):
                 mode_map.get(self.settings.interaction_mode, InteractionMode.FREE)
             )
 
-            # Apply always on top
             flags = self._pet.windowFlags()
             if self.settings.always_on_top:
                 flags |= Qt.WindowType.WindowStaysOnTopHint
@@ -3235,16 +3082,13 @@ class MainWindow(QMainWindow):
             self._pet.setWindowFlags(flags)
             self._pet.show()
 
-            # Apply opacity
             self._pet.setWindowOpacity(dialog.get_opacity())
 
-            # Apply house
             if self.settings.house_enabled and not self._house_window:
                 self._spawn_house()
             elif not self.settings.house_enabled and self._house_window:
                 self._close_house()
 
-            # Apply pomodoro
             if hasattr(self._pet, '_pomodoro_timer'):
                 if self.settings.pomodoro_enabled:
                     self._pet._pomodoro_interval = self.settings.pomodoro_interval * 60 * 1000
@@ -3252,7 +3096,6 @@ class MainWindow(QMainWindow):
                 else:
                     self._pet._pomodoro_timer.stop()
 
-            # Reload AI config
             if hasattr(self._pet, '_ai_config'):
                 self._pet._ai_config.load()
                 self._pet._ai = AICompanion(self._pet._ai_config)
@@ -3273,11 +3116,9 @@ class MainWindow(QMainWindow):
             config.temperature = self._ai_temp_spin.value()
             config.save()
 
-            # Update existing AI companion config (keep history)
             if self._pet:
                 self._pet._ai_config = config
                 self._pet._ai.config = config
-                # Update proactive system reference
                 if hasattr(self._pet, '_proactive'):
                     self._pet._proactive._ai = self._pet._ai
 
@@ -3300,7 +3141,6 @@ class MainWindow(QMainWindow):
 
     def _refresh_inline_styles(self):
         """Re-apply all inline styles after dark mode toggle."""
-        # Tab buttons
         btn_style = f"""
             QPushButton {{
                 background: transparent;
@@ -3324,7 +3164,6 @@ class MainWindow(QMainWindow):
         for btn in self._page_btns.values():
             btn.setStyleSheet(btn_style)
 
-        # Scrollbar handles
         sb_style = f"QScrollBar::handle:vertical {{ background: {self._c('handle')}; border-radius: 3px; min-height: 20px; }}"
         for scroll in self.findChildren(QScrollArea):
             old = scroll.styleSheet()
@@ -3334,7 +3173,6 @@ class MainWindow(QMainWindow):
                              old)
                 scroll.setStyleSheet(new)
 
-        # Bead card
         if hasattr(self, '_bead_card'):
             self._bead_card.setStyleSheet(f"""
                 QFrame#beadCard {{
@@ -3344,28 +3182,24 @@ class MainWindow(QMainWindow):
                 }}
             """)
 
-        # Dividers
         for sep in self.findChildren(QFrame):
             if sep.frameShape() == QFrame.Shape.VLine:
                 sep.setStyleSheet(f"background: {self._c('border')}; max-width: 1px;")
             elif sep.frameShape() == QFrame.Shape.HLine:
                 sep.setStyleSheet(f"background: {self._c('border')}; max-height: 1px;")
 
-        # Status labels
         for attr in ('_house_check', '_action_status', '_mood_status', '_affection_status'):
             w = getattr(self, attr, None)
             if w:
                 key = 'accent' if attr == '_affection_status' else 'text'
                 w.setStyleSheet(f"color: {self._c(key)}; font-size: 11px; font-weight: bold; background: transparent;")
 
-        # Secondary labels
         for attr in ('_fav_placeholder', '_showcase_placeholder', '_pomodoro_status'):
             w = getattr(self, attr, None)
             if w:
                 w.setStyleSheet(f"color: {self._c('text2')}; font-size: 11px; padding: 18px 10px;" if 'placeholder' in attr
                                else f"color: {self._c('text2')}; font-size: 11px;")
 
-        # Auto-home spin
         if hasattr(self, '_auto_home_spin'):
             self._auto_home_spin.setStyleSheet(f"""
                 QSpinBox {{
@@ -3381,7 +3215,6 @@ class MainWindow(QMainWindow):
                 }}
             """)
 
-        # Preset buttons (auto-home & pomodoro)
         for btn in getattr(self, '_auto_home_presets', []):
             btn.setStyleSheet(f"""
                 QPushButton {{
@@ -3402,7 +3235,6 @@ class MainWindow(QMainWindow):
                 }}
             """)
 
-        # Fav add btn & showcase add btn
         if hasattr(self, '_fav_add_btn'):
             self._fav_add_btn.setStyleSheet(f"""
                 QPushButton {{
@@ -3436,14 +3268,12 @@ class MainWindow(QMainWindow):
                 }}
             """)
 
-        # Time period label
         if hasattr(self, '_time_period_label'):
             self._time_period_label.setStyleSheet(
                 f"font-size: 12px; color: {self._c('accent')}; font-weight: bold;"
                 f"background: {self._c('tab_bg')}; border-radius: 4px; padding: 2px 8px; margin-left: 10px;"
             )
 
-        # Bead editor/import buttons
         for child in self.findChildren(QPushButton):
             if child.text() in ('✏️ 拼豆编辑器', '📥 拼豆图导入'):
                 child.setStyleSheet(f"""
@@ -3461,7 +3291,6 @@ class MainWindow(QMainWindow):
                     }}
                 """)
 
-        # Thumbnail name labels
         for lbl in self.findChildren(QLabel):
             ss = lbl.styleSheet()
             if 'font-size: 10px' in ss and 'font-weight: bold' in ss:
@@ -3470,7 +3299,6 @@ class MainWindow(QMainWindow):
                     "font-weight: bold; background: transparent;"
                 )
 
-        # Affection bar background
         if hasattr(self, '_affection_bar'):
             bg_widget = self._affection_bar.parent()
             if bg_widget:
@@ -3481,11 +3309,9 @@ class MainWindow(QMainWindow):
                     }}
                 """)
 
-        # DropZone
         if hasattr(self, '_drop_zone'):
             self._drop_zone.set_dark(self._is_dark_mode)
 
-        # Force repaint
         self.update()
 
     def _dark_stylesheet(self):

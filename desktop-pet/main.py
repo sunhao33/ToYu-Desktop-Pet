@@ -4,7 +4,6 @@ import ctypes
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 
-
 def _resource_path(relative_path):
     """Get absolute path to resource, works for dev and PyInstaller bundle."""
     import sys as _sys
@@ -14,9 +13,7 @@ def _resource_path(relative_path):
         base = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base, relative_path)
 
-
 def main():
-    # Set AppUserModelID so Windows taskbar shows our icon instead of Python's
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ToYu.DesktopPet")
 
     app = QApplication(sys.argv)
@@ -30,7 +27,6 @@ def main():
     window.show()
 
     sys.exit(app.exec())
-
 
 if __name__ == "__main__":
     main()

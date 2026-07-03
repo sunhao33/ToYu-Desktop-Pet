@@ -12,8 +12,6 @@ from PyQt6.QtWidgets import (
     QWidget, QLineEdit, QSizePolicy
 )
 
-
-# ── Warm cream theme (matching main window) ──
 BG_CREAM = "#FFFDF7"
 BORDER_SOFT = "#E8DDD2"
 ACCENT = "#C49A3C"
@@ -22,19 +20,16 @@ TEXT_DARK = "#2C1810"
 TEXT_SEC = "#8B7355"
 DANGER = "#C0392B"
 
-# ── Cute bubble palette ──
 BUBBLE_BG = "#FFF8F0"
 BUBBLE_BG_TOP = "#FFF5EE"
 BUBBLE_BG_BOTTOM = "#FFEEE0"
 BUBBLE_BORDER = "#F5D5C8"
 BUBBLE_TAIL_SIZE = 12
 
-# ── Shared window flags for top-level bubble windows (no DWM shadow) ──
 _BUBBLE_FLAGS = (
     Qt.WindowType.Tool | Qt.WindowType.FramelessWindowHint
     | Qt.WindowType.WindowStaysOnTopHint
 )
-
 
 class PetFunctionBubble(QFrame):
     """Styled floating bubble — 'pet' mode shows status, 'house' mode shows settings."""
@@ -301,7 +296,6 @@ class PetFunctionBubble(QFrame):
     def _clear_opacity_effect(self):
         self.setGraphicsEffect(None)
 
-
 class PomodoroNotificationBubble(QWidget):
     """Small notification that appears when the pomodoro timer fires.
     Top-level window positioned above the pet, follows pet movement."""
@@ -390,7 +384,6 @@ class PomodoroNotificationBubble(QWidget):
             self._fade_timer.stop()
             self.close()
 
-
 class CompanionBubble(QWidget):
     """Cute speech bubble with tail, attached to pet and moves with it.
     Top-level window repositioned each frame to follow the pet."""
@@ -452,11 +445,9 @@ class CompanionBubble(QWidget):
         bubble_rect = QRectF(4, 0, w - 8, h - tail_h)
         r = 16
 
-        # Bubble body
         path = QPainterPath()
         path.addRoundedRect(bubble_rect, r, r)
 
-        # Tail (pointing down to pet's head)
         tail_cx = self._tail_x if self._tail_x > 0 else w / 2
         tail_cx = max(20, min(tail_cx, w - 20))
         tail_path = QPainterPath()
@@ -467,7 +458,6 @@ class CompanionBubble(QWidget):
 
         full_path = path.united(tail_path)
 
-        # Gradient fill
         grad = QLinearGradient(0, 0, 0, h)
         grad.setColorAt(0.0, QColor(BUBBLE_BG_TOP))
         grad.setColorAt(1.0, QColor(BUBBLE_BG_BOTTOM))
@@ -476,13 +466,11 @@ class CompanionBubble(QWidget):
         painter.setBrush(QBrush(grad))
         painter.drawPath(full_path)
 
-        # Border
         pen = QPen(QColor(BUBBLE_BORDER), 1.5)
         painter.setPen(pen)
         painter.setBrush(Qt.BrushStyle.NoBrush)
         painter.drawPath(full_path)
 
-        # Decorative dots near tail
         painter.setPen(Qt.PenStyle.NoPen)
         painter.setBrush(QColor(BUBBLE_BORDER))
         dot_y = bubble_rect.bottom() + tail_h // 2 + 1
@@ -497,13 +485,10 @@ class CompanionBubble(QWidget):
         self._label.setText(message)
         self._pet_window = pet_window
 
-        # Calculate ideal size based on text
         fm = self._label.fontMetrics()
-        # Max text width (minus padding)
         max_text_w = 260
         text_rect = fm.boundingRect(0, 0, max_text_w, 2000,
                                     Qt.TextFlag.TextWordWrap, message)
-        # Add label padding + layout margins + tail
         w = min(max(text_rect.width() + 28, 100), 320)
         h = min(max(text_rect.height() + 20 + BUBBLE_TAIL_SIZE, 32 + BUBBLE_TAIL_SIZE), 250 + BUBBLE_TAIL_SIZE)
         self.resize(w, h)
@@ -565,7 +550,6 @@ class CompanionBubble(QWidget):
             self.close()
             self._is_showing = False
 
-
 class ChatBubble(QWidget):
     """Chat input bubble — appears when clicking the pet, for AI conversations."""
 
@@ -589,7 +573,6 @@ class ChatBubble(QWidget):
 
         self._init_ui()
 
-        # Close on click-outside
         QApplication.instance().installEventFilter(self)
 
     def closeEvent(self, event):
@@ -597,14 +580,12 @@ class ChatBubble(QWidget):
         super().closeEvent(event)
 
     def _init_ui(self):
-        # Root layout adds margin for the painted border + tail
         root = QVBoxLayout(self)
         root.setContentsMargins(
             self._MARGIN, self._MARGIN,
             self._MARGIN, self._MARGIN + self._TAIL_H
         )
 
-        # Card frame (transparent bg, painted by paintEvent)
         card = QFrame()
         card.setObjectName("chatCard")
         root.addWidget(card)
@@ -613,7 +594,6 @@ class ChatBubble(QWidget):
         inner.setContentsMargins(14, 10, 14, 10)
         inner.setSpacing(4)
 
-        # Header (draggable)
         self._header = QLabel("💬 和 ToYu 聊天")
         self._header.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._header.setStyleSheet(
@@ -623,7 +603,6 @@ class ChatBubble(QWidget):
         self._header.setCursor(Qt.CursorShape.OpenHandCursor)
         inner.addWidget(self._header)
 
-        # Message history (scrollable)
         from PyQt6.QtWidgets import QScrollArea, QSizePolicy as SP
         self._scroll = QScrollArea()
         self._scroll.setWidgetResizable(True)
@@ -644,7 +623,6 @@ class ChatBubble(QWidget):
         self._scroll.setMaximumHeight(300)
         inner.addWidget(self._scroll)
 
-        # Input row
         input_row = QHBoxLayout()
         input_row.setSpacing(6)
 
@@ -687,7 +665,6 @@ class ChatBubble(QWidget):
 
         inner.addLayout(input_row)
 
-        # Status label
         self._status = QLabel("")
         self._status.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._status.setStyleSheet(
@@ -696,7 +673,6 @@ class ChatBubble(QWidget):
         self._status.hide()
         inner.addWidget(self._status)
 
-        # Style the card — transparent bg, painted by paintEvent
         card.setStyleSheet("QFrame#chatCard { background: transparent; border: none; }")
 
     def paintEvent(self, event):
@@ -705,16 +681,13 @@ class ChatBubble(QWidget):
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
         m = self._MARGIN
-        # Body rect inside the margin
         body = QRectF(m, m, self.width() - 2 * m, self.height() - 2 * m - self._TAIL_H)
         self._paint_rect = body
         r = self._RADIUS
 
-        # Rounded rect path
         path = QPainterPath()
         path.addRoundedRect(body, r, r)
 
-        # Tail: gentle droplet at bottom-right
         tx = body.right() - 20
         ty = body.bottom()
         tail = QPainterPath()
@@ -731,19 +704,15 @@ class ChatBubble(QWidget):
         )
         path = path.united(tail)
 
-        # Fill gradient
         grad = QLinearGradient(0, body.top(), 0, body.bottom())
         grad.setColorAt(0, QColor(BUBBLE_BG_TOP))
         grad.setColorAt(1, QColor(BUBBLE_BG_BOTTOM))
         painter.fillPath(path, QBrush(grad))
 
-        # Border
         painter.setPen(QPen(QColor(BUBBLE_BORDER), 1.5))
         painter.drawPath(path)
 
         painter.end()
-
-    # ── Dragging ─────────────────────────────────────────────
 
     def mousePressEvent(self, event):
         if event.button() == Qt.MouseButton.LeftButton:
@@ -811,10 +780,8 @@ class ChatBubble(QWidget):
             )
             bubble.setAlignment(Qt.AlignmentFlag.AlignLeft)
 
-        # Insert before the stretch
         self._msg_layout.insertWidget(self._msg_layout.count() - 1, bubble)
 
-        # Auto-scroll to bottom
         QTimer.singleShot(50, self._scroll_to_bottom)
 
     def _scroll_to_bottom(self):
@@ -828,12 +795,10 @@ class ChatBubble(QWidget):
 
     def load_history(self, messages):
         """Load chat history from AI companion."""
-        # Clear existing messages
         while self._msg_layout.count() > 1:  # Keep the stretch
             item = self._msg_layout.takeAt(0)
             if item.widget():
                 item.widget().deleteLater()
-        # Add messages from history
         for msg in messages:
             role = "user" if msg.role == "user" else "ai"
             self._add_message(role, msg.content)
@@ -876,10 +841,8 @@ class ChatBubble(QWidget):
             return
         pet_geo = self._pet_window.geometry()
         pet_cx = pet_geo.x() + pet_geo.width() // 2
-        # Place to the right of the pet
         x = pet_geo.x() + pet_geo.width() + 10
         y = pet_geo.y() + pet_geo.height() // 2 - self.height() // 2
-        # Keep on screen
         screen = QApplication.primaryScreen().availableGeometry()
         if x + self.width() > screen.right():
             x = pet_geo.x() - self.width() - 10

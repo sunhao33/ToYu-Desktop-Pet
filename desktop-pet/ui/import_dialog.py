@@ -14,7 +14,6 @@ from image_processor.processor import (
     process_image, process_and_save, get_default_pet_path
 )
 
-
 class ImportDialog(QDialog):
     """Dialog for importing and processing a pet image."""
 
@@ -39,15 +38,12 @@ class ImportDialog(QDialog):
         layout.setSpacing(12)
         layout.setContentsMargins(20, 20, 20, 20)
 
-        # Title
         title = QLabel("Choose Your Desktop Pet Image")
         title.setObjectName("title")
         layout.addWidget(title)
 
-        # Preview area
         preview_layout = QHBoxLayout()
 
-        # Before
         before_group = QGroupBox("Before")
         before_layout = QVBoxLayout(before_group)
         self._before_label = QLabel("No image selected")
@@ -57,13 +53,11 @@ class ImportDialog(QDialog):
         before_layout.addWidget(self._before_label)
         preview_layout.addWidget(before_group)
 
-        # Arrow
         arrow = QLabel("→")
         arrow.setObjectName("arrow")
         arrow.setAlignment(Qt.AlignmentFlag.AlignCenter)
         preview_layout.addWidget(arrow)
 
-        # After
         after_group = QGroupBox("After")
         after_layout = QVBoxLayout(after_group)
         self._after_label = QLabel("Processed result")
@@ -78,11 +72,9 @@ class ImportDialog(QDialog):
 
         layout.addLayout(preview_layout)
 
-        # Controls
         controls = QGroupBox("Processing Options")
         controls_layout = QVBoxLayout(controls)
 
-        # Threshold
         thresh_layout = QHBoxLayout()
         thresh_layout.addWidget(QLabel("White Threshold:"))
         self._threshold_slider = QSlider(Qt.Orientation.Horizontal)
@@ -96,7 +88,6 @@ class ImportDialog(QDialog):
         thresh_layout.addWidget(self._threshold_label)
         controls_layout.addLayout(thresh_layout)
 
-        # AI checkbox
         self._ai_check = QCheckBox("Use AI background removal (rembg)")
         self._ai_check.setToolTip(
             "Uses deep learning for better results. Requires model download on first use."
@@ -106,12 +97,10 @@ class ImportDialog(QDialog):
 
         layout.addWidget(controls)
 
-        # Progress
         self._progress = QProgressBar()
         self._progress.setVisible(False)
         layout.addWidget(self._progress)
 
-        # Buttons
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 

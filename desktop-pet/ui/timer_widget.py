@@ -9,7 +9,6 @@ from PyQt6.QtWidgets import (
     QSpinBox, QFrame, QGridLayout, QSizePolicy, QMessageBox
 )
 
-# Theme colors
 ACCENT = "#C49A3C"
 ACCENT_HOVER = "#D4AE50"
 DARK = "#3E2723"
@@ -22,11 +21,9 @@ BORDER = "#E8D5C0"
 SUCCESS = "#6B9B37"
 DANGER = "#C0392B"
 
-
 class TimerWidget(QWidget):
     """Countdown timer widget with pet notifications."""
     
-    # Signal emitted when timer completes
     timer_complete = pyqtSignal()
     
     def __init__(self, parent=None):
@@ -43,7 +40,6 @@ class TimerWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(12)
         
-        # Timer display
         display_frame = QFrame()
         display_frame.setStyleSheet(f"""
             QFrame {{
@@ -56,7 +52,6 @@ class TimerWidget(QWidget):
         display_layout = QVBoxLayout(display_frame)
         display_layout.setSpacing(8)
         
-        # Time display
         self._time_display = QLabel("00:00:00")
         self._time_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._time_display.setStyleSheet("""
@@ -70,7 +65,6 @@ class TimerWidget(QWidget):
         """)
         display_layout.addWidget(self._time_display)
         
-        # Status label
         self._status_label = QLabel("准备开始")
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._status_label.setStyleSheet("""
@@ -84,7 +78,6 @@ class TimerWidget(QWidget):
         
         layout.addWidget(display_frame)
         
-        # Preset buttons
         preset_label = QLabel("快捷设置")
         preset_label.setStyleSheet(f"color: {TEXT}; font-size: 12px; font-weight: bold;")
         layout.addWidget(preset_label)
@@ -123,7 +116,6 @@ class TimerWidget(QWidget):
         
         layout.addLayout(preset_grid)
         
-        # Custom time input
         custom_label = QLabel("自定义时间")
         custom_label.setStyleSheet(f"color: {TEXT}; font-size: 12px; font-weight: bold;")
         layout.addWidget(custom_label)
@@ -131,7 +123,6 @@ class TimerWidget(QWidget):
         custom_row = QHBoxLayout()
         custom_row.setSpacing(8)
         
-        # Hours
         self._hour_spin = QSpinBox()
         self._hour_spin.setRange(0, 23)
         self._hour_spin.setSuffix(" 时")
@@ -147,7 +138,6 @@ class TimerWidget(QWidget):
         """)
         custom_row.addWidget(self._hour_spin)
         
-        # Minutes
         self._min_spin = QSpinBox()
         self._min_spin.setRange(0, 59)
         self._min_spin.setSuffix(" 分")
@@ -163,7 +153,6 @@ class TimerWidget(QWidget):
         """)
         custom_row.addWidget(self._min_spin)
         
-        # Seconds
         self._sec_spin = QSpinBox()
         self._sec_spin.setRange(0, 59)
         self._sec_spin.setSuffix(" 秒")
@@ -181,7 +170,6 @@ class TimerWidget(QWidget):
         
         layout.addLayout(custom_row)
         
-        # Control buttons
         btn_row = QHBoxLayout()
         btn_row.setSpacing(12)
         
@@ -252,7 +240,6 @@ class TimerWidget(QWidget):
         
         layout.addLayout(btn_row)
         
-        # Progress bar
         self._progress_bar = QFrame()
         self._progress_bar.setFixedHeight(6)
         self._progress_bar.setStyleSheet(f"""
@@ -287,7 +274,6 @@ class TimerWidget(QWidget):
         if self._is_running:
             return
         
-        # Calculate total seconds
         hours = self._hour_spin.value()
         minutes = self._min_spin.value()
         seconds = self._sec_spin.value()
@@ -346,16 +332,13 @@ class TimerWidget(QWidget):
             self._pause_btn.setEnabled(False)
             self._status_label.setText("⏰ 时间到！")
             
-            # Update display
             self._update_display(0)
             self._progress_fill.setFixedWidth(self._progress_bar.width())
             
-            # Emit signal (no popup, let parent handle notification)
             self.timer_complete.emit()
         else:
             self._update_display(self._remaining_seconds)
             
-            # Update progress bar
             if self._total_seconds > 0:
                 progress = 1 - (self._remaining_seconds / self._total_seconds)
                 bar_width = int(progress * self._progress_bar.width())
@@ -370,7 +353,6 @@ class TimerWidget(QWidget):
         time_str = f"{hours:02d}:{minutes:02d}:{secs:02d}"
         self._time_display.setText(time_str)
         
-        # Change color when low time
         if seconds <= 10 and seconds > 0:
             self._time_display.setStyleSheet("""
                 QLabel {

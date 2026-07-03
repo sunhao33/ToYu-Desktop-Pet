@@ -6,7 +6,6 @@ import numpy as np
 import os
 from collections import deque
 
-
 def _resource_path(relative_path):
     """Get absolute path to resource, works for dev and PyInstaller bundle."""
     if getattr(sys, 'frozen', False):
@@ -14,7 +13,6 @@ def _resource_path(relative_path):
     else:
         base = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     return os.path.join(base, relative_path)
-
 
 def _flood_fill_exterior(is_white, feather=35):
     """Find exterior white region connected to image edges via BFS.
@@ -34,7 +32,6 @@ def _flood_fill_exterior(is_white, feather=35):
     exterior = np.zeros((h, w), dtype=bool)
     q = deque()
 
-    # Seed: all white edge pixels
     for y in range(h):
         if is_white[y, 0]:
             q.append((y, 0))
@@ -50,7 +47,6 @@ def _flood_fill_exterior(is_white, feather=35):
             q.append((h - 1, x))
             exterior[h - 1, x] = True
 
-    # BFS flood fill through white pixels only
     while q:
         y, x = q.popleft()
         for ny, nx in [(y - 1, x), (y + 1, x), (y, x - 1), (y, x + 1)]:
@@ -59,22 +55,14 @@ def _flood_fill_exterior(is_white, feather=35):
                     exterior[ny, nx] = True
                     q.append((ny, nx))
 
-    # ── Feathering: BFS from exterior boundary inward ──
-    # distance[y,x] = min steps from exterior (0 = exterior)
     distance = np.full((h, w), -1, dtype=np.int16)
     q2 = deque()
 
-    # Seed: exterior pixels (distance 0)
     for y in range(h):
         for x in range(w):
             if exterior[y, x]:
                 distance[y, x] = 0
                 q2.append((y, x))
-
-    # Also seed: non-white border pixels adjacent to exterior
-    # (the boundary between exterior and non-exterior)
-    # We add all pixels at distance 0 to the queue.
-    # Then BFS outward into non-exterior pixels up to feather steps.
 
     while q2:
         y, x = q2.popleft()
@@ -87,7 +75,6 @@ def _flood_fill_exterior(is_white, feather=35):
                     distance[ny, nx] = d + 1
                     q2.append((ny, nx))
 
-    # Build alpha mask from distances
     alpha = np.ones((h, w), dtype=np.float32)
     for y in range(h):
         for x in range(w):
@@ -100,7 +87,6 @@ def _flood_fill_exterior(is_white, feather=35):
                 alpha[y, x] = min(d / feather, 1.0)  # feather band
 
     return alpha
-
 
 def remove_white_background(image, threshold=200, feather=None):
     """Remove white background using flood-fill from image edges.
@@ -125,15 +111,12 @@ def remove_white_background(image, threshold=200, feather=None):
     rgb = arr[:, :, :3]
     h, w = arr.shape[:2]
 
-    # Whiteness: min(R,G,B) — all channels must be bright to be "white"
     min_channel = np.min(rgb, axis=2)
     is_white = min_channel > threshold
 
-    # ── Color-based alpha factor (backup: how "non-white" each pixel is) ──
     color_range = max(255 - threshold, 1)
     color_alpha = np.clip((255 - min_channel) / color_range, 0.0, 1.0)
 
-    # ── Erode white mask by 1px to close anti-aliasing bridges ──
     eroded = is_white.copy()
     for y in range(1, h - 1):
         for x in range(1, w - 1):
@@ -143,20 +126,14 @@ def remove_white_background(image, threshold=200, feather=None):
                     eroded[y, x] = False
     is_white = eroded
 
-    # Flood-fill from edges to find exterior background
     distance_alpha = _flood_fill_exterior(is_white, feather=feather)
 
-    # ── Combine: max of distance-based and color-based alpha ──
-    # This preserves interior colored pixels even if they're near
-    # the exterior boundary, while properly feathering near-white edges.
     alpha_mask = np.maximum(distance_alpha, color_alpha)
     alpha_mask = np.clip(alpha_mask, 0.0, 1.0)
 
-    # Apply alpha
     arr[:, :, 3] = arr[:, :, 3] * alpha_mask
 
     return Image.fromarray(arr.astype(np.uint8), "RGBA")
-
 
 def remove_background_ai(image):
     """Use rembg to remove background with AI.
@@ -175,7 +152,6 @@ def remove_background_ai(image):
             "rembg is not installed. Install with: pip install rembg onnxruntime"
         )
 
-
 def crop_to_content(image, padding=5):
     """Crop image to non-transparent content bounds.
 
@@ -189,7 +165,6 @@ def crop_to_content(image, padding=5):
     arr = np.array(image)
     alpha = arr[:, :, 3]
 
-    # Find non-transparent pixels
     rows = np.any(alpha > 10, axis=1)
     cols = np.any(alpha > 10, axis=0)
 
@@ -205,7 +180,6 @@ def crop_to_content(image, padding=5):
     x_max = min(image.width, x_max + padding + 1)
 
     return image.crop((x_min, y_min, x_max, y_max))
-
 
 def process_image(image_path, threshold=200, use_ai=False, output_size=None):
     """Full image processing pipeline.
@@ -233,7 +207,6 @@ def process_image(image_path, threshold=200, use_ai=False, output_size=None):
 
     return img
 
-
 def process_and_save(input_path, output_dir, threshold=200, use_ai=False):
     """Process image and save to output directory.
 
@@ -259,7 +232,6 @@ def process_and_save(input_path, output_dir, threshold=200, use_ai=False):
 
     return output_path
 
-
 def process_bead_image(image_path, output_size=32):
     """Convert a perler bead photo into a pixel-art pet.
 
@@ -281,17 +253,11 @@ def process_bead_image(image_path, output_size=32):
     except Exception:
         return None
 
-    # Step 1: Resize to 4x the target grid, then pick the most
-    # saturated pixel in each 4x4 block. This avoids the color
-    # washout that happens when averaging bead+background together —
-    # bead centers are bright and saturated, gaps are dull.
     block_size = 4
     img_big = img.resize((output_size * block_size, output_size * block_size),
                          Image.LANCZOS)
     big_pixels = img_big.load()
 
-    # Build a 32x32 image where each cell = the most saturated pixel
-    # from the corresponding 4x4 block in the 128x128 intermediate.
     img_small = Image.new("RGB", (output_size, output_size))
     small_pixels = img_small.load()
     for y in range(output_size):
@@ -309,8 +275,6 @@ def process_bead_image(image_path, output_size=32):
             small_pixels[x, y] = best_rgb
     pixels = small_pixels
 
-    # Step 2: Improved background detection using multiple methods
-    # Method 1: Collect border pixels for background reference
     border_rgb = []
     for x in range(output_size):
         for dy in (0, 1, output_size - 2, output_size - 1):
@@ -321,7 +285,6 @@ def process_bead_image(image_path, output_size=32):
             if 0 <= dx < output_size:
                 border_rgb.append(pixels[dx, y])
 
-    # Filter out saturated border pixels (likely bead edges)
     low_sat_border = []
     for r, g, b in border_rgb:
         sat = max(r, g, b) - min(r, g, b)
@@ -335,7 +298,6 @@ def process_bead_image(image_path, output_size=32):
         border_rgb.sort()
         bg_r, bg_g, bg_b = border_rgb[len(border_rgb) // 2]
 
-    # Step 3: Build palette lookup
     palette_keys = [k for k in BEAD_PALETTE if k != '.']
     palette_lookup = []
     for k in palette_keys:
@@ -356,10 +318,6 @@ def process_bead_image(image_path, output_size=32):
     def rgb_dist(r1, g1, b1, r2, g2, b2):
         return (r1 - r2) ** 2 + (g1 - g2) ** 2 + (b1 - b2) ** 2
 
-    # Step 4: Build char grid. A cell is transparent only if it is BOTH
-    # desaturated (low color) AND close to the background reference.
-    # This preserves bead colors even when they've been slightly blended
-    # with background by the resize.
     BG_DIST_THRESHOLD = 3000   # squared RGB distance (~55 per channel)
     SATURATION_THRESHOLD = 35  # max-min must exceed this to be a bead
 
@@ -376,7 +334,6 @@ def process_bead_image(image_path, output_size=32):
                 row_chars.append(closest_color(r, g, b))
         grid.append(''.join(row_chars))
 
-    # Step 5: Post-processing - remove isolated pixels (noise)
     def is_isolated(x, y, grid, output_size):
         """Check if a pixel is isolated (no neighbors of same color)."""
         if grid[y][x] == '.':
@@ -390,7 +347,6 @@ def process_bead_image(image_path, output_size=32):
                     neighbors += 1
         return neighbors == 0
 
-    # Clean up isolated pixels
     cleaned_grid = [list(row) for row in grid]
     for y in range(1, output_size - 1):
         for x in range(1, output_size - 1):
@@ -398,27 +354,22 @@ def process_bead_image(image_path, output_size=32):
                 cleaned_grid[y][x] = '.'
     grid = [''.join(row) for row in cleaned_grid]
 
-    # Step 6: Render at 5x scale with the bead palette
     palette = {k: (v[1].red(), v[1].green(), v[1].blue(),
                    255 if k != '.' else 0) for k, v in BEAD_PALETTE.items()}
     from resources.generate_toyu import render_pixel_art
     return render_pixel_art(grid, palette, scale=5)
 
-
 def get_default_pet_path():
     """Get path to the default pet image (ToYu the potato)."""
     return _resource_path("resources/toyu_pet.png")
-
 
 def get_tv_pet_path():
     """Get path to the TV-kun pet image."""
     return _resource_path("resources/tv_pet.png")
 
-
 def get_house_path():
     """Get path to the house sprite image."""
     return _resource_path("resources/house.png")
-
 
 def get_knock_path():
     """Get path to the door knock sound effect."""

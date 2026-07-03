@@ -16,7 +16,6 @@ from PyQt6.QtWidgets import (
 from PIL import Image
 from resources.generate_toyu import render_pixel_art
 
-
 class Tool(Enum):
     PEN = "pen"
     ERASER = "eraser"
@@ -25,11 +24,8 @@ class Tool(Enum):
     ELLIPSE = "ellipse"
     FILL = "fill"
 
-
 def _make_tool_icon(tool: Tool, size=24) -> QPixmap:
     """Draw a cute pixel-art icon using small grid → scaled up."""
-    # Define each icon as a 12x12 pixel grid
-    # . = transparent, letters = color keys
     GRIDS = {
         Tool.PEN: [
             "............",
@@ -117,7 +113,6 @@ def _make_tool_icon(tool: Tool, size=24) -> QPixmap:
         ],
     }
 
-    # Color map for each tool
     COLORS = {
         Tool.PEN: {
             'g': QColor(100, 80, 60),   # dark brown tip
@@ -150,7 +145,6 @@ def _make_tool_icon(tool: Tool, size=24) -> QPixmap:
     grid_h = len(grid)
     grid_w = max(len(row) for row in grid)
 
-    # Render to small QImage then scale up with NearestNeighbor
     img = QImage(grid_w, grid_h, QImage.Format.Format_ARGB32)
     img.fill(Qt.GlobalColor.transparent)
     for gy, row in enumerate(grid):
@@ -158,58 +152,45 @@ def _make_tool_icon(tool: Tool, size=24) -> QPixmap:
             if ch != '.' and ch in colors:
                 img.setPixelColor(gx, gy, colors[ch])
 
-    # Scale up with NearestNeighbor for crisp pixels
     from PyQt6.QtCore import Qt as QtCore
     scaled = img.scaled(size, size,
                         Qt.AspectRatioMode.IgnoreAspectRatio,
                         Qt.TransformationMode.FastTransformation)
     return QPixmap.fromImage(scaled)
 
-
-# ── Perler bead palette (51 colors + transparent) ──
-# Uppercase = base hues, lowercase = variants/shades
 BEAD_PALETTE = {
-    # ── Neutrals: whites / creams ──
     'W': ("纯白", QColor(255, 255, 255)),
     'w': ("奶油白", QColor(255, 248, 230)),
     'C': ("米色", QColor(255, 230, 200)),
     'c': ("浅米色", QColor(255, 240, 220)),
-    # ── Neutrals: grays / blacks ──
     'h': ("浅灰", QColor(210, 210, 210)),
     'H': ("灰色", QColor(170, 170, 170)),
     'z': ("深灰", QColor(100, 100, 100)),
     'Z': ("炭灰", QColor(55, 55, 55)),
     'K': ("黑色", QColor(30, 30, 30)),
-    # ── Skin tones ──
     'F': ("肤色", QColor(255, 210, 170)),
     'f': ("深肤色", QColor(220, 170, 130)),
-    # ── Browns ──
     'D': ("深棕", QColor(80, 50, 20)),
     'd': ("红棕", QColor(160, 80, 40)),
     'B': ("棕色", QColor(140, 100, 50)),
     'b': ("咖啡", QColor(120, 70, 30)),
     'T': ("浅棕", QColor(200, 160, 100)),
     't': ("沙色", QColor(220, 190, 140)),
-    # ── Reds ──
     'r': ("深红", QColor(180, 30, 30)),
     'R': ("红色", QColor(220, 50, 50)),
     'x': ("亮红", QColor(255, 70, 70)),
     'M': ("玫红", QColor(230, 50, 130)),
     'm': ("桃红", QColor(255, 130, 130)),
-    # ── Pinks ──
     'P': ("粉色", QColor(255, 150, 180)),
     'p': ("亮粉", QColor(255, 180, 200)),
     'q': ("浅粉", QColor(255, 210, 230)),
-    # ── Oranges ──
     'o': ("深橙", QColor(230, 110, 30)),
     'O': ("橙色", QColor(255, 150, 50)),
     'j': ("浅橙", QColor(255, 180, 100)),
-    # ── Yellows / Golds ──
     'G': ("金色", QColor(220, 180, 60)),
     'Y': ("黄色", QColor(255, 240, 50)),
     'y': ("浅黄", QColor(255, 250, 150)),
     'g': ("奶油黄", QColor(255, 245, 180)),
-    # ── Greens ──
     'E': ("深绿", QColor(30, 120, 40)),
     'e': ("橄榄绿", QColor(100, 130, 40)),
     'N': ("绿色", QColor(80, 180, 50)),
@@ -217,26 +198,21 @@ BEAD_PALETTE = {
     'L': ("浅绿", QColor(160, 220, 100)),
     'l': ("黄绿", QColor(180, 230, 60)),
     'i': ("薄荷绿", QColor(100, 210, 160)),
-    # ── Blues ──
     'u': ("深蓝", QColor(30, 60, 180)),
     'U': ("蓝色", QColor(50, 100, 220)),
     'A': ("浅蓝", QColor(130, 180, 255)),
     'a': ("天蓝", QColor(100, 200, 255)),
     'J': ("湖蓝", QColor(60, 180, 210)),
-    # ── Cyans / Teals ──
     'Q': ("青色", QColor(50, 200, 200)),
     'I': ("浅青", QColor(150, 230, 230)),
-    # ── Purples ──
     'v': ("深紫", QColor(100, 20, 160)),
     'V': ("紫色", QColor(150, 60, 200)),
     'S': ("浅紫", QColor(190, 130, 240)),
     's': ("薰衣草", QColor(210, 180, 250)),
     'X': ("品红", QColor(200, 50, 180)),
-    # ── Transparent ──
     '.': ("透明", QColor(0, 0, 0, 0)),
 }
 
-# ── Palette sections for grouped display ──
 PALETTE_SECTIONS = [
     ("中性色 · 白色/米色", ['W', 'w', 'C', 'c']),
     ("中性色 · 灰色/黑色", ['h', 'H', 'z', 'Z', 'K']),
@@ -258,7 +234,6 @@ CELL_SIZE = 16  # pixels per cell on canvas
 CANVAS_SIZE = GRID_SIZE * CELL_SIZE  # 512
 GRID_SIZES = [16, 32, 48]
 
-
 class BeadCanvas(QWidget):
     """Pixel-art drawing grid with configurable dimensions."""
 
@@ -278,7 +253,6 @@ class BeadCanvas(QWidget):
         self._erasing = False
         self._undo_stack = []
         self._is_dirty = False
-        # Shape tool state
         self._shape_start = None  # QPoint cell coords
         self._shape_preview = None  # list of (x, y) cells to preview
 
@@ -298,7 +272,6 @@ class BeadCanvas(QWidget):
         self._cell_size = max(8, self.MAX_CANVAS // new_size)
         self._canvas_px = self._cell_size * new_size
         self.setFixedSize(self._canvas_px, self._canvas_px)
-        # Scale the old grid content into the new grid
         self._grid = [['.' for _ in range(new_size)] for _ in range(new_size)]
         scale = new_size / old_size
         for y in range(new_size):
@@ -399,7 +372,6 @@ class BeadCanvas(QWidget):
             self._grid[cell[1]][cell[0]] = color
             self.update()
         elif tool in (Tool.LINE, Tool.RECT, Tool.ELLIPSE) and self._drawing and self._shape_start:
-            # Generate preview points
             self._shape_preview = self._get_shape_cells(
                 self._shape_start, cell, tool
             )
@@ -409,7 +381,6 @@ class BeadCanvas(QWidget):
         tool = self._current_tool
 
         if tool in (Tool.LINE, Tool.RECT, Tool.ELLIPSE) and self._drawing:
-            # Commit shape to grid
             if self._shape_preview:
                 color = '.' if self._erasing else self._current_color
                 for x, y in self._shape_preview:
@@ -432,7 +403,6 @@ class BeadCanvas(QWidget):
         if tool == Tool.LINE:
             cells = self._bresenham_line(x0, y0, x1, y1)
         elif tool == Tool.RECT:
-            # Outline of rectangle
             xmin, xmax = min(x0, x1), max(x0, x1)
             ymin, ymax = min(y0, y1), max(y0, y1)
             for x in range(xmin, xmax + 1):
@@ -484,7 +454,6 @@ class BeadCanvas(QWidget):
             return [(x, round(cy)) for x in range(xmin, xmax + 1)]
 
         cells = set()
-        # Parametric approach for pixel-art ellipse
         steps = max(int(max(rx, ry) * 8), 32)
         import math
         for i in range(steps):
@@ -517,7 +486,6 @@ class BeadCanvas(QWidget):
         painter = QPainter(self)
         gs = self._grid_size
         cs = self._cell_size
-        # Draw checkerboard for transparency
         for cy in range(gs):
             for cx in range(gs):
                 x = cx * cs
@@ -531,14 +499,12 @@ class BeadCanvas(QWidget):
                     color = BEAD_PALETTE.get(key, (None, QColor(0, 0, 0)))[1]
                     painter.fillRect(x, y, cs, cs, color)
 
-        # Draw shape preview overlay
         if self._shape_preview and self._drawing:
             preview_color = QColor(196, 154, 60, 120)  # Gold semi-transparent
             for px, py in self._shape_preview:
                 if 0 <= px < gs and 0 <= py < gs:
                     painter.fillRect(px * cs, py * cs, cs, cs, preview_color)
 
-        # Draw grid lines
         pen = QPen(QColor(200, 200, 200), 1)
         painter.setPen(pen)
         for i in range(gs + 1):
@@ -546,14 +512,12 @@ class BeadCanvas(QWidget):
             painter.drawLine(0, p, self._canvas_px, p)
             painter.drawLine(p, 0, p, self._canvas_px)
 
-        # Draw crosshair for shape tools
         if self._current_tool in (Tool.LINE, Tool.RECT, Tool.ELLIPSE):
             pen = QPen(QColor(196, 154, 60, 80), 1, Qt.PenStyle.DashLine)
             painter.setPen(pen)
             painter.drawRect(0, 0, self._canvas_px - 1, self._canvas_px - 1)
 
         painter.end()
-
 
 class BeadEditor(QMainWindow):
     """Perler bead pixel-art editor window."""
@@ -598,11 +562,9 @@ class BeadEditor(QMainWindow):
         root.setContentsMargins(12, 12, 12, 12)
         root.setSpacing(12)
 
-        # ── Left: Canvas with frame ──
         left_col = QVBoxLayout()
         left_col.setSpacing(8)
 
-        # Canvas frame
         canvas_frame = QFrame()
         canvas_frame.setObjectName("canvasFrame")
         canvas_frame.setStyleSheet(
@@ -615,7 +577,6 @@ class BeadEditor(QMainWindow):
         canvas_frame_layout.addWidget(self._canvas, alignment=Qt.AlignmentFlag.AlignCenter)
         left_col.addWidget(canvas_frame)
 
-        # ── Drawing tools toolbar ──
         tools_bar = QHBoxLayout()
         tools_bar.setSpacing(4)
 
@@ -669,7 +630,6 @@ class BeadEditor(QMainWindow):
         tools_bar.addStretch()
         left_col.addLayout(tools_bar)
 
-        # Toolbar
         toolbar = QHBoxLayout()
         toolbar.setSpacing(6)
 
@@ -689,7 +649,6 @@ class BeadEditor(QMainWindow):
 
         toolbar.addStretch()
 
-        # Grid size selector
         grid_label = QLabel("网格:")
         grid_label.setStyleSheet("font-size: 11px; color: #8B7355; font-weight: bold;")
         toolbar.addWidget(grid_label)
@@ -723,11 +682,9 @@ class BeadEditor(QMainWindow):
         left_col.addLayout(toolbar)
         root.addLayout(left_col, stretch=4)
 
-        # ── Right: Preview + Palette ──
         right_col = QVBoxLayout()
         right_col.setSpacing(8)
 
-        # Live preview card - compact horizontal strip
         preview_card = QFrame()
         preview_card.setFixedHeight(90)
         preview_card.setStyleSheet("""
@@ -767,7 +724,6 @@ class BeadEditor(QMainWindow):
         self._update_preview()
         right_col.addWidget(preview_card)
 
-        # Color palette card - fills remaining space
         palette_card = QFrame()
         palette_card.setStyleSheet("""
             QFrame {
@@ -807,7 +763,6 @@ class BeadEditor(QMainWindow):
 
         root.addLayout(right_col, stretch=1)  # Right takes 1/4 of space
 
-        # Timer for preview updates
         self._preview_timer = QTimer(self)
         self._preview_timer.timeout.connect(self._update_preview)
         self._preview_timer.start(300)
@@ -856,7 +811,6 @@ class BeadEditor(QMainWindow):
                 row.addStretch()
                 layout.addLayout(row)
 
-        # Custom color picker button
         custom_row = QHBoxLayout()
         custom_row.setSpacing(3)
         custom_lbl = QLabel("自定义")
@@ -880,7 +834,6 @@ class BeadEditor(QMainWindow):
         custom_row.addStretch()
         layout.addLayout(custom_row)
 
-        # Re-select current color to update button highlights
         self._select_color(self._canvas._current_color)
 
     def _select_color(self, key):
@@ -1040,7 +993,6 @@ class BeadEditor(QMainWindow):
             elif event.key() == Qt.Key.Key_S:
                 self._on_save()
                 return
-        # Tool shortcuts
         key_map = {
             Qt.Key.Key_P: Tool.PEN, Qt.Key.Key_E: Tool.ERASER,
             Qt.Key.Key_L: Tool.LINE, Qt.Key.Key_R: Tool.RECT,
@@ -1058,7 +1010,6 @@ class BeadEditor(QMainWindow):
         if rgba is None:
             return
         gs = self._canvas.grid_size
-        # Scale preview size based on grid: smaller grid = smaller preview
         preview_size = max(60, min(160, gs * 5))
         qimg = QImage(rgba.tobytes(), rgba.width, rgba.height,
                        rgba.width * 4, QImage.Format.Format_RGBA8888)

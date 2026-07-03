@@ -9,8 +9,6 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushBut
                               QSizePolicy, QMenu, QScrollArea, QFrame, QDialog,
                               QLineEdit, QDialogButtonBox)
 
-
-# ── Colors ──
 ACCENT = "#FF6B47"
 ACCENT_LIGHT = "#FFD4C4"
 TODAY_BG = "#FFF0E6"
@@ -21,7 +19,6 @@ OTHER_MONTH = "#CCB89A"
 HEADER = "#FF6B47"
 BTN_HOVER = "#FFEEE0"
 
-# Event colors
 EVENT_COLORS = {
     "yellow": ("#F5A623", "#FFF8E1"),
     "blue":   ("#4A90D9", "#E3F2FD"),
@@ -33,7 +30,6 @@ SUCCESS = "#4CAF50"
 SAVE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                          "calendar_events.json")
 TASK_HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".desktop_pet", "task_history.json")
-
 
 class EventDialog(QDialog):
     """Custom dialog for adding event annotations."""
@@ -47,7 +43,6 @@ class EventDialog(QDialog):
 
         self._selected_color = DEFAULT_EVENT_COLOR
 
-        # Main container
         container = QWidget(self)
         container.setGeometry(10, 10, 280, 180)
         container.setStyleSheet(
@@ -59,12 +54,10 @@ class EventDialog(QDialog):
         lay.setContentsMargins(16, 16, 16, 12)
         lay.setSpacing(10)
 
-        # Title
         title = QLabel(f"📌 给 {date_str} 添加标注")
         title.setStyleSheet("color: #FF6B47; font-size: 14px; font-weight: bold;")
         lay.addWidget(title)
 
-        # Input
         self._input = QLineEdit()
         self._input.setPlaceholderText("输入事件名称...")
         self._input.setStyleSheet(
@@ -75,7 +68,6 @@ class EventDialog(QDialog):
         )
         lay.addWidget(self._input)
 
-        # Color selection
         color_row = QHBoxLayout()
         color_row.setSpacing(8)
         color_label = QLabel("颜色：")
@@ -99,10 +91,8 @@ class EventDialog(QDialog):
         color_row.addStretch()
         lay.addLayout(color_row)
 
-        # Highlight default
         self._pick_color(DEFAULT_EVENT_COLOR)
 
-        # Buttons
         btn_row = QHBoxLayout()
         btn_row.setSpacing(8)
 
@@ -153,7 +143,6 @@ class EventDialog(QDialog):
             return text, self._selected_color
         return None, None
 
-
 class CuteCalendar(QWidget):
     """A cute calendar widget with colored date annotations."""
 
@@ -177,7 +166,6 @@ class CuteCalendar(QWidget):
         layout.setContentsMargins(6, 6, 6, 6)
         layout.setSpacing(4)
 
-        # ── Header
         header = QHBoxLayout()
         header.setSpacing(6)
 
@@ -198,7 +186,6 @@ class CuteCalendar(QWidget):
 
         layout.addLayout(header)
 
-        # ── Today + info row
         info_row = QHBoxLayout()
         info_row.setSpacing(8)
 
@@ -220,7 +207,6 @@ class CuteCalendar(QWidget):
 
         layout.addLayout(info_row)
 
-        # ── Weekday headers
         week_row = QHBoxLayout()
         week_row.setSpacing(0)
         for day in ["一", "二", "三", "四", "五", "六", "日"]:
@@ -233,7 +219,6 @@ class CuteCalendar(QWidget):
             week_row.addWidget(lbl)
         layout.addLayout(week_row)
 
-        # ── Day grid
         self._day_btns = []
         grid = QVBoxLayout()
         grid.setSpacing(2)
@@ -256,13 +241,11 @@ class CuteCalendar(QWidget):
             grid.addLayout(row_layout)
         layout.addLayout(grid)
 
-        # ── Separator
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet(f"color: {ACCENT_LIGHT}; margin: 4px 0;")
         layout.addWidget(sep)
 
-        # ── Upcoming events
         self._events_label = QLabel()
         self._events_label.setWordWrap(True)
         self._events_label.setStyleSheet(
@@ -375,7 +358,6 @@ class CuteCalendar(QWidget):
                    "7月", "8月", "9月", "10月", "11月", "12月"]
         self._title.setText(f"🌸 {self._view_year}年 {months[self._view_month]}")
 
-        # Info line
         diff = self._today.daysTo(self._selected)
         if diff == 0:
             info = "今天"
@@ -394,7 +376,6 @@ class CuteCalendar(QWidget):
             info += f"  ·  📌 {', '.join(names)}"
         self._info_lbl.setText(info)
 
-        # Calendar grid
         first = QDate(self._view_year, self._view_month, 1)
         start_day = first.dayOfWeek()
         days_in_month = first.daysInMonth()
@@ -432,7 +413,6 @@ class CuteCalendar(QWidget):
                 is_weekend = (date.dayOfWeek() >= 6)
                 color = WEEKEND if is_weekend else NORMAL
 
-                # Get event color
                 evt_key = date.toString("yyyy-MM-dd")
                 evt_color = None
                 if evt_key in self._events:
@@ -450,7 +430,6 @@ class CuteCalendar(QWidget):
         lines = []
         today = self._today
 
-        # Upcoming events
         for delta in range(0, 31):
             check = today.addDays(delta)
             key = check.toString("yyyy-MM-dd")
@@ -468,7 +447,6 @@ class CuteCalendar(QWidget):
                         label = f"📍 {delta}天后"
                     lines.append(f"<span style='color:{dot_color}'>●</span> {label} · {text}")
 
-        # Completed tasks for selected date
         sel_key = self._selected.toString("yyyy-MM-dd")
         self._load_task_history()
         if sel_key in self._task_history:
@@ -526,15 +504,12 @@ class CuteCalendar(QWidget):
                 f" border-radius: 8px; font-size: 13px; border: none; }}"
             )
 
-        # Event color indicator
         if evt_color and evt_color in EVENT_COLORS:
             dot = EVENT_COLORS[evt_color][0]
             base = base.rstrip("}")
             base += f" border-bottom: 3px solid {dot}; }}"
 
         return base
-
-    # ── Persistence ──
 
     def _load_events(self):
         try:

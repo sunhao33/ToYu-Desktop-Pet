@@ -4,7 +4,6 @@ from PyQt6.QtCore import Qt, QTimer, pyqtSignal
 from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel,
                               QPushButton, QListWidget, QFrame)
 
-
 class TodoTimerPopup(QWidget):
     """Minimal timer popup."""
 
@@ -38,7 +37,6 @@ class TodoTimerPopup(QWidget):
         )
 
         self.setStyleSheet("""
-            #bg {
                 background: #FFF8F0;
                 border: 1px solid #E8D5C0;
                 border-radius: 12px;
@@ -53,7 +51,6 @@ class TodoTimerPopup(QWidget):
         lay.setContentsMargins(18, 18, 18, 16)
         lay.setSpacing(10)
 
-        # ── Top: title + close
         top = QHBoxLayout()
         top.setSpacing(0)
 
@@ -74,13 +71,11 @@ class TodoTimerPopup(QWidget):
         top.addWidget(close_btn)
         lay.addLayout(top)
 
-        # ── Task name
         self._task_label = QLabel(self._active_task)
         self._task_label.setWordWrap(True)
         self._task_label.setStyleSheet("color: #5C3D1E; font-size: 12px; background: transparent;")
         lay.addWidget(self._task_label)
 
-        # ── Timer
         self._time_label = QLabel("00:00:00")
         self._time_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._time_label.setStyleSheet(
@@ -90,7 +85,6 @@ class TodoTimerPopup(QWidget):
         )
         lay.addWidget(self._time_label)
 
-        # ── Buttons
         btns = QHBoxLayout()
         btns.setSpacing(8)
 
@@ -132,13 +126,11 @@ class TodoTimerPopup(QWidget):
 
         lay.addLayout(btns)
 
-        # ── Separator
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
         sep.setStyleSheet("color: #E8D5C0;")
         lay.addWidget(sep)
 
-        # ── Task list
         list_title = QLabel("📊 专注记录")
         list_title.setStyleSheet("color: #C49A3C; font-size: 12px; font-weight: bold; background: transparent;")
         lay.addWidget(list_title)

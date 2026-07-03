@@ -4,19 +4,15 @@ import random
 from PyQt6.QtCore import (
     Qt, QTimer, QPropertyAnimation, QPoint, QEasingCurve, pyqtSignal
 
-
-# ── Food Item ────────────────────────────────────────────────
 )
 from PyQt6.QtGui import QFont, QMouseEvent, QCursor
 from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout, QGraphicsOpacityEffect
 
 FOOD_EMOJIS = ["🍙", "🍪", "🍰"]
 
-
 class FoodItemWindow(QFrame):
     """Small popup showing a random food emoji near the pet. Can be dragged."""
 
-    # Signal emitted when food is dragged to a new position
     food_moved = pyqtSignal(QPoint)
 
     def __init__(self):
@@ -54,13 +50,11 @@ class FoodItemWindow(QFrame):
     def spawn_near(self, pet_window):
         px = pet_window.x() + pet_window.width() // 2
         py = pet_window.y() + pet_window.height() // 2
-        # Spawn farther away: 80-200px horizontally, -100 to -50px vertically
         offset_x = random.choice([-1, 1]) * random.randint(80, 200)
         offset_y = random.randint(-100, -50)
         self.move(QPoint(px + offset_x, py + offset_y))
         self.show()
 
-        # Gentle float-up
         anim = QPropertyAnimation(self, b"pos")
         anim.setDuration(300)
         anim.setStartValue(self.pos())
@@ -100,7 +94,6 @@ class FoodItemWindow(QFrame):
             self.close()
             return
         self._opacity.setOpacity(1.0 - progress)
-        # Move toward center and shrink
         geo = self.geometry()
         cx = geo.x() + geo.width() // 2
         cy = geo.y() + geo.height() // 2
@@ -112,9 +105,6 @@ class FoodItemWindow(QFrame):
         new_w = int(48 * scale)
         new_h = int(48 * scale)
         self.setGeometry(new_x + (48 - new_w) // 2, new_y + (48 - new_h) // 2, new_w, new_h)
-
-
-# ── Floating Text ────────────────────────────────────────────
 
 class FloatingText(QFrame):
     """+15 heart text that drifts up and fades out."""

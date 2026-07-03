@@ -9,7 +9,6 @@ from PyQt6.QtWidgets import (
     QLineEdit
 )
 
-# Color constants
 ACCENT = "#C49A3C"
 DARK = "#3E2723"
 LIGHT_BG = "#FFF8F0"
@@ -18,11 +17,9 @@ TEXT = "#2C1810"
 TEXT_SEC = "#8B7355"
 BORDER = "#E8D5C0"
 
-
 class SettingsDialog(QDialog):
     """Settings dialog with tabbed interface."""
 
-    # Signals for live preview
     scale_changed = pyqtSignal(float)
     speed_changed = pyqtSignal(float)
     dark_mode_changed = pyqtSignal(bool)
@@ -152,13 +149,11 @@ class SettingsDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        # Title
         title = QLabel("⚙️ YoTu 设置")
         title.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {DARK};")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
 
-        # Tab widget
         tabs = QTabWidget()
         tabs.addTab(self._create_display_tab(), "🎨 显示")
         tabs.addTab(self._create_behavior_tab(), "🐾 行为")
@@ -166,7 +161,6 @@ class SettingsDialog(QDialog):
         tabs.addTab(self._create_advanced_tab(), "⚡ 高级")
         layout.addWidget(tabs)
 
-        # Buttons
         btn_layout = QHBoxLayout()
         btn_layout.addStretch()
 
@@ -217,7 +211,6 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(widget)
         layout.setSpacing(12)
 
-        # ── 宠物大小 ──
         size_group = QGroupBox("宠物大小")
         size_layout = QVBoxLayout(size_group)
 
@@ -244,7 +237,6 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(size_group)
 
-        # ── 窗口行为 ──
         window_group = QGroupBox("窗口")
         window_layout = QVBoxLayout(window_group)
 
@@ -257,7 +249,6 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(window_group)
 
-        # ── 透明度 ──
         opacity_group = QGroupBox("透明度")
         opacity_layout = QVBoxLayout(opacity_group)
 
@@ -293,7 +284,6 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(widget)
         layout.setSpacing(12)
 
-        # ── 移动速度 ──
         speed_group = QGroupBox("移动速度")
         speed_layout = QVBoxLayout(speed_group)
 
@@ -320,11 +310,9 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(speed_group)
 
-        # ── 发呆时间 ──
         idle_group = QGroupBox("发呆时间")
         idle_layout = QVBoxLayout(idle_group)
 
-        # Use a grid-like layout with fixed label widths for alignment
         idle_form = QHBoxLayout()
         idle_form.setSpacing(8)
 
@@ -361,7 +349,6 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(idle_group)
 
-        # ── 互动模式 ──
         mode_group = QGroupBox("互动模式")
         mode_layout = QVBoxLayout(mode_group)
 
@@ -379,7 +366,6 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(mode_group)
 
-        # ── 时间感知 ──
         time_group = QGroupBox("时间感知")
         time_layout = QVBoxLayout(time_group)
 
@@ -401,7 +387,6 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(widget)
         layout.setSpacing(12)
 
-        # ── 好感度系统 ──
         affection_group = QGroupBox("好感度系统")
         affection_layout = QVBoxLayout(affection_group)
 
@@ -422,7 +407,6 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(affection_group)
 
-        # ── 喂食设置 ──
         feed_group = QGroupBox("喂食")
         feed_layout = QVBoxLayout(feed_group)
 
@@ -441,7 +425,6 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(feed_group)
 
-        # ── 小房子 ──
         house_group = QGroupBox("小房子")
         house_layout = QVBoxLayout(house_group)
 
@@ -463,7 +446,6 @@ class SettingsDialog(QDialog):
         layout = QVBoxLayout(widget)
         layout.setSpacing(12)
 
-        # ── 番茄钟 ──
         pomo_group = QGroupBox("番茄钟")
         pomo_layout = QVBoxLayout(pomo_group)
 
@@ -485,7 +467,6 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(pomo_group)
 
-        # ── 启动行为 ──
         startup_group = QGroupBox("启动")
         startup_layout = QVBoxLayout(startup_group)
 
@@ -501,7 +482,6 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(startup_group)
 
-        # ── 关于 ──
         about_group = QGroupBox("关于")
         about_layout = QVBoxLayout(about_group)
 
@@ -533,12 +513,10 @@ class SettingsDialog(QDialog):
 
     def _load_settings(self):
         """从设置加载当前值"""
-        # Display
         scale = self.settings.animation_scale
         self._scale_slider.setValue(int(scale * 100))
         self._always_on_top.setChecked(self.settings.always_on_top)
 
-        # Behavior
         speed = self.settings.walking_speed_max
         self._speed_slider.setValue(int(speed))
 
@@ -548,23 +526,18 @@ class SettingsDialog(QDialog):
 
         self._time_awareness.setChecked(self.settings.time_awareness_enabled)
 
-        # House
         self._house_enabled.setChecked(self.settings.house_enabled)
 
-        # Pomodoro
         self._pomo_enabled.setChecked(self.settings.pomodoro_enabled)
         self._pomo_interval.setValue(self.settings.pomodoro_interval)
 
-        # Auto start
         self._auto_start.setChecked(self.settings.auto_start)
 
     def _save_settings(self):
         """保存设置"""
-        # Display
         self.settings.animation_scale = self._scale_slider.value() / 100.0
         self.settings.always_on_top = self._always_on_top.isChecked()
 
-        # Behavior
         speed = float(self._speed_slider.value())
         self.settings.walking_speed_max = speed
         self.settings.walking_speed_min = max(0.3, speed * 0.3)
@@ -574,14 +547,11 @@ class SettingsDialog(QDialog):
 
         self.settings.time_awareness_enabled = self._time_awareness.isChecked()
 
-        # House
         self.settings.house_enabled = self._house_enabled.isChecked()
 
-        # Pomodoro
         self.settings.pomodoro_enabled = self._pomo_enabled.isChecked()
         self.settings.pomodoro_interval = self._pomo_interval.value()
 
-        # Auto start
         self.settings.auto_start = self._auto_start.isChecked()
 
     def _reset_defaults(self):

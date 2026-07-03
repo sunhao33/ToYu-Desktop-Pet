@@ -4,7 +4,6 @@ import time
 import random
 from PyQt6.QtCore import QTimer
 
-
 class AccessoryBrain:
     """Behavior-driven accessory/expression system.
 
@@ -16,7 +15,6 @@ class AccessoryBrain:
     - Random selection when multiple behaviors are possible
     """
 
-    # Behavior cooldowns (seconds)
     COOLDOWN_WEATHER = 300      # 5 min between weather reactions
     COOLDOWN_BOREDOM = 480      # 8 min between boredom behaviors
     COOLDOWN_ICECREAM = 1800    # 30 min between ice cream treats
@@ -29,25 +27,21 @@ class AccessoryBrain:
         self.settings = settings_manager
         self._enabled = True
 
-        # Cooldown tracking (timestamp of last trigger)
         self._cooldowns = {
             'weather': 0, 'boredom': 0, 'icecream': 0,
             'music': 0, 'mood': 0, 'micro': 0,
             'morning_greet': 0, 'night_greet': 0,
         }
 
-        # State
         self._current_weather_acc = None  # 'umbrella', 'snow', None
         self._boredom_count = 0           # escalates if ignored
         self._last_interaction_time = time.time()
         self._last_check_time = 0
         self._started = False
 
-        # Main behavior loop — every 2 minutes
         self._timer = QTimer(self.pet)
         self._timer.timeout.connect(self._tick)
 
-        # Track interaction for boredom detection
         if not getattr(pet_window, '_brain_handlers_wrapped', False):
             pet_window._brain_handlers_wrapped = True
             self._orig_mouse_press = pet_window.mousePressEvent
@@ -111,7 +105,6 @@ class AccessoryBrain:
             now = time.localtime()
             hour = now.tm_hour
 
-            # Priority: weather > time-of-day > boredom > mood > micro
             if self._try_weather():
                 return
             if self._try_time_of_day(hour):
@@ -124,8 +117,6 @@ class AccessoryBrain:
 
         except Exception as e:
             print(f"[AccessoryBrain] Error: {e}")
-
-    # ── Weather ──────────────────────────────────────────────
 
     def _get_weather(self):
         try:
@@ -171,7 +162,6 @@ class AccessoryBrain:
             self._do_hot_icecream()
             return True
 
-        # Clear weather → remove umbrella if present
         if not is_rainy and not is_snowy and self._current_weather_acc:
             self.pet.clear_accessories()
             self._current_weather_acc = None
@@ -185,21 +175,17 @@ class AccessoryBrain:
         self._did('weather')
         self._current_weather_acc = 'umbrella'
 
-        # Remove old accessories, add umbrella
         self.pet.clear_accessories()
         self.pet.add_umbrella(duration=45)  # auto-fade after 45s
 
-        # Rain particles + tired animation
         self.pet.trigger_rain_mood(6.0)
 
-        # Text bubble
         self._say(random.choice([
             "下雨了，撑伞~☂️",
             "雨滴答答的...",
             "别淋湿了哦~",
         ]))
 
-        # After umbrella fades, clear state
         self._schedule(46_000, lambda: self._clear_weather_acc('umbrella'))
 
     def _do_snow(self):
@@ -226,11 +212,9 @@ class AccessoryBrain:
         self._did('icecream')
         self._did('weather')
 
-        # Add ice cream at HAND_RIGHT
         self.pet.clear_accessories()
         self.pet.add_icecream(duration=0)
 
-        # Sparkle burst (excitement)
         center = self.pet.geometry().center()
         self.pet._effects.add_sparkles(center.x(), center.y() - 20, count=4)
 
@@ -240,7 +224,6 @@ class AccessoryBrain:
             "夏天的快乐~🍦",
         ]))
 
-        # Pet "eats" it — fade after 5s, then celebrate
         self._schedule(5000, self._eat_icecream)
 
     def _eat_icecream(self):
@@ -260,11 +243,8 @@ class AccessoryBrain:
             self._current_weather_acc = None
             self.pet.clear_accessories()
 
-    # ── Time of Day ──────────────────────────────────────────
-
     def _try_time_of_day(self, hour: int) -> bool:
         """Time-based behaviors: morning sparkle, night sleep."""
-        # Morning greeting (6-9, once per session)
         if 6 <= hour < 9 and self._can('morning_greet', 7200):
             if self._busy():
                 return False
@@ -277,7 +257,6 @@ class AccessoryBrain:
             ]))
             return True
 
-        # Night sleep (23-6)
         if (hour >= 23 or hour < 6) and self._can('night_greet', 3600):
             if self._busy():
                 return False
@@ -290,7 +269,6 @@ class AccessoryBrain:
             ]))
             return True
 
-        # Evening wind-down (20-22)
         if 20 <= hour < 22 and self._can('micro', self.COOLDOWN_MICRO):
             if self._busy():
                 return False
@@ -300,8 +278,6 @@ class AccessoryBrain:
             return True
 
         return False
-
-    # ── Boredom ──────────────────────────────────────────────
 
     def _try_boredom(self) -> bool:
         """If pet hasn't been interacted with for a while, do something fun."""
@@ -317,14 +293,12 @@ class AccessoryBrain:
         self._did('boredom')
         self._boredom_count += 1
 
-        # Escalating boredom behaviors
         behaviors = [
             self._bored_dance_with_hat,
             self._bored_cool_glasses,
             self._bored_wand_sparkle,
             self._bored_just_dance,
         ]
-        # Pick one, weighted by boredom level
         weights = [3, 3, 2, 1] if self._boredom_count <= 2 else [1, 1, 2, 3]
         behavior = random.choices(behaviors, weights=weights, k=1)[0]
         behavior()
@@ -340,13 +314,11 @@ class AccessoryBrain:
             "无聊了，自娱自乐~",
             "啦啦啦~🎩",
         ]))
-        # Hat auto-fades via duration=7
 
     def _bored_cool_glasses(self):
         """Bored: put on sunglasses, do a cool pose, remove."""
         self.pet.clear_accessories()
         self.pet.add_glasses(duration=8)
-        # Cool sway + sparkles
         self.pet.trigger_dance(5.0)
         center = self.pet.geometry().center()
         self.pet._effects.add_sparkles(center.x(), center.y() - 20, count=4)
@@ -377,8 +349,6 @@ class AccessoryBrain:
             "哼首歌吧~🎵",
             "跳舞！跳舞！",
         ]))
-
-    # ── Mood / Favorability ──────────────────────────────────
 
     def _try_mood(self) -> bool:
         """Based on favorability, do mood-appropriate accessories."""
@@ -420,8 +390,6 @@ class AccessoryBrain:
             pass
         return False
 
-    # ── Micro-behaviors (ambient particles) ──────────────────
-
     def _try_micro(self, hour: int):
         """Small ambient effects — particles, tiny reactions."""
         if not self._can('micro', self.COOLDOWN_MICRO):
@@ -429,14 +397,12 @@ class AccessoryBrain:
         if self._busy():
             return
 
-        # 40% chance to do something ambient
         if random.random() > 0.4:
             return
 
         center = self.pet.geometry().center()
         choices = []
 
-        # Time-appropriate particles
         if 6 <= hour < 12:
             choices.append(('sparkles', lambda: self.pet._effects.add_sparkles(center.x(), center.y() - 20, count=3)))
         if 12 <= hour < 18:
@@ -446,15 +412,12 @@ class AccessoryBrain:
         if hour >= 23 or hour < 6:
             choices.append(('zzz', lambda: self.pet._effects.add_zzz(center.x() + 20, center.y() - 35, count=2)))
 
-        # Always available
         choices.append(('heart', lambda: self.pet._effects.add_hearts(center.x(), center.y() - 30, count=2)))
 
         if choices:
             name, action = random.choice(choices)
             action()
             self._did('micro')
-
-    # ── Utility ──────────────────────────────────────────────
 
     def _say(self, message: str):
         """Show a text bubble from the pet."""

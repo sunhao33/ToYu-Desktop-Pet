@@ -11,8 +11,6 @@ from typing import Optional, Callable
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
-
-# ── Default system prompt ──
 DEFAULT_SYSTEM_PROMPT = (
     "你是{name}，一个可爱的桌面宠物伴侣。"
     "你的性格：{personality}。"
@@ -30,7 +28,6 @@ PERSONALITIES = {
     "元气": "元气满满，积极向上，喜欢鼓励别人，像一个永远充满正能量的小伙伴",
 }
 
-
 class AIMessage:
     """Single chat message."""
     def __init__(self, role: str, content: str):
@@ -39,7 +36,6 @@ class AIMessage:
 
     def to_dict(self):
         return {"role": self.role, "content": self.content}
-
 
 class AIConfig:
     """AI configuration stored locally."""
@@ -104,7 +100,6 @@ class AIConfig:
         except Exception:
             return False
 
-
 class AIWorker(QObject):
     """Background worker for non-blocking API calls."""
     finished = pyqtSignal(str)   # AI response text
@@ -159,7 +154,6 @@ class AIWorker(QObject):
         except Exception as e:
             self.error.emit(f"未知错误: {str(e)[:80]}")
 
-
 class AICompanion:
     """Manages AI chat state and API calls."""
 
@@ -183,19 +177,15 @@ class AICompanion:
                 on_error("AI 未启用，请先在设置中配置 API")
             return
 
-        # Add user message to history
         self._history.append(AIMessage("user", user_input))
 
-        # Trim history
         if len(self._history) > self.config.max_history:
             self._history = self._history[-self.config.max_history:]
 
-        # Build messages for API
         messages = [{"role": "system", "content": self.get_system_prompt_with_context()}]
         for msg in self._history:
             messages.append(msg.to_dict())
 
-        # Start async call
         self._worker = AIWorker(self.config, messages)
         self._worker.finished.connect(lambda text: self._on_response(text, on_response))
         self._worker.error.connect(lambda err: self._on_error(err, on_error))

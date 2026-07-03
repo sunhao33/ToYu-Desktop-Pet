@@ -3,7 +3,6 @@
 from PIL import Image
 import os
 
-# ── Pixel art color palette ──
 C = {
     '.': (0, 0, 0, 0),              # transparent
     'O': (0x2A, 0x2A, 0x2A, 255),  # dark outline
@@ -25,11 +24,7 @@ C = {
     'F': (0x3E, 0x3E, 0x3E, 255),  # feet
 }
 
-# ── TV-kun pixel art (32 columns x 32 rows) ──
-# Design: Retro CRT TV with rabbit-ear antenna, showing a cute face on screen
 TV_KUN = [
-    #  0         1         2         3
-    #  01234567890123456789012345678901
     "................................",  # 0
     "...........AAAA.................",  # 1  rabbit ears top
     "..........A.A..A................",  # 2  ear posts
@@ -64,7 +59,6 @@ TV_KUN = [
     "................................",  # 31
 ]
 
-
 def render_pixel_art(art, palette, scale=4):
     height = len(art)
     width = max(len(row) for row in art)
@@ -80,7 +74,6 @@ def render_pixel_art(art, palette, scale=4):
 
     return img
 
-
 def main():
     output_dir = os.path.dirname(os.path.abspath(__file__))
     scale = 5  # 32×5 = 160px
@@ -89,7 +82,6 @@ def main():
     pet_path = os.path.join(output_dir, "tv_pet.png")
     tv.save(pet_path, "PNG")
     print(f"TV-kun pet: {pet_path} ({tv.width}x{tv.height})")
-
 
 if __name__ == "__main__":
     main()

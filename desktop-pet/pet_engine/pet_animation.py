@@ -5,7 +5,6 @@ import time
 import random
 from enum import Enum
 
-
 class AnimationType(Enum):
     IDLE = "idle"
     WALK = "walk"
@@ -21,7 +20,6 @@ class AnimationType(Enum):
     BOUNCE_LAND = "bounce_land"   # squash-stretch on landing after drag
     LEAN = "lean"                 # tilt toward mouse cursor (proximity)
     DIZZY = "dizzy"               # wobble after rapid shake
-
 
 class AnimationState:
     def __init__(self):
@@ -40,7 +38,6 @@ class AnimationState:
         self.offset_y = 0.0
         self.offset_x = 0.0
 
-
 class PetAnimation:
     def __init__(self, sprite_is_sheet=False, sheet_frames=1, sheet_columns=1):
         self.current_type = AnimationType.IDLE
@@ -51,7 +48,6 @@ class PetAnimation:
         self._current_frame = 0
         self._frame_timer = 0.0
 
-        # Idle sub-animation timers
         self._blink_timer = 0.0
         self._blink_interval = random.uniform(3.0, 7.0)
         self._blinking = False
@@ -82,7 +78,6 @@ class PetAnimation:
         if self.current_type == AnimationType.IDLE:
             self._idle_time += dt
 
-            # ── Idle base: gentle breathing ──
             breath_speed = 1.8 if self._idle_time < 30 else 1.0  # slower when sleepy
             breath_amplitude = 0.03 if self._idle_time < 30 else 0.02
             breath = math.sin(elapsed * breath_speed) * breath_amplitude
@@ -92,7 +87,6 @@ class PetAnimation:
             s.offset_y = math.sin(elapsed * breath_speed) * 1.5
             s.offset_x = 0
 
-            # ── Blink sub-animation ──
             self._blink_timer += dt
             if not self._blinking and self._blink_timer >= self._blink_interval:
                 self._blinking = True
@@ -104,7 +98,6 @@ class PetAnimation:
                 blink_elapsed = elapsed - self._blink_start
                 blink_duration = 0.15
                 if blink_elapsed < blink_duration:
-                    # Quick vertical squash (eyes close)
                     t = blink_elapsed / blink_duration
                     squint = math.sin(t * math.pi) * 0.6
                     s.scale_y = s.scale_y * (1.0 - squint)
@@ -112,7 +105,6 @@ class PetAnimation:
                 else:
                     self._blinking = False
 
-            # ── Random wiggle ──
             wiggle_interval = 15.0
             wiggle_elapsed = elapsed % wiggle_interval
             if wiggle_elapsed < 0.5:
@@ -120,7 +112,6 @@ class PetAnimation:
                 s.rotation += math.sin(t * math.pi * 4) * 4 * (1 - t)
                 s.offset_x = math.sin(t * math.pi * 3) * 3 * (1 - t)
 
-            # ── Sleepy droop after long idle ──
             if self._idle_time > 30:
                 droop = min((self._idle_time - 30) / 10.0, 1.0) * 0.04
                 s.scale_y -= droop
@@ -178,21 +169,17 @@ class PetAnimation:
             duration = 0.5
             progress = min(elapsed / duration, 1.0)
 
-            # Jump arc: go up then down with gravity feel
             if progress < 0.3:
-                # Crouch down
                 t = progress / 0.3
                 s.scale_x = 1.0 + t * 0.1
                 s.scale_y = 1.0 - t * 0.15
                 s.offset_y = t * 5
             elif progress < 0.6:
-                # Launch upward
                 t = (progress - 0.3) / 0.3
                 s.scale_x = 1.1 - t * 0.05
                 s.scale_y = 0.85 + t * 0.15
                 s.offset_y = 5 - t * 25
             else:
-                # Land and settle
                 t = (progress - 0.6) / 0.4
                 landing = math.sin((1 - t) * math.pi) * 0.05
                 s.scale_x = 1.05 + landing
@@ -214,7 +201,6 @@ class PetAnimation:
             s.offset_x = 0
 
         elif self.current_type == AnimationType.DANCE:
-            # Bounce up/down + sway left/right — happy dancing
             s.offset_y = abs(math.sin(elapsed * 6.0)) * -15
             s.offset_x = math.sin(elapsed * 3.0) * 8
             s.rotation = math.sin(elapsed * 4.0) * 12
@@ -223,7 +209,6 @@ class PetAnimation:
             s.scale_y = 1.0 - bounce * 0.5
 
         elif self.current_type == AnimationType.TIRED:
-            # Slow sway like about to fall — long work
             s.rotation = math.sin(elapsed * 0.8) * 15
             s.offset_x = math.sin(elapsed * 0.5) * 5
             droop = min(elapsed / 5.0, 1.0) * 0.06
@@ -232,7 +217,6 @@ class PetAnimation:
             s.offset_y = droop * 40
 
         elif self.current_type == AnimationType.SLEEP:
-            # Slow sink + gentle breathing — asleep
             s.offset_y = min(elapsed * 0.5, 10)
             breath = math.sin(elapsed * 0.8) * 0.02
             s.scale_x = 1.0 + breath
@@ -241,7 +225,6 @@ class PetAnimation:
             s.offset_x = 0
 
         elif self.current_type == AnimationType.CELEBRATE:
-            # Fast bounce + spin — celebration!
             s.offset_y = abs(math.sin(elapsed * 10.0)) * -20
             s.rotation = math.sin(elapsed * 8.0) * 15
             pop = math.sin(elapsed * 10.0) * 0.1
@@ -250,30 +233,25 @@ class PetAnimation:
             s.offset_x = math.sin(elapsed * 5.0) * 5
 
         elif self.current_type == AnimationType.BOUNCE_LAND:
-            # Squash on landing, then spring back — triggered after drag release
             duration = 0.6
             progress = min(elapsed / duration, 1.0)
             if progress < 0.12:
-                # Squash down — hard landing
                 t = progress / 0.12
                 s.scale_x = 1.0 + t * 0.35
                 s.scale_y = 1.0 - t * 0.4
                 s.offset_y = t * 18
             elif progress < 0.35:
-                # Stretch up — spring bounce
                 t = (progress - 0.12) / 0.23
                 s.scale_x = 1.35 - t * 0.4
                 s.scale_y = 0.6 + t * 0.55
                 s.offset_y = 18 - t * 35
             elif progress < 0.6:
-                # Second smaller squash
                 t = (progress - 0.35) / 0.25
                 bounce = math.sin(t * math.pi) * 0.08
                 s.scale_x = 0.95 + bounce + t * 0.05
                 s.scale_y = 1.15 - bounce - t * 0.15
                 s.offset_y = -17 * (1 - t)
             elif progress < 0.8:
-                # Settle
                 t = (progress - 0.6) / 0.2
                 s.scale_x = 1.0 + (1 - t) * 0.02
                 s.scale_y = 1.0 - (1 - t) * 0.02
@@ -290,23 +268,18 @@ class PetAnimation:
                 self._schedule_next_blink()
 
         elif self.current_type == AnimationType.LEAN:
-            # Gentle tilt toward target — mouse proximity reaction
             direction = getattr(self, '_lean_dir', 0)
             strength = getattr(self, '_lean_strength', 0.0)
-            # Smooth approach
             target_rot = direction * 8.0 * strength
             target_offset_x = direction * 4.0 * strength
             s.rotation += (target_rot - s.rotation) * 0.1
             s.offset_x += (target_offset_x - s.offset_x) * 0.1
-            # Gentle vertical bob
             s.offset_y = math.sin(elapsed * 2.0) * 2.0 * strength
-            # Slight scale pulse
             pulse = math.sin(elapsed * 2.5) * 0.015 * strength
             s.scale_x = 1.0 + pulse
             s.scale_y = 1.0 - pulse * 0.5
 
         elif self.current_type == AnimationType.DIZZY:
-            # Wobble + spin — after rapid shake
             wobble_speed = max(3.0, 10.0 - elapsed * 2.0)
             wobble_amp = max(0.5, 8.0 - elapsed * 3.0)
             s.rotation = math.sin(elapsed * wobble_speed) * wobble_amp

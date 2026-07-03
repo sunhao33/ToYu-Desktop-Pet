@@ -5,7 +5,6 @@ from PyQt6.QtGui import QIcon, QAction
 
 from image_processor.processor import get_default_pet_path
 
-
 class TrayIcon(QSystemTrayIcon):
     def __init__(self, pet_window, settings):
         super().__init__()

@@ -11,7 +11,6 @@ from PyQt6.QtWidgets import (
     QFrame, QSizePolicy, QComboBox
 )
 
-# Theme colors
 ACCENT = "#C49A3C"
 ACCENT_HOVER = "#D4AE50"
 DARK = "#3E2723"
@@ -26,9 +25,7 @@ DANGER = "#C0392B"
 DONE_GREEN = "#4CAF50"
 TIMER_COLOR = "#4A90D9"
 
-# Data paths
 DATA_DIR = os.path.join(os.path.expanduser("~"), ".desktop_pet")
-
 
 class TodoItem:
     """Single todo item."""
@@ -37,7 +34,6 @@ class TodoItem:
         self.done = done
         self.created_at = created_at or datetime.now().isoformat()
         self.priority = priority
-
 
 class TodoWidget(QWidget):
     """Todo list widget with inline action buttons and timer."""
@@ -59,7 +55,6 @@ class TodoWidget(QWidget):
         layout.setContentsMargins(0, 0, 0, 0)
         layout.setSpacing(6)
 
-        # ── Input row ──
         input_row = QHBoxLayout()
         input_row.setSpacing(6)
 
@@ -123,7 +118,6 @@ class TodoWidget(QWidget):
 
         layout.addLayout(input_row)
 
-        # ── Filter row ──
         filter_row = QHBoxLayout()
         filter_row.setSpacing(4)
 
@@ -144,7 +138,6 @@ class TodoWidget(QWidget):
 
         layout.addLayout(filter_row)
 
-        # ── List ──
         self._list = QListWidget()
         self._list.setStyleSheet(f"""
             QListWidget {{
@@ -163,7 +156,6 @@ class TodoWidget(QWidget):
         self._list.setContextMenuPolicy(Qt.ContextMenuPolicy.NoContextMenu)
         layout.addWidget(self._list)
 
-        # ── Clear done button ──
         clear_btn = QPushButton("清除已完成")
         clear_btn.setFixedHeight(28)
         clear_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -252,7 +244,6 @@ class TodoWidget(QWidget):
         """Open a timer popup for the todo item."""
         from ui.timer_popup import TodoTimerPopup
         history = self._load_history()
-        # Flatten history: {task_text: total_seconds}
         flat = {}
         for day_tasks in history.values():
             for t in day_tasks:
@@ -267,7 +258,6 @@ class TodoWidget(QWidget):
     def _on_timer_finished(self, todo_text, elapsed):
         """Timer completed — record to history."""
         self._record_task_done(todo_text, elapsed)
-        # Mark todo as done if it matches
         for t in self.todos:
             if t.text == todo_text and not t.done:
                 t.done = True
@@ -311,7 +301,6 @@ class TodoWidget(QWidget):
             row.setContentsMargins(10, 6, 6, 6)
             row.setSpacing(6)
 
-            # Status indicator
             status = QLabel("●")
             if todo.done:
                 status.setStyleSheet(f"color: {DONE_GREEN}; font-size: 16px; background: transparent;")
@@ -321,7 +310,6 @@ class TodoWidget(QWidget):
                 status.setStyleSheet(f"color: {color}; font-size: 16px; background: transparent;")
             row.addWidget(status)
 
-            # Text
             text_label = QLabel(todo.text)
             text_label.setWordWrap(True)
             if todo.done:
@@ -337,7 +325,6 @@ class TodoWidget(QWidget):
                 """)
             row.addWidget(text_label, 1)
 
-            # Timer button (only for active tasks)
             if not todo.done:
                 timer_btn = QPushButton("⏱")
                 timer_btn.setFixedSize(26, 26)
@@ -353,7 +340,6 @@ class TodoWidget(QWidget):
                 timer_btn.clicked.connect(lambda checked=False, t=todo: self._start_timer(t))
                 row.addWidget(timer_btn)
 
-            # Toggle button
             if todo.done:
                 toggle_btn = QPushButton("↩")
                 toggle_btn.setToolTip("撤销完成")
@@ -379,7 +365,6 @@ class TodoWidget(QWidget):
             toggle_btn.clicked.connect(lambda checked=False, t=todo: self._toggle_todo_by_ref(t))
             row.addWidget(toggle_btn)
 
-            # Delete button
             del_btn = QPushButton("✕")
             del_btn.setFixedSize(26, 26)
             del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -397,12 +382,9 @@ class TodoWidget(QWidget):
             self._list.addItem(item)
             self._list.setItemWidget(item, widget)
 
-        # Update stats
         total = len(self.todos)
         done = sum(1 for t in self.todos if t.done)
         self._stats_label.setText(f"完成: {done}/{total}")
-
-    # ── Task history for calendar ──
 
     def _record_task_done(self, task_text, elapsed_seconds=0):
         """Record a completed task to daily history."""
@@ -437,8 +419,6 @@ class TodoWidget(QWidget):
     def get_task_history(self):
         """Return task history dict for calendar use."""
         return self._load_history()
-
-    # ── Persistence ──
 
     def _load_todos(self):
         try:

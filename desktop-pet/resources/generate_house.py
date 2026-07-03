@@ -6,8 +6,6 @@ import struct
 import wave
 import math
 
-
-# ── House pixel art color palette ──
 C = {
     '.': (0, 0, 0, 0),             # transparent
     'O': (0x3D, 0x28, 0x22, 255), # dark outline
@@ -37,10 +35,7 @@ C = {
     'E': (0x4A, 0x8C, 0x3A, 255), # grass
 }
 
-# ── House pixel art (32 columns x 32 rows) ──
 HOUSE = [
-    #  0         1         2         3
-    #  01234567890123456789012345678901
     "................................",  # 0
     ".............SSS................",  # 1  smoke puff
     "............SSSSS...............",  # 2
@@ -75,11 +70,9 @@ HOUSE = [
     ".........EEEEEggEEEE...........",  # 31 grass
 ]
 
-# ── Door region (in grid coords) for interaction ──
 DOOR_GRID_X1, DOOR_GRID_X2 = 13, 18
 DOOR_GRID_Y1, DOOR_GRID_Y2 = 22, 26
 SCALE = 5
-
 
 def render_pixel_art(art, palette, scale=4):
     height = len(art)
@@ -95,7 +88,6 @@ def render_pixel_art(art, palette, scale=4):
                         img.putpixel((x * scale + dx, y * scale + dy), color)
 
     return img
-
 
 def generate_knock_wav(output_path):
     """Generate a short door-knock sound effect."""
@@ -128,7 +120,6 @@ def generate_knock_wav(output_path):
         wf.setframerate(sample_rate)
         wf.writeframes(struct.pack(f'<{len(samples)}h', *samples))
 
-
 def main():
     output_dir = os.path.dirname(os.path.abspath(__file__))
     scale = SCALE
@@ -141,7 +132,6 @@ def main():
     knock_path = os.path.join(output_dir, "knock.wav")
     generate_knock_wav(knock_path)
     print(f"Knock sound: {knock_path}")
-
 
 if __name__ == "__main__":
     main()

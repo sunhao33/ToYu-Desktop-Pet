@@ -2,10 +2,6 @@
 
 from PyQt6.QtGui import QPixmap, QImage
 
-
-# ── Visible Bounds Detection ─────────────────────────────────
-
-
 def get_visible_bounds(pixmap: QPixmap) -> tuple:
     """Scan pet pixmap and return (top, bottom, left, right) of actual visible pixels.
     
@@ -26,14 +22,12 @@ def get_visible_bounds(pixmap: QPixmap) -> tuple:
     if w == 0 or h == 0:
         return (0, 0, 0, 0)
     
-    # Scan for first/last visible row
     top_visible = h
     bottom_visible = -1
     
     for y in range(h):
         row_has_pixel = False
         ptr = img.constScan(y)
-        # Scan this row for any non-transparent pixel
         for x in range(w):
             pixel = img.pixelColor(x, y)
             if pixel.alpha() > 20:  # threshold: ignore near-transparent
@@ -48,7 +42,6 @@ def get_visible_bounds(pixmap: QPixmap) -> tuple:
     if bottom_visible < 0:
         return (0, 0, 0, 0)
     
-    # Scan for first/last visible column
     left_visible = w
     right_visible = -1
     
@@ -75,7 +68,6 @@ def get_visible_bounds(pixmap: QPixmap) -> tuple:
         w - 1 - right_visible   # pixels from right edge to last visible col
     )
 
-
 def get_content_rect(pixmap: QPixmap) -> tuple:
     """Return (x, y, width, height) of the actual visible content area."""
     if pixmap.isNull():
@@ -90,7 +82,6 @@ def get_content_rect(pixmap: QPixmap) -> tuple:
     ch = h - top - bottom
     
     return (cx, cy, cw, ch)
-
 
 def get_content_ratio(pixmap: QPixmap) -> dict:
     """Return visible content as ratios (0.0-1.0) relative to full pixmap.
@@ -112,11 +103,8 @@ def get_content_ratio(pixmap: QPixmap) -> dict:
         'right': right / w if w > 0 else 0.0,
     }
 
-
-# Shared layout constants for the pet window
 _PET_PADDING = 60
 _PET_SCALE_FACTOR = 1.6
-
 
 def get_sprite_frame_size(pet_geometry):
     """Return the sprite pixel dimensions and position from pet window geometry.

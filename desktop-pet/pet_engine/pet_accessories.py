@@ -6,9 +6,6 @@ from PyQt6.QtCore import Qt, QTimer, QRectF
 from PyQt6.QtGui import QPainter, QPixmap
 from PyQt6.QtWidgets import QWidget
 
-
-# ── Anchor Points ────────────────────────────────────────────
-
 class Anchor:
     """Attachment point relative to pet visible content area."""
     TOP = "top"
@@ -20,11 +17,7 @@ class Anchor:
     CENTER = "center"
     HAND_RIGHT = "hand_right"
 
-
-# Offsets relative to visible content (ratios from content edges)
-# These are fine-tuned to stay within the sprite's actual pixels
 CONTENT_ANCHORS = {
-    # (content_x_ratio, content_y_ratio) — 0.0 = content start, 1.0 = content end
     Anchor.TOP:         (0.5, -0.08),   # just above content top center
     Anchor.BOTTOM:      (0.5, 1.05),    # just below content bottom
     Anchor.LEFT:        (-0.15, 0.4),   # left of content, mid height
@@ -34,9 +27,6 @@ CONTENT_ANCHORS = {
     Anchor.CENTER:      (0.5, 0.45),
     Anchor.HAND_RIGHT:  (0.95, 0.6),
 }
-
-
-# ── Accessory ────────────────────────────────────────────────
 
 class Accessory:
     """A single accessory sprite with position, animation, and lifecycle."""
@@ -71,25 +61,19 @@ class Accessory:
         """Calculate draw rect based on content-relative anchor."""
         ax_ratio, ay_ratio = CONTENT_ANCHORS.get(self.anchor, (0.5, 0.5))
 
-        # Anchor point in content-local coordinates
         ax = content_x + content_w * ax_ratio
         ay = content_y + content_h * ay_ratio
 
-        # Bobbing animation
         bob = 0
         if self.bobbing:
             bob = math.sin(self._age * 2.5) * 3
 
-        # Final position (centered on anchor)
         w = self.pixmap.width() * self.scale
         h = self.pixmap.height() * self.scale
         x = ax - w / 2 + self.offset_x
         y = ay - h / 2 + self.offset_y + bob
 
         return QRectF(x, y, w, h)
-
-
-# ── Accessory Layer ──────────────────────────────────────────
 
 class AccessoryLayer(QWidget):
     """Transparent overlay that renders accessories on top of the pet."""
@@ -176,13 +160,11 @@ class AccessoryLayer(QWidget):
         ph = self._pet_local_h
         r = self._content_ratio
 
-        # Content area = pet rect inset by content ratios
         cx = px + pw * r['left']
         cy = py + ph * r['top']
         cw = pw * (1.0 - r['left'] - r['right'])
         ch = ph * (1.0 - r['top'] - r['bottom'])
 
-        # Clamp minimum size
         cw = max(cw, 20)
         ch = max(ch, 20)
 

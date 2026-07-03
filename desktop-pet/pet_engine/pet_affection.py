@@ -11,9 +11,6 @@ import os
 import random
 import time
 
-
-# ── Constants ────────────────────────────────────────────────
-
 LEVEL_EMOJIS = [
     (0, "😊"),
     (15, "🙂"),
@@ -25,12 +22,9 @@ LEVEL_EMOJIS = [
 
 MAX_AFFECTION = 100
 
-# Daily soft cap: after reaching this many points today, further points are halved
 DAILY_SOFT_CAP = 8
 DAILY_HARD_CAP = 15  # absolute max per day regardless of source
 
-# Interaction cooldowns (seconds), points, daily limits
-# 100 好感度 ÷ 15点/天 ≈ 7天连续互动才能满
 INTERACTIONS = {
     'click':       {'cooldown': 15,   'points': 1, 'daily_max': 4},
     'drag':        {'cooldown': 60,   'points': 1, 'daily_max': 2},
@@ -43,12 +37,10 @@ INTERACTIONS = {
     'milestone':   {'cooldown': 0,    'points': 5, 'daily_max': 1},
 }
 
-# Decay config
 DECAY_INTERVAL = 7200    # lose 1 point every 2 hours
 DECAY_GRACE = 14400      # no decay if interacted within 4 hours
 DECAY_MIN = 5            # never decay below this level (hard-earned base)
 
-# Milestones: level → (title, emoji, description)
 MILESTONES = {
     10:  ("初见",    "🌱", "第一次建立联系"),
     20:  ("相识",    "🌿", "开始熟悉彼此"),
@@ -60,7 +52,6 @@ MILESTONES = {
 }
 
 DATA_DIR = os.path.join(os.path.expanduser("~"), ".desktop_pet")
-
 
 class AffectionSystem:
     def __init__(self, settings_manager):
@@ -92,7 +83,6 @@ class AffectionSystem:
                 self._daily_points = data.get('daily_points', {})
                 self._daily_by_type = data.get('daily_by_type', {})
                 self._milestones_reached = set(data.get('milestones', []))
-                # Clean old days (keep last 7)
                 cutoff = time.strftime("%Y-%m-%d", time.localtime(time.time() - 7*86400))
                 self._daily_points = {k: v for k, v in self._daily_points.items() if k >= cutoff}
                 self._daily_by_type = {k: v for k, v in self._daily_by_type.items() if k >= cutoff}
@@ -131,15 +121,12 @@ class AffectionSystem:
             return False
         cfg = INTERACTIONS[itype]
 
-        # Hard daily cap
         if self._get_daily_total() >= DAILY_HARD_CAP:
             return False
 
-        # Per-type daily limit
         if self._get_daily_type_count(itype) >= cfg['daily_max']:
             return False
 
-        # Cooldown
         last = self._interaction_log.get(itype, 0)
         if cfg['cooldown'] > 0 and (time.time() - last) < cfg['cooldown']:
             return False
@@ -156,48 +143,38 @@ class AffectionSystem:
 
         cfg = INTERACTIONS[itype]
 
-        # Check cooldown
         last = self._interaction_log.get(itype, 0)
         if cfg['cooldown'] > 0 and (time.time() - last) < cfg['cooldown']:
             return 0
 
-        # Check daily limit for this type
         if self._get_daily_type_count(itype) >= cfg['daily_max']:
             return 0
 
-        # Hard daily cap
         daily_total = self._get_daily_total()
         if daily_total >= DAILY_HARD_CAP:
             return 0
 
-        # Mark interaction
         self._interaction_log[itype] = time.time()
 
-        # Calculate points with soft cap
         base_points = cfg['points']
         if daily_total >= DAILY_SOFT_CAP:
-            # After soft cap: points halved (min 1)
             actual_points = max(1, base_points // 2)
         else:
             actual_points = base_points
 
-        # Don't exceed hard cap
         actual_points = min(actual_points, DAILY_HARD_CAP - daily_total)
 
         if actual_points <= 0:
             return 0
 
-        # Apply
         new_lv = min(self.level + actual_points, MAX_AFFECTION)
         self._settings.affection_level = new_lv
         self._settings.affection_last_decay = time.time()
 
-        # Track daily
         today = self._today()
         self._daily_points[today] = self._daily_points.get(today, 0) + actual_points
         self._inc_daily_type(itype)
 
-        # Check milestones
         self._check_milestones(self.level, new_lv)
 
         self._save_state()
@@ -212,7 +189,6 @@ class AffectionSystem:
             self._settings.affection_last_decay = now
             return
 
-        # Grace period
         if (now - last) < DECAY_GRACE:
             return
 
@@ -227,7 +203,6 @@ class AffectionSystem:
         for threshold, (title, emoji, desc) in MILESTONES.items():
             if new_level >= threshold and old_level < threshold and threshold not in self._milestones_reached:
                 self._milestones_reached.add(threshold)
-                # Trigger milestone bonus
                 self.add(itype='milestone')
                 if self._milestone_callback:
                     self._milestone_callback(title, emoji, desc)
