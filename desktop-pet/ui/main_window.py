@@ -238,40 +238,63 @@ class MainWindow(QMainWindow):
         self._init_tools_hub()
 
     def _apply_content_minimum_width(self):
-        """最小宽度必须容得下内容，否则窗口缩小后右侧内容会被推出可视区。
+        """最小尺寸必须容得下内容，否则窗口缩小时内容会被裁掉。
 
-        各页内容真实需要的宽度不同（宠物页约 780、效率工具 741、数据面板 972），
-        而 _init_ui 里设的 680 太窄：缩到那个尺寸时横向滚动条出现，
-        用户看到的就是「内容框里的东西看不见」。
+        宽度：各页内容需要 780~1000 不等（数据面板最宽），
+              而 _init_ui 里设的 680 太窄 → 出现横向滚动条把右侧推出可视区。
+        高度：AI 页内容约 800 高（API 配置 + 性格设置 + 保存按钮），
+              而最小高度设的 700 太矮 → 底部内容被裁掉（实测 AI 页底部被切）。
 
-        注意：隐藏页面的 minimumSizeHint() 是过期值（未重新布局），
+        隐藏页面的 minimumSizeHint() 是过期值（未重新布局），
         所以这里先做两次延迟估算，并在每次切页时用「已显示页面」的实测值复核。
         """
-        self._content_min_width = 800
-        self.setMinimumWidth(800)
+        self._content_min_width = self.MIN_SIZE[0]
+        self._content_min_height = self.MIN_SIZE[1]
+        self.setMinimumSize(*self.MIN_SIZE)
         self._page_stack.currentChanged.connect(lambda _i: self._update_content_min_width())
         QTimer.singleShot(120, self._update_content_min_width)
         QTimer.singleShot(700, self._update_content_min_width)
 
     def _update_content_min_width(self):
-        """用当前可见页面实测所需宽度，必要时抬高窗口最小宽度。"""
+        """用当前可见页面实测所需尺寸，必要时抬高窗口最小尺寸。
+
+        高度用 sizeHint()（内容自然高度）而不是 minimumSizeHint()：
+        后者对普通容器往往很小，无法反映「AI 页要 800 高才放得下」这类需求。
+        """
         try:
             page = self._page_stack.currentWidget()
             if page is None:
                 return
-            needed = page.minimumSizeHint().width()
+            hint = page.sizeHint()
+            min_hint = page.minimumSizeHint()
+            need_w = max(hint.width(), min_hint.width())
+            need_h = max(hint.height(), min_hint.height())
+
             # 工具页内部还有子页，取当前子页
             if self._tools_stack.count():
                 sub = self._tools_stack.currentWidget()
                 if sub is not None:
-                    needed = max(needed, sub.minimumSizeHint().width())
-            needed += 40          # 滚动条与边距余量
-            needed = max(680, min(needed, 1100))
-            if needed > self._content_min_width:
-                self._content_min_width = needed
-                self.setMinimumWidth(int(needed))
-                if self.width() < needed:
-                    self.resize(int(needed), self.height())
+                    s_hint, s_min = sub.sizeHint(), sub.minimumSizeHint()
+                    need_w = max(need_w, s_hint.width(), s_min.width())
+                    need_h = max(need_h, s_hint.height(), s_min.height())
+
+            need_w = max(self.MIN_SIZE[0], min(need_w + 40, 1200))
+            # 头部(80) + 标签栏(46) + 状态栏(30) + 页内边距，约 190
+            need_h = max(self.MIN_SIZE[1], min(need_h + 190, 1150))
+
+            changed = False
+            if need_w > self._content_min_width:
+                self._content_min_width = need_w
+                changed = True
+            if need_h > self._content_min_height:
+                self._content_min_height = need_h
+                changed = True
+            if changed:
+                self.setMinimumSize(int(self._content_min_width),
+                                    int(self._content_min_height))
+                if self.width() < self._content_min_width or self.height() < self._content_min_height:
+                    self.resize(max(self.width(), int(self._content_min_width)),
+                                max(self.height(), int(self._content_min_height)))
         except RuntimeError:
             pass
 
@@ -371,10 +394,14 @@ class MainWindow(QMainWindow):
     def _init_ui(self):
         self.setWindowTitle("ToYu · 桌面土豆宠物")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "toyu_icon.ico")))
-        # 初始值只是占位：真实最小宽度由 _apply_content_minimum_width() 按内容算
-        # （各页内容实测需要约 1082，这里若给 680 会先生成过窄界面再被抬宽）
-        self.setMinimumSize(680, 700)
-        self.resize(1100, 820)
+        # 起始尺寸与最小尺寸：由实测内容需求决定（见 _apply_content_minimum_width）
+        #   AI 页最宽最高：约 962×844（API 配置 + 性格设置 + 保存按钮）
+        #   数据面板/效率工具：约 840×830
+        # 最小尺寸留一点余量避免贴边，起始尺寸给更宽松的初始视野
+        self.MIN_SIZE = (980, 850)
+        self.START_SIZE = (1120, 880)
+        self.setMinimumSize(*self.MIN_SIZE)
+        self.resize(*self.START_SIZE)
         self.setStyleSheet(self._global_stylesheet())
 
         central = QWidget()

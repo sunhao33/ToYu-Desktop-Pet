@@ -54,16 +54,22 @@ for i, label in enumerate(PAGES):
 
 check("最小宽度已按内容抬高（>680）", mw.minimumWidth() > 680,
       "最小宽度 %d" % mw.minimumWidth())
-check("最小宽度不超出常见屏幕宽度", mw.minimumWidth() <= 1100,
+check("最小高度已按内容抬高（AI 页需要）", mw.minimumHeight() >= 800,
+      "最小高度 %d" % mw.minimumHeight())
+check("最小宽度不超出常见屏幕宽度", mw.minimumWidth() <= 1200,
       "最小宽度 %d" % mw.minimumWidth())
+check("起始尺寸不小于最小尺寸",
+      mw.width() >= mw.minimumWidth() and mw.height() >= mw.minimumHeight(),
+      "起始 %dx%d 最小 %dx%d" % (mw.width(), mw.height(), mw.minimumWidth(), mw.minimumHeight()))
 
-# ── 2. 缩到最小宽度后，各页不得出现横向滚动 ────────────────
+# ── 2. 缩到最小尺寸后，各页不得出现横向滚动 ────────────────
 # 注意：离屏平台不会自动把窗口限制在最小尺寸内，必须显式先归位，
 # 否则会测到「比最小值还窄」这种真实环境不存在的状态
-mw.resize(mw.minimumWidth(), 760)
+mw.resize(mw.minimumWidth(), mw.minimumHeight())
 pump(600)
-check("测试前窗口已归位到最小宽度", mw.width() >= mw.minimumWidth(),
-      "宽 %d 最小 %d" % (mw.width(), mw.minimumWidth()))
+check("测试前窗口已归位到最小尺寸",
+      mw.width() >= mw.minimumWidth() and mw.height() >= mw.minimumHeight(),
+      "窗口 %dx%d 最小 %dx%d" % (mw.width(), mw.height(), mw.minimumWidth(), mw.minimumHeight()))
 overflow = []
 for i, label in enumerate(PAGES):
     mw._on_page_switch(i, label)
