@@ -2329,6 +2329,8 @@ class MainWindow(QMainWindow):
             self._pet.start_accessory_brain(self.settings)
             self._pet.set_pet_image(processed_path)
             self._pet.set_scale(scale)
+            # 给宠物内置的 AI 伴侣注入工具能力（加待办 / 开计时 / 查学习数据）
+            self._bind_agent_tools()
 
             if self._tray:
                 self._tray._pet = self._pet
@@ -3564,6 +3566,49 @@ class MainWindow(QMainWindow):
             if hasattr(self._pet, '_ai_config'):
                 self._pet._ai_config.load()
                 self._pet._ai = AICompanion(self._pet._ai_config)
+                # 让 AI 具备工具调用能力（加待办 / 开计时 / 查学习数据）
+                self._bind_agent_tools()
+
+    # ── 智能体工具能力 ──────────────────────────────────────
+    def _ensure_agent_tools(self):
+        """创建工具注册表与执行桥（必须主线程），并注入到 AI 伴侣。
+
+        只在第一次调用时创建：QTimer 依赖主线程事件循环，
+        不能在子线程里懒加载。
+        """
+        if getattr(self, "_tool_runtime", None) is not None:
+            return self._tool_runtime
+        try:
+            from pet_engine.agent import ToolRuntime, build_default_registry
+            self._tool_registry = build_default_registry(self)
+            self._tool_runtime = ToolRuntime(
+                self._tool_registry, parent=self,
+                on_trace=self._on_agent_trace)
+            if self._pet is not None and getattr(self._pet, "_ai", None) is not None:
+                self._pet._ai.set_tools(self._tool_registry, self._tool_runtime)
+                self._pet._ai.set_trace_callback(self._on_agent_trace)
+            return self._tool_runtime
+        except Exception as exc:  # noqa: BLE001 — 工具能力失败不能影响聊天
+            print("[Agent] 工具能力初始化失败: %s" % exc)
+            self._tool_runtime = None
+            return None
+
+    def _on_agent_trace(self, message: str):
+        """把工具执行轨迹显示到状态栏（让用户看得见"它在做什么"）。"""
+        try:
+            self._status.setText(message)
+        except RuntimeError:
+            pass
+
+    def _bind_agent_tools(self):
+        """把工具能力接到当前 AI 实例上。"""
+        runtime = self._ensure_agent_tools()
+        if runtime is None or self._pet is None:
+            return
+        ai = getattr(self._pet, "_ai", None)
+        if ai is not None:
+            ai.set_tools(self._tool_registry, runtime)
+            ai.set_trace_callback(self._on_agent_trace)
 
     def _save_ai_settings(self):
         """Save AI settings from the AI page."""
@@ -3584,6 +3629,7 @@ class MainWindow(QMainWindow):
             if self._pet:
                 self._pet._ai_config = config
                 self._pet._ai.config = config
+                self._bind_agent_tools()
                 if hasattr(self._pet, '_proactive'):
                     self._pet._proactive._ai = self._pet._ai
 

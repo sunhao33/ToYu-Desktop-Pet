@@ -154,17 +154,66 @@ class AIWorker(QObject):
         except Exception as e:
             self.error.emit(f"未知错误: {str(e)[:80]}")
 
+class AIAgentWorker(QObject):
+    """在子线程里跑 Agent 主循环（多轮工具调用）。
+
+    必须在子线程：工具执行要回主线程，如果主循环自己占着主线程就会死锁。
+    结果通过信号回到主线程。
+    """
+
+    finished = pyqtSignal(str)
+    trace = pyqtSignal(str)
+
+    def __init__(self, loop, messages: list, runtime):
+        super().__init__()
+        self._loop = loop
+        self._messages = messages
+        self._runtime = runtime
+
+    def start(self):
+        threading.Thread(target=self._run, daemon=True).start()
+
+    def _run(self):
+        try:
+            text = self._loop.run(self._messages)
+            self.finished.emit(text or "（我没想出该说什么）")
+        except Exception as exc:  # noqa: BLE001 — 子线程异常绝不能冒泡
+            self.finished.emit("[出错了: %s]" % str(exc)[:120])
+
+
 class AICompanion:
     """Manages AI chat state and API calls."""
 
     HISTORY_PATH = "ai_chat_history.json"
 
-    def __init__(self, config: AIConfig = None):
+    def __init__(self, config: AIConfig = None, tool_registry=None,
+                 tool_runtime=None):
         self.config = config or AIConfig()
         self._history: list[AIMessage] = []
         self._worker: Optional[AIWorker] = None
+        self._agent_worker: Optional[AIAgentWorker] = None
         self._pending_callbacks: list[tuple[Callable, Callable]] = []
+        # 工具能力是可选的：没有注册表就退回原来的单轮问答，行为不变
+        self._tool_registry = tool_registry
+        self._tool_runtime = tool_runtime
+        self._on_trace: Optional[Callable[[str], None]] = None
         self._load_history()
+
+    # ── 工具能力 ────────────────────────────────────────────
+    def set_tools(self, registry, runtime):
+        """注入工具注册表与运行时（由主窗口在初始化时调用）。"""
+        self._tool_registry = registry
+        self._tool_runtime = runtime
+
+    def set_trace_callback(self, callback):
+        """设置执行轨迹回调（界面用来显示"正在做什么"）。"""
+        self._on_trace = callback
+
+    @property
+    def tools_enabled(self) -> bool:
+        return (self._tool_registry is not None
+                and self._tool_runtime is not None
+                and len(self._tool_registry) > 0)
 
     def is_available(self) -> bool:
         return self.config.enabled and bool(self.config.api_key)
@@ -182,7 +231,14 @@ class AICompanion:
         if len(self._history) > self.config.max_history:
             self._history = self._history[-self.config.max_history:]
 
-        messages = [{"role": "system", "content": self.get_system_prompt_with_context()}]
+        system_prompt = self.get_system_prompt_with_context()
+
+        # 有工具时走 Agent 主循环：模型可以多轮调用工具再回答
+        if self.tools_enabled:
+            self._chat_with_tools(system_prompt, on_response, on_error)
+            return
+
+        messages = [{"role": "system", "content": system_prompt}]
         for msg in self._history:
             messages.append(msg.to_dict())
 
@@ -190,6 +246,32 @@ class AICompanion:
         self._worker.finished.connect(lambda text: self._on_response(text, on_response))
         self._worker.error.connect(lambda err: self._on_error(err, on_error))
         self._worker.start()
+
+    def _chat_with_tools(self, system_prompt, on_response, on_error):
+        """带工具的一轮对话。"""
+        try:
+            from pet_engine.agent import AgentLoop
+            from pet_engine.agent.transport import openai_tool_transport
+        except Exception as exc:  # noqa: BLE001
+            if on_error:
+                on_error("工具模块加载失败: %s" % exc)
+            return
+
+        loop = AgentLoop(
+            self._tool_registry, self._tool_runtime,
+            openai_tool_transport(self.config),
+            on_trace=self._on_trace)
+
+        # 系统提示 = 人格提示 + 工具使用准则
+        messages = [{"role": "system",
+                     "content": system_prompt + "\n\n" + loop.build_tool_prompt()}]
+        for msg in self._history:
+            messages.append(msg.to_dict())
+
+        self._agent_worker = AIAgentWorker(loop, messages, self._tool_runtime)
+        self._agent_worker.finished.connect(
+            lambda text: self._on_response(text, on_response))
+        self._agent_worker.start()
 
     def _on_response(self, text: str, callback: Callable):
         self._history.append(AIMessage("assistant", text))
