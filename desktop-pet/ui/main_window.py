@@ -227,8 +227,7 @@ class MainWindow(QMainWindow):
         )
         self._is_dark_mode = False
         self._flow_active = False
-        # 心流面板是工具页的第四个子页（不显示在子页标签栏里，由头部按钮进入）
-        self.FLOW_SUBPAGE_INDEX = 3
+        self._flow_window = None          # 心流模式是一个独立的顶层窗口
 
         self._init_ui()
         self._init_tray()
@@ -1233,12 +1232,6 @@ class MainWindow(QMainWindow):
 
         self._tools_stack.addWidget(tools_p2)
 
-        # 心流模式面板：与主页共用 settings / 宠物 / 工具中枢 / 屏幕统计，
-        # 计时器实例也在切换时被搬进来，所以状态不会重置
-        from ui.flow_panel import FlowPanel
-        self._flow_panel = FlowPanel(self)
-        self._tools_stack.addWidget(self._flow_panel)
-
         self._tools_tab_btns[0].setChecked(True)
         tools_main_layout.addWidget(self._tools_stack, 1)
         self._tools_tab_bar = tools_tab_bar
@@ -2195,47 +2188,59 @@ class MainWindow(QMainWindow):
         if effect is not None:
             effect.setOpacity(1.0)
 
-    # ── 心流模式 ────────────────────────────────────────────
+    # ── 心流模式（独立窗口）──────────────────────────────────
     def enter_flow_mode(self):
-        """切到心流工作台：同一套数据、同一个计时器，宠物状态不变。"""
+        """关闭主窗口，打开心流模式独立窗口。
+
+        两个窗口共用同一套数据：settings / 宠物实例 / 计时器实例 /
+        工具中枢 / 屏幕统计，所以切换不丢任何状态。
+        """
         if self._flow_active:
             return
         self._flow_active = True
         self.settings.flow_mode_enabled = True
 
-        # 让「心流」成为工具页的可见子页（隐藏子页标签栏，避免误切走）
-        self._page_btns["工具"].click()
-        self._tools_stack.setCurrentIndex(self.FLOW_SUBPAGE_INDEX)
-        self._tools_tab_bar.setVisible(False)
-        for btn in self._tools_tab_btns.values():
-            btn.setChecked(False)
+        if self._flow_window is None:
+            from ui.flow_window import FlowWindow
+            self._flow_window = FlowWindow(self)
 
-        self._flow_panel._timer_holder.addWidget(self._timer_widget)
-        self._timer_widget.show()
-        self._flow_panel.refresh_all()
+        # 尺寸与位置沿用主窗口，视觉上是"同一个窗口换了内容"
+        geo = self.geometry()
+        self._flow_window.resize(geo.size())
+        self._flow_window.move(geo.topLeft())
 
-        self._flow_btn.setText("↩ 回到 ToYu")
-        self._flow_btn.setToolTip("退出心流模式，返回 ToYu 主页")
-        self._status.setText("心流模式 · 专注中")
+        # 计时器实例搬进心流窗口：计时状态自然延续，不会重置
+        self._timer_slot_layout.removeWidget(self._timer_widget)
+        self._flow_window.attach_timer(self._timer_widget)
+
+        self._flow_window.apply_theme()
+        self._flow_window.refresh_all()
+        self.hide()
+        self._flow_window.show()
+        self._flow_window.raise_()
+        self._flow_window.activateWindow()
+        self._flow_btn.setText("↩ 已进入心流模式")
 
     def exit_flow_mode(self):
-        """退出心流模式，回到 ToYu 主页（计时与宠物状态继续保留）。"""
+        """关闭心流窗口，回到 ToYu 主窗口（计时与宠物状态继续保留）。"""
         if not self._flow_active:
             return
         self._flow_active = False
         self.settings.flow_mode_enabled = False
 
-        self._flow_panel._timer_holder.removeWidget(self._timer_widget)
-        self._timer_widget.setParent(None)
-        self._timer_slot_layout.addWidget(self._timer_widget)
-        self._timer_widget.show()
+        if self._flow_window is not None:
+            timer = self._flow_window.detach_timer()
+            if timer is not None:
+                self._timer_slot_layout.addWidget(timer)
+                timer.show()
+            geo = self._flow_window.geometry()
+            self._flow_window.hide()
+            self.setGeometry(geo)          # 位置尺寸交还给主窗口
 
-        self._tools_tab_bar.setVisible(True)
-        self._switch_tools_page(0)
-        self._page_btns["宠物"].click()
-
+        self.show()
+        self.raise_()
+        self.activateWindow()
         self._flow_btn.setText("🧘 心流模式")
-        self._flow_btn.setToolTip("进入心流工作台：专注计时 + 今日进度，宠物状态保持不变")
         self._status.setText("ToYu 运行中")
 
     def _on_mode_change_val(self, mode_val):
@@ -3658,8 +3663,8 @@ class MainWindow(QMainWindow):
         if getattr(self, '_desktop_tools_page', None) is not None:
             self._desktop_tools_page.restyle()
 
-        if getattr(self, '_flow_panel', None) is not None:
-            self._flow_panel.restyle()
+        if getattr(self, '_flow_window', None) is not None:
+            self._flow_window.apply_theme()
 
         if getattr(self, '_flow_btn', None) is not None:
             self._flow_btn.setStyleSheet(f"""
