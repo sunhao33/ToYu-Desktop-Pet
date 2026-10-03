@@ -11,11 +11,9 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
 import ui.screen_time_tracker as stt  # noqa: E402
 
-# 把数据落到临时目录，避免污染真实数据
+# 数据落到临时目录：不再污染真实的 ~/.desktop_pet，
+# 也不会与其他会创建 MainWindow 的测试互相踩（它们各自写真实目录）
 TMP = tempfile.mkdtemp(prefix="toyu_screen_")
-stt.DATA_DIR = TMP
-stt.SCREEN_TIME_FILE = os.path.join(TMP, "screen_time.json")
-stt.SESSION_FILE = os.path.join(TMP, "screen_sessions.json")
 
 results = []
 
@@ -38,9 +36,9 @@ check("普通数字标题不误杀", stt.sanitize_title("第 3 章 习题 2026")
 # ── 老数据迁移 ──────────────────────────────────────────────
 today = datetime.now().strftime("%Y-%m-%d")
 yesterday = (datetime.now() - timedelta(days=1)).strftime("%Y-%m-%d")
-with open(stt.SCREEN_TIME_FILE, "w", encoding="utf-8") as f:
+with open(os.path.join(TMP, "screen_time.json"), "w", encoding="utf-8") as f:
     json.dump({yesterday: {"chrome.exe": 600.0, "Code.exe": 300.0}}, f)
-tr = stt.ScreenTimeTracker()
+tr = stt.ScreenTimeTracker(data_dir=TMP)
 migrated = tr.get_sessions(yesterday)
 check("老数据迁移成会话", len(migrated) == 2, "迁移 %d 条" % len(migrated))
 check("迁移数据标记 inferred", all(s.get("inferred") for s in migrated))
@@ -81,7 +79,7 @@ check("名单内但非全屏也不暂停（_is_fullscreen 为假）", tr._should
 
 # ── 落盘与重载 ──────────────────────────────────────────────
 tr._save_sessions()
-tr2 = stt.ScreenTimeTracker()
+tr2 = stt.ScreenTimeTracker(data_dir=TMP)
 reloaded = tr2.get_sessions(today)
 check("会话落盘后可重载", len(reloaded) == 4, "重载 %d 条" % len(reloaded))
 check("落盘保留标题", any(s.get("title") == "main.py".replace("main.py", "pet_ai.py") for s in reloaded))

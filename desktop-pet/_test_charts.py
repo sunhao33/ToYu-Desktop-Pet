@@ -132,6 +132,37 @@ try:
     check("图表失败时控件上显示原因", "失败" in text, repr(text[:40]))
     check("失败时旧图被清掉", getattr(mw._pie_label, "_src_pixmap", None) is None)
 
+    # ── 6. 打开数据面板就应自动出图（不必先点日历）──────────
+    mw2 = MainWindow()
+    mw2.resize(1000, 880)
+    mw2.move(20, 20)
+    mw2.show()
+    pump(400)
+    mw2._page_btns["工具"].click()
+    pump(250)
+    mw2._switch_tools_page(2)          # 只切到数据面板，不点任何日历
+    pump(1200)
+    src_pie = getattr(mw2._pie_label, "_src_pixmap", None)
+    src_bar = getattr(mw2._bar_label, "_src_pixmap", None)
+    check("打开数据面板即自动绘制环形图", src_pie is not None and not src_pie.isNull(),
+          "原始图 %s" % (("%dx%d" % (src_pie.width(), src_pie.height())) if src_pie else "None"))
+    check("打开数据面板即自动绘制柱状图", src_bar is not None and not src_bar.isNull())
+
+    # ── 7. 完全没有历史数据时也必须出图（显示空状态提示）────
+    os.remove(HIST)
+    mw3 = MainWindow()
+    mw3.resize(1000, 880)
+    mw3.move(20, 20)
+    mw3.show()
+    pump(400)
+    mw3._page_btns["工具"].click()
+    pump(250)
+    mw3._switch_tools_page(2)
+    pump(1200)
+    src_pie3 = getattr(mw3._pie_label, "_src_pixmap", None)
+    check("无任何历史时也绘制图表（而非空白）",
+          src_pie3 is not None and not src_pie3.isNull())
+
 finally:
     if backup is not None:
         open(HIST, "w", encoding="utf-8").write(backup)

@@ -13,9 +13,8 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import ui.screen_time_tracker as stt  # noqa: E402
 
 TMP = tempfile.mkdtemp(prefix="toyu_compact_")
-stt.DATA_DIR = TMP
-stt.SCREEN_TIME_FILE = os.path.join(TMP, "screen_time.json")
-stt.SESSION_FILE = os.path.join(TMP, "screen_sessions.json")
+SCREEN_FILE = os.path.join(TMP, "screen_time.json")
+SESSION_FILE = os.path.join(TMP, "screen_sessions.json")
 
 results = []
 def check(name, ok, extra=""):
@@ -45,11 +44,11 @@ keep = [
 check("两段 30 分钟同一文件保持独立", len(stt.ScreenTimeTracker._compact(keep)) == 2)
 
 print("\n=== 3. 落盘体积可控 ===")
-tr = stt.ScreenTimeTracker()
+tr = stt.ScreenTimeTracker(data_dir=TMP)
 tr._sessions[today] = raw
 tr._save_sessions()
-size = os.path.getsize(stt.SESSION_FILE)
-with open(stt.SESSION_FILE, encoding="utf-8") as f:
+size = os.path.getsize(SESSION_FILE)
+with open(SESSION_FILE, encoding="utf-8") as f:
     saved = json.load(f)[today]
 check("落盘后只剩合并结果", len(saved) == 2, "文件内 %d 段" % len(saved))
 check("文件体积 < 2KB", size < 2048, "%d bytes" % size)

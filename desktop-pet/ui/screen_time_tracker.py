@@ -64,9 +64,17 @@ def sanitize_title(title):
 
 
 class ScreenTimeTracker:
-    """Tracks foreground window time in a background thread."""
+    """Tracks foreground window time in a background thread.
 
-    def __init__(self):
+    data_dir 可注入：测试用临时目录，避免污染真实的使用记录
+    （此前多个测试各自会写出真实的 screen_time.json / screen_sessions.json，
+    导致测试之间互相干扰）。
+    """
+
+    def __init__(self, data_dir=None):
+        self._data_dir = data_dir or DATA_DIR
+        self._screen_file = os.path.join(self._data_dir, "screen_time.json")
+        self._session_file = os.path.join(self._data_dir, "screen_sessions.json")
         self._running = False
         self._thread = None
         self._lock = threading.Lock()
@@ -85,16 +93,16 @@ class ScreenTimeTracker:
     # ── 持久化 ──────────────────────────────────────────────
     def _load_data(self):
         try:
-            if os.path.exists(SCREEN_TIME_FILE):
-                with open(SCREEN_TIME_FILE, "r", encoding="utf-8") as f:
+            if os.path.exists(self._screen_file):
+                with open(self._screen_file, "r", encoding="utf-8") as f:
                     self._data = json.load(f)
         except Exception:
             self._data = {}
 
     def _load_sessions(self):
         try:
-            if os.path.exists(SESSION_FILE):
-                with open(SESSION_FILE, "r", encoding="utf-8") as f:
+            if os.path.exists(self._session_file):
+                with open(self._session_file, "r", encoding="utf-8") as f:
                     raw = json.load(f)
                 for date, items in raw.items():
                     self._sessions[date] = [s for s in items if isinstance(s, dict) and s.get("app")]
@@ -164,8 +172,8 @@ class ScreenTimeTracker:
             self._buffer.clear()
 
         try:
-            os.makedirs(DATA_DIR, exist_ok=True)
-            with open(SCREEN_TIME_FILE, "w", encoding="utf-8") as f:
+            os.makedirs(self._data_dir, exist_ok=True)
+            with open(self._screen_file, "w", encoding="utf-8") as f:
                 json.dump(self._data, f, ensure_ascii=False, indent=2)
         except Exception as e:
             print(f"Screen time save error: {e}")
@@ -179,11 +187,11 @@ class ScreenTimeTracker:
                 self._sessions[date] = self._compact(self._sessions[date])
         self._prune_sessions()
         try:
-            os.makedirs(DATA_DIR, exist_ok=True)
-            tmp = SESSION_FILE + ".tmp"
+            os.makedirs(self._data_dir, exist_ok=True)
+            tmp = self._session_file + ".tmp"
             with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(self._sessions, f, ensure_ascii=False, indent=1)
-            os.replace(tmp, SESSION_FILE)
+            os.replace(tmp, self._session_file)
         except Exception as e:
             print(f"Session save error: {e}")
 

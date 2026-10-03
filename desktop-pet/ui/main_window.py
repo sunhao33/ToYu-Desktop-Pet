@@ -1984,6 +1984,9 @@ class MainWindow(QMainWindow):
             btn.setChecked(i == idx)
         if idx == 1:
             self._refresh_desktop_tools()
+        elif idx == 2:
+            # 进数据面板就把学习统计的图先画出来，不用再点日历才有图
+            self._ensure_study_charts()
 
     # ── 桌面工具（剪贴板历史 / 护眼提醒）────────────────────
     def _init_tools_hub(self):
@@ -2470,6 +2473,41 @@ class MainWindow(QMainWindow):
         self._stat_tab_screen.setChecked(idx == 1)
         if idx == 1:
             self._refresh_screen_time()
+        else:
+            self._ensure_study_charts()
+
+    def _ensure_study_charts(self):
+        """切到「学习统计」时自动出图。
+
+        以前必须点日历日期才会画图，刚打开面板只有一行「点击日历查看统计」，
+        很容易被当成「图不显示」。现在默认就按已选日期（初始为今天）画一次；
+        如果当前选中的日期还没有任何任务，就退回到最近有记录的那一天。
+        """
+        from datetime import datetime
+        import json, os
+
+        if getattr(self, "_study_charts_drawn", False):
+            return
+        self._study_charts_drawn = True
+
+        date_str = getattr(self, "_selected_chart_date", None) or datetime.now().strftime("%Y-%m-%d")
+        history_file = os.path.join(os.path.expanduser("~"), ".desktop_pet", "task_history.json")
+        history = {}
+        try:
+            if os.path.exists(history_file):
+                with open(history_file, "r", encoding="utf-8") as f:
+                    history = json.load(f)
+        except Exception:
+            history = {}
+
+        if not history.get(date_str):
+            # 当前日期没有记录时，退回到最近有记录的一天，保证面板不是空的
+            dated = sorted([d for d, items in history.items() if items], reverse=True)
+            if dated:
+                date_str = dated[0]
+
+        tasks = history.get(date_str, [])
+        self._finish_calendar_selection(date_str, tasks)
 
     def _refresh_screen_time(self):
         """Refresh screen time display."""
@@ -2765,6 +2803,15 @@ class MainWindow(QMainWindow):
         for s in ax2.spines.values(): s.set_visible(False)
         ax2.yaxis.grid(True, color='#E0E0E0', linewidth=0.5, zorder=0)
         ax2.set_axisbelow(True)
+        if max(day_minutes) <= 0:
+            # 7 天全都没有记录：matplotlib 会给 0.04/0.02 这种无意义刻度，
+            # 这里改成固定范围 + 一句说明
+            ax2.set_ylim(0, 60)
+            ax2.set_yticks([])
+            ax2.text(0.5, 0.5, '近 7 天暂无完成记录', transform=ax2.transAxes,
+                     ha='center', va='center', fontsize=11, color='#8B7355')
+        else:
+            ax2.set_ylim(0, max(day_minutes) * 1.25)
         fig2.subplots_adjust(left=0.1, right=0.95, top=0.88, bottom=0.12)
 
         buf2 = io.BytesIO()
