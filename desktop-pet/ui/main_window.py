@@ -371,8 +371,10 @@ class MainWindow(QMainWindow):
     def _init_ui(self):
         self.setWindowTitle("ToYu · 桌面土豆宠物")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "toyu_icon.ico")))
+        # 初始值只是占位：真实最小宽度由 _apply_content_minimum_width() 按内容算
+        # （各页内容实测需要约 1082，这里若给 680 会先生成过窄界面再被抬宽）
         self.setMinimumSize(680, 700)
-        self.resize(720, 800)
+        self.resize(1100, 820)
         self.setStyleSheet(self._global_stylesheet())
 
         central = QWidget()

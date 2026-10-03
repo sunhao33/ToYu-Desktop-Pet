@@ -72,10 +72,20 @@ check("有效会话数（≥5分钟）", focus["meaningful"] == 3, str(focus))
 check("最长单次会话", abs(focus["longest_secs"] - 3600.0) < 1.0, str(focus))
 
 # ── 全屏暂停策略 ────────────────────────────────────────────
+# 注意：_is_fullscreen() 读的是真实桌面的前台窗口。如果直接断言
+# 「名单内但非全屏也不暂停」，当用户正在看全屏视频/演示时就会失败
+# （测试依赖了外部环境状态）。这里改为注入式测试，行为与桌面状态无关。
 check("默认不屏蔽任何全屏应用", tr._should_pause("chrome.exe") is False)
 tr.set_fullscreen_pause_apps(["game.exe"])
 check("名单外的全屏应用不暂停", tr._should_pause("chrome.exe") is False)
-check("名单内但非全屏也不暂停（_is_fullscreen 为假）", tr._should_pause("game.exe") is False)
+
+orig_is_fullscreen = tr._is_fullscreen
+tr._is_fullscreen = lambda: False
+check("名单内但当前非全屏 -> 不暂停", tr._should_pause("game.exe") is False)
+tr._is_fullscreen = lambda: True
+check("名单内且全屏 -> 暂停", tr._should_pause("game.exe") is True)
+check("名单内且全屏，但其他应用不受影响", tr._should_pause("chrome.exe") is False)
+tr._is_fullscreen = orig_is_fullscreen
 
 # ── 落盘与重载 ──────────────────────────────────────────────
 tr._save_sessions()
