@@ -21,6 +21,7 @@ TESTS = [
     ("配件层对齐与内容区比例", "_test_accessory_align.py"),
     ("宠物始终留在屏幕内", "_test_pet_onscreen.py"),
     ("窗口缩放不裁切内容", "_test_window_resize.py"),
+    ("心流模式", "_test_flow_mode.py"),
 ]
 
 env = dict(os.environ)

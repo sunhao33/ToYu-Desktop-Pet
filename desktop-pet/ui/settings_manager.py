@@ -288,3 +288,15 @@ class SettingsManager:
     @eye_care_deadline.setter
     def eye_care_deadline(self, value):
         self._settings.setValue("tools/eye_care_deadline", float(value))
+
+    # ── 心流模式 ────────────────────────────────────────────
+    @property
+    def flow_mode_enabled(self):
+        val = self._settings.value("flow/enabled", False)
+        if isinstance(val, str):
+            return val.lower() == "true"
+        return bool(val)
+
+    @flow_mode_enabled.setter
+    def flow_mode_enabled(self, value):
+        self._settings.setValue("flow/enabled", value)

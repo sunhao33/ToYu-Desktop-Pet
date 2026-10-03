@@ -54,6 +54,9 @@ class TimerWidget(QWidget):
         
         self._time_display = QLabel("00:00:00")
         self._time_display.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        # 字号 48px，必须给足高度：否则外层竖直空间紧张时标签会被压到 18px 高、
+        # 时间文字被整条裁掉（在心流模式这类布局里实测出现，表现为"看不见时间"）
+        self._time_display.setMinimumHeight(64)
         self._time_display.setStyleSheet("""
             QLabel {
                 color: #C49A3C;
@@ -67,6 +70,7 @@ class TimerWidget(QWidget):
         
         self._status_label = QLabel("准备开始")
         self._status_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._status_label.setMinimumHeight(18)
         self._status_label.setStyleSheet("""
             QLabel {
                 color: #A0A0A0;

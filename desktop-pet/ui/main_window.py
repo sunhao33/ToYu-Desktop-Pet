@@ -226,6 +226,9 @@ class MainWindow(QMainWindow):
             os.path.expanduser("~"), ".desktop_pet", "images"
         )
         self._is_dark_mode = False
+        self._flow_active = False
+        # 心流面板是工具页的第四个子页（不显示在子页标签栏里，由头部按钮进入）
+        self.FLOW_SUBPAGE_INDEX = 3
 
         self._init_ui()
         self._init_tray()
@@ -236,6 +239,10 @@ class MainWindow(QMainWindow):
         self._screen_tracker.start()
 
         self._init_tools_hub()
+
+        # 上次退出时若停在心流模式，就回到心流模式
+        if self.settings.flow_mode_enabled:
+            QTimer.singleShot(400, self.enter_flow_mode)
 
     def _apply_content_minimum_width(self):
         """最小尺寸必须容得下内容，否则窗口缩小时内容会被裁掉。
@@ -490,6 +497,30 @@ class MainWindow(QMainWindow):
         self._start_btn.setFixedWidth(120)
         self._start_btn.setFixedHeight(38)
         header_layout.addWidget(self._start_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
+
+        # 心流模式：切换到一个只看专注与进度的工作台（与主页共用同一套数据）
+        self._flow_btn = QPushButton("🧘 心流模式")
+        self._flow_btn.setObjectName("flowModeBtn")
+        self._flow_btn.setFixedHeight(38)
+        self._flow_btn.setToolTip("进入心流工作台：专注计时 + 今日进度，宠物状态保持不变")
+        self._flow_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._flow_btn.setStyleSheet(f"""
+            QPushButton {{
+                background: {self._c('hover_bg')};
+                border: 1px solid {self._c('accent')};
+                font-size: 12px;
+                font-weight: bold;
+                color: {self._c('mid')};
+                border-radius: 8px;
+                padding: 4px 14px;
+            }}
+            QPushButton:hover {{
+                background: {self._c('press_bg')};
+                border-color: {self._c('accent_h')};
+            }}
+        """)
+        self._flow_btn.clicked.connect(self.enter_flow_mode)
+        header_layout.addWidget(self._flow_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         root.addWidget(header)
 
@@ -1078,7 +1109,13 @@ class MainWindow(QMainWindow):
         from ui.timer_widget import TimerWidget
         self._timer_widget = TimerWidget()
         self._timer_widget.timer_complete.connect(self._on_timer_complete)
-        timer_card_layout.addWidget(self._timer_widget)
+        # 放进容器里，方便心流模式把同一个实例借走（共用状态，不复制）
+        self._timer_slot = QWidget()
+        self._timer_slot.setStyleSheet("background: transparent;")
+        self._timer_slot_layout = QVBoxLayout(self._timer_slot)
+        self._timer_slot_layout.setContentsMargins(0, 0, 0, 0)
+        self._timer_slot_layout.addWidget(self._timer_widget)
+        timer_card_layout.addWidget(self._timer_slot)
         tools_layout.addWidget(timer_card, 1)  # stretch=1
 
         self._tools_stack.addWidget(tools_p1)
@@ -1196,8 +1233,15 @@ class MainWindow(QMainWindow):
 
         self._tools_stack.addWidget(tools_p2)
 
+        # 心流模式面板：与主页共用 settings / 宠物 / 工具中枢 / 屏幕统计，
+        # 计时器实例也在切换时被搬进来，所以状态不会重置
+        from ui.flow_panel import FlowPanel
+        self._flow_panel = FlowPanel(self)
+        self._tools_stack.addWidget(self._flow_panel)
+
         self._tools_tab_btns[0].setChecked(True)
         tools_main_layout.addWidget(self._tools_stack, 1)
+        self._tools_tab_bar = tools_tab_bar
 
         self._page_stack.addWidget(tools_page)
 
@@ -2150,6 +2194,49 @@ class MainWindow(QMainWindow):
         effect = getattr(widget, "_page_fade_effect", None) if widget is not None else None
         if effect is not None:
             effect.setOpacity(1.0)
+
+    # ── 心流模式 ────────────────────────────────────────────
+    def enter_flow_mode(self):
+        """切到心流工作台：同一套数据、同一个计时器，宠物状态不变。"""
+        if self._flow_active:
+            return
+        self._flow_active = True
+        self.settings.flow_mode_enabled = True
+
+        # 让「心流」成为工具页的可见子页（隐藏子页标签栏，避免误切走）
+        self._page_btns["工具"].click()
+        self._tools_stack.setCurrentIndex(self.FLOW_SUBPAGE_INDEX)
+        self._tools_tab_bar.setVisible(False)
+        for btn in self._tools_tab_btns.values():
+            btn.setChecked(False)
+
+        self._flow_panel._timer_holder.addWidget(self._timer_widget)
+        self._timer_widget.show()
+        self._flow_panel.refresh_all()
+
+        self._flow_btn.setText("↩ 回到 ToYu")
+        self._flow_btn.setToolTip("退出心流模式，返回 ToYu 主页")
+        self._status.setText("心流模式 · 专注中")
+
+    def exit_flow_mode(self):
+        """退出心流模式，回到 ToYu 主页（计时与宠物状态继续保留）。"""
+        if not self._flow_active:
+            return
+        self._flow_active = False
+        self.settings.flow_mode_enabled = False
+
+        self._flow_panel._timer_holder.removeWidget(self._timer_widget)
+        self._timer_widget.setParent(None)
+        self._timer_slot_layout.addWidget(self._timer_widget)
+        self._timer_widget.show()
+
+        self._tools_tab_bar.setVisible(True)
+        self._switch_tools_page(0)
+        self._page_btns["宠物"].click()
+
+        self._flow_btn.setText("🧘 心流模式")
+        self._flow_btn.setToolTip("进入心流工作台：专注计时 + 今日进度，宠物状态保持不变")
+        self._status.setText("ToYu 运行中")
 
     def _on_mode_change_val(self, mode_val):
         self.settings.interaction_mode = mode_val
@@ -3570,6 +3657,26 @@ class MainWindow(QMainWindow):
 
         if getattr(self, '_desktop_tools_page', None) is not None:
             self._desktop_tools_page.restyle()
+
+        if getattr(self, '_flow_panel', None) is not None:
+            self._flow_panel.restyle()
+
+        if getattr(self, '_flow_btn', None) is not None:
+            self._flow_btn.setStyleSheet(f"""
+                QPushButton {{
+                    background: {self._c('hover_bg')};
+                    border: 1px solid {self._c('accent')};
+                    font-size: 12px;
+                    font-weight: bold;
+                    color: {self._c('mid')};
+                    border-radius: 8px;
+                    padding: 4px 14px;
+                }}
+                QPushButton:hover {{
+                    background: {self._c('press_bg')};
+                    border-color: {self._c('accent_h')};
+                }}
+            """)
 
         self.update()
 
