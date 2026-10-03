@@ -2016,28 +2016,45 @@ class MainWindow(QMainWindow):
             from PyQt6.QtWidgets import QGraphicsOpacityEffect
             from PyQt6.QtCore import QPropertyAnimation
 
-            if getattr(self, "_page_fade_anim", None) is None:
-                self._page_fade_effect = QGraphicsOpacityEffect(new_widget)
-                self._page_fade_anim = QPropertyAnimation(self._page_fade_effect, b"opacity", self)
-                self._page_fade_anim.setDuration(200)
-                self._page_fade_anim.setStartValue(0.0)
-                self._page_fade_anim.setEndValue(1.0)
-            else:
-                # 复用同一个动画/效果对象：每次切换都新建会永久堆积在主窗口下
-                self._page_fade_anim.stop()
+            # 每个页面各自持有一个常驻效果对象：既避免每次切换新建导致堆积，
+            # 也避免复用同一个对象时被 setGraphicsEffect(None) 删除后失效
+            effect = getattr(new_widget, "_page_fade_effect", None)
+            if effect is None:
+                effect = QGraphicsOpacityEffect(new_widget)
+                effect.setOpacity(1.0)
+                new_widget.setGraphicsEffect(effect)
+                new_widget._page_fade_effect = effect
 
-            new_widget.setGraphicsEffect(self._page_fade_effect)
-            self._page_fade_effect.setOpacity(0.0)
-            try:
-                self._page_fade_anim.finished.disconnect()
-            except TypeError:
-                pass
-            self._page_fade_anim.finished.connect(lambda w=new_widget: w.setGraphicsEffect(None))
-            self._page_fade_anim.start()
+            anim = getattr(self, "_page_fade_anim", None)
+            if anim is None:
+                anim = QPropertyAnimation(effect, b"opacity", self)
+                anim.setDuration(200)
+                anim.setStartValue(0.0)
+                anim.setEndValue(1.0)
+                self._page_fade_anim = anim
+                self._page_fade_anim.finished.connect(self._on_page_fade_finished)
+            else:
+                if anim.state() == QPropertyAnimation.State.Running:
+                    anim.stop()
+                anim.setTargetObject(effect)
+
+            self._page_fade_widget = new_widget
+            effect.setOpacity(0.0)
+            anim.start()
+            # 兜底：万一 finished 没触发（页面被隐藏、动画被打断），
+            # 也要把不透明度恢复，否则页面会一直停在看不见的状态
+            QTimer.singleShot(400, self._on_page_fade_finished)
 
         self._page_stack.setCurrentIndex(idx)
         for lbl, btn in self._page_btns.items():
             btn.setChecked(lbl == label)
+
+    def _on_page_fade_finished(self):
+        """切换动画结束后把页面恢复为完全不透明（效果对象保留，供下次复用）。"""
+        widget = getattr(self, "_page_fade_widget", None)
+        effect = getattr(widget, "_page_fade_effect", None) if widget is not None else None
+        if effect is not None:
+            effect.setOpacity(1.0)
 
     def _on_mode_change_val(self, mode_val):
         self.settings.interaction_mode = mode_val

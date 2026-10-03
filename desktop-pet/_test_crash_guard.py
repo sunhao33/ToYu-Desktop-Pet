@@ -54,4 +54,5 @@ print("exceptions     :", RESULT["raised"])
 print("errors.log     :", "已写入" if RESULT["log_grew"] else "未写入", LOG)
 ok = RESULT["ticks"] > 12 and RESULT["raised"] == 3 and RESULT["log_grew"]
 print("\n结果:", "PASS — 异常后进程继续运行且已记录" if ok else "FAIL")
-sys.exit(0 if ok else 1)
+sys.stdout.flush()
+os._exit(0 if ok else 1)

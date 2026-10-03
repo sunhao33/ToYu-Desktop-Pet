@@ -113,4 +113,5 @@ for name, status, extra in results:
         fails += 1
     print("%-4s %-38s %s" % (status, name, extra))
 print("\n%d/%d passed" % (len(results) - fails, len(results)))
-sys.exit(1 if fails else 0)
+sys.stdout.flush()
+os._exit(1 if fails else 0)

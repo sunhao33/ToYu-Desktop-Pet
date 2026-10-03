@@ -14,6 +14,7 @@ TESTS = [
     ("崩溃防护", "_test_crash_guard.py"),
     ("屏幕时间会话记录与小时分布", "_test_screen_time.py"),
     ("会话合并与启动行为", "_test_compact.py"),
+    ("主窗口标签切换", "_test_tab_switch.py"),
 ]
 
 env = dict(os.environ)
