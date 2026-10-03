@@ -21,7 +21,24 @@ from PyQt6.QtWidgets import (
 FOCUS_PRESETS = (25, 45, 60, 90)
 SPRITE_BOX = 150
 TIMER_MIN_HEIGHT = 300
+# 尺寸与主窗口保持一致（方案 A：由实测内容需求决定）
+MIN_SIZE = (980, 850)
+START_SIZE = (1120, 880)
+ICON_SIZE = 34
+RESOURCE_DIR = os.path.join(
+    os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources")
 HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".desktop_pet", "task_history.json")
+
+
+def _app_icon():
+    """程序图标：优先用 128px 版本，回退到 ico。"""
+    for name in ("toyu_128.png", "toyu_icon.ico", "icon.ico"):
+        path = os.path.join(RESOURCE_DIR, name)
+        if os.path.exists(path):
+            icon = QIcon(path)
+            if not icon.isNull():
+                return icon
+    return QIcon()
 
 
 def _fmt_duration(seconds):
@@ -72,10 +89,9 @@ class FlowWindow(QMainWindow):
         self._main = main_window
         self.settings = main_window.settings
         self.setWindowTitle("心流模式 · ToYu")
-        self.setWindowIcon(QIcon(os.path.join(
-            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
-            "resources", "toyu_icon.ico")))
-        self.setMinimumSize(880, 700)
+        self.setWindowIcon(_app_icon())
+        self.setMinimumSize(*MIN_SIZE)
+        self.resize(*START_SIZE)
 
         central = QWidget()
         self.setCentralWidget(central)
@@ -132,10 +148,17 @@ class FlowWindow(QMainWindow):
         lay = QHBoxLayout(header)
         lay.setContentsMargins(24, 14, 24, 14)
 
-        logo = QLabel("🧘")
-        logo.setStyleSheet("font-size: 30px; background: transparent;")
+        # 用 ToYu 自己的图标，不用 emoji（emoji 在不同系统上渲染差异大、也不统一）
+        logo = QLabel()
         logo.setFixedSize(48, 48)
         logo.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo.setStyleSheet("background: transparent;")
+        logo_pix = _app_icon().pixmap(ICON_SIZE, ICON_SIZE)
+        if not logo_pix.isNull():
+            logo.setPixmap(logo_pix)
+        else:
+            logo.setText("🥔")
+            logo.setStyleSheet("font-size: 28px; background: transparent;")
         lay.addWidget(logo)
 
         title_box = QVBoxLayout()

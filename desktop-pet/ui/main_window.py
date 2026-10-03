@@ -425,10 +425,22 @@ class MainWindow(QMainWindow):
         logo_layout = QHBoxLayout()
         logo_layout.setSpacing(12)
         
-        logo_icon = QLabel("🥔")
-        logo_icon.setStyleSheet("font-size: 32px; background: transparent;")
+        logo_icon = QLabel()
         logo_icon.setFixedSize(48, 48)
         logo_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        logo_icon.setStyleSheet("background: transparent;")
+        # 用程序自己的图标，和心流模式、窗口图标保持一致（emoji 渲染因系统而异）
+        _icon_path = os.path.join(
+            os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
+            "resources", "toyu_128.png")
+        _logo_pix = QPixmap(_icon_path)
+        if not _logo_pix.isNull():
+            logo_icon.setPixmap(_logo_pix.scaled(
+                34, 34, Qt.AspectRatioMode.KeepAspectRatio,
+                Qt.TransformationMode.SmoothTransformation))
+        else:
+            logo_icon.setText("🥔")
+            logo_icon.setStyleSheet("font-size: 32px; background: transparent;")
         logo_layout.addWidget(logo_icon)
         
         title_layout = QVBoxLayout()
