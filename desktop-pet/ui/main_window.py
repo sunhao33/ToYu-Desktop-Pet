@@ -223,6 +223,10 @@ class MainWindow(QMainWindow):
             if not pix.isNull():
                 self._drop_zone.show_pixmap(pix)
             self._start_btn.setEnabled(True)
+            # 有历史宠物也要自动启动：以前只在首次运行时自动启动，
+            # 老用户打开软件后宠物一直不出现，会以为程序坏了
+            self._first_launch = True
+            self._status.setText("正在启动宠物...")
         else:
             self._first_launch = True
             default = get_default_pet_path()
@@ -2793,8 +2797,16 @@ class MainWindow(QMainWindow):
             self._status.setText("拼豆图转换失败")
 
     def closeEvent(self, event):
+        # 关窗口只是收进托盘，必须明确告诉用户怎么唤回，否则会以为程序没关掉
         event.ignore()
         self.hide()
+        if self._tray and self._tray.isVisible():
+            self._tray.showMessage(
+                "ToYu 还在运行",
+                "已收起到系统托盘。双击托盘图标可以重新打开这个面板。",
+                QSystemTrayIcon.MessageIcon.Information,
+                4000,
+            )
 
     @staticmethod
     def _global_stylesheet():

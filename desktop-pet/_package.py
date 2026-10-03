@@ -1,4 +1,4 @@
-"""Package ToYu into ToYu_v<版本>.zip。
+r"""Package ToYu into ToYu_v<版本>.zip。
 
 包内结构：
   根目录：      ToYu.exe + _internal/      ← onedir 版，双击即用（不会被杀软拦）

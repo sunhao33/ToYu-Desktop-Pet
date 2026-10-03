@@ -12,6 +12,8 @@ TESTS = [
     ("桌面工具逻辑（剪贴板/护眼）", "_test_tools.py"),
     ("精灵可见区域计算", "_test_sprite_bounds.py"),
     ("崩溃防护", "_test_crash_guard.py"),
+    ("屏幕时间会话记录与小时分布", "_test_screen_time.py"),
+    ("会话合并与启动行为", "_test_compact.py"),
 ]
 
 env = dict(os.environ)
