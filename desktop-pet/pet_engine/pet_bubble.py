@@ -2,7 +2,7 @@
 
 from PyQt6.QtCore import (
     Qt, QPoint, QTimer, pyqtSignal, QSize,
-    QPropertyAnimation, QEasingCurve, QParallelAnimationGroup,
+    QPropertyAnimation, QAbstractAnimation, QEasingCurve, QParallelAnimationGroup,
     QPointF, QRectF, QEvent
 )
 from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QBrush, QLinearGradient
@@ -524,17 +524,18 @@ class CompanionBubble(QWidget):
             self._position_above_pet()
 
     def _bounce_in(self):
-        if self._bounce_anim:
+        # 复用同一个动画对象：每次新建会作为子对象挂在 self 上永不释放，
+        # 长期运行会以每秒数十个的速度堆积（实测 4 分钟泄漏 1.5 万个）
+        if self._bounce_anim is None:
+            self._bounce_anim = QPropertyAnimation(self, b"pos", self)
+            self._bounce_anim.setDuration(300)
+            self._bounce_anim.setEasingCurve(QEasingCurve.Type.OutBounce)
+        elif self._bounce_anim.state() == QAbstractAnimation.State.Running:
             self._bounce_anim.stop()
 
-        self._bounce_anim = QPropertyAnimation(self, b"pos", self)
         start_pos = self.pos()
-        bounce_pos = QPoint(start_pos.x(), start_pos.y() - 6)
-
-        self._bounce_anim.setDuration(300)
-        self._bounce_anim.setStartValue(bounce_pos)
+        self._bounce_anim.setStartValue(QPoint(start_pos.x(), start_pos.y() - 6))
         self._bounce_anim.setEndValue(start_pos)
-        self._bounce_anim.setEasingCurve(QEasingCurve.Type.OutBounce)
         self._bounce_anim.start()
 
     def _start_fade(self):

@@ -55,12 +55,12 @@ class FoodItemWindow(QFrame):
         self.move(QPoint(px + offset_x, py + offset_y))
         self.show()
 
-        anim = QPropertyAnimation(self, b"pos")
+        anim = QPropertyAnimation(self, b"pos", self)
         anim.setDuration(300)
         anim.setStartValue(self.pos())
         anim.setEndValue(self.pos() + QPoint(0, -15))
         anim.setEasingCurve(QEasingCurve.Type.OutCubic)
-        anim.start()
+        anim.start(QPropertyAnimation.DeletionPolicy.DeleteWhenStopped)
 
     def mousePressEvent(self, event: QMouseEvent):
         if event.button() == Qt.MouseButton.LeftButton:

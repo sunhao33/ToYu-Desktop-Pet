@@ -34,6 +34,9 @@ SKIP_SCRIPTS = {
     "_debug_launch.py", "_check_methods.py", "_fix_acc.py", "_path_matrix.py",
     "_reliability.py", "_stress_exe.py", "_test_crash.py", "_test_pet.py",
     "_test_run.py", "main_window.py.bak", "_ToYuDebug.spec",
+    # 稳定性测试与截图工具（开发期使用，不进发布包）
+    "_test_all.py", "_test_crash_guard.py", "_test_sprite_bounds.py",
+    "_soak.py", "_soak_phased.py", "_shots_render.py",
 }
 
 README = r"""ToYu 桌面土豆宠物 — 使用说明
@@ -74,7 +77,8 @@ ToYu.exe 旁边的 _internal 文件夹是程序运行库，请勿删除或改名
 def read_version():
     with open(CHANGELOG_PATH, encoding="utf-8") as fh:
         for line in fh:
-            match = re.match(r"\s*v(\d+\.\d+)", line)
+            # 支持 x.y 与 x.y.z（补丁号）
+            match = re.match(r"\s*v(\d+\.\d+(?:\.\d+)*)", line)
             if match:
                 return match.group(1)
     raise RuntimeError("changelog.txt 里找不到版本号")

@@ -2000,7 +2000,7 @@ class MainWindow(QMainWindow):
         setattr(self, f"_notify_bubble_{kind}", bubble)
         if kind == "eye_rest":
             pet.trigger_dance(2.5)
-        else:
+        elif kind == "eye_resume":
             pet.trigger_sparkle_burst()
 
     def _on_page_switch(self, idx, label):
@@ -2009,21 +2009,27 @@ class MainWindow(QMainWindow):
         new_widget = self._page_stack.widget(idx)
 
         if current_widget != new_widget:
-            new_widget.setGraphicsEffect(None)
             from PyQt6.QtWidgets import QGraphicsOpacityEffect
             from PyQt6.QtCore import QPropertyAnimation
 
-            opacity_effect = QGraphicsOpacityEffect(new_widget)
-            opacity_effect.setOpacity(0.0)
-            new_widget.setGraphicsEffect(opacity_effect)
+            if getattr(self, "_page_fade_anim", None) is None:
+                self._page_fade_effect = QGraphicsOpacityEffect(new_widget)
+                self._page_fade_anim = QPropertyAnimation(self._page_fade_effect, b"opacity", self)
+                self._page_fade_anim.setDuration(200)
+                self._page_fade_anim.setStartValue(0.0)
+                self._page_fade_anim.setEndValue(1.0)
+            else:
+                # 复用同一个动画/效果对象：每次切换都新建会永久堆积在主窗口下
+                self._page_fade_anim.stop()
 
-            animation = QPropertyAnimation(opacity_effect, b"opacity", self)
-            animation.setDuration(200)  # 200ms
-            animation.setStartValue(0.0)
-            animation.setEndValue(1.0)
-            animation.start()
-
-            animation.finished.connect(lambda: new_widget.setGraphicsEffect(None))
+            new_widget.setGraphicsEffect(self._page_fade_effect)
+            self._page_fade_effect.setOpacity(0.0)
+            try:
+                self._page_fade_anim.finished.disconnect()
+            except TypeError:
+                pass
+            self._page_fade_anim.finished.connect(lambda w=new_widget: w.setGraphicsEffect(None))
+            self._page_fade_anim.start()
 
         self._page_stack.setCurrentIndex(idx)
         for lbl, btn in self._page_btns.items():

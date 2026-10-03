@@ -492,6 +492,7 @@ class PetWindow(QMainWindow):
                 pix = QPixmap(get_default_pet_path())
                 self._pet_image_path = get_default_pet_path()
             self._pet_pixmap = pix
+            self._update_sprite_bounds()  # 必须先算可见区域：配件层按它对齐
             self._update_window_size()  # also updates physics with window size + sprite offset
         except Exception:
             self._pet_pixmap = QPixmap(get_default_pet_path())

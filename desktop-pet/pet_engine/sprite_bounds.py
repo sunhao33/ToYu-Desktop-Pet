@@ -1,71 +1,66 @@
 """Detect actual visible bounds of a pet sprite (ignoring transparent pixels)."""
 
+import numpy as np
 from PyQt6.QtGui import QPixmap, QImage
+
+def _alpha_mask(pixmap: QPixmap):
+    """Return the alpha channel as an owned 2D uint8 array, or None if unusable.
+
+    注意：必须在这里就把数据拷出来。numpy 若直接引用 QImage 的缓冲区，
+    那个 QImage 是临时对象，函数返回后随时可能被回收 —— 之后访问就是野指针
+    （表现为偶发 access violation，图越大越容易崩）。
+    """
+    if pixmap.isNull():
+        return None
+
+    img = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
+    w, h = img.width(), img.height()
+    if w == 0 or h == 0:
+        return None
+
+    ptr = img.constBits()
+    if hasattr(ptr, "setsize"):
+        ptr.setsize(img.sizeInBytes())
+    # ARGB32 在小端机器上字节序为 B,G,R,A；每行按 bytesPerLine 对齐，需按行切片
+    buf = np.frombuffer(ptr, dtype=np.uint8)
+    padded = buf.reshape(h, img.bytesPerLine())[:, : w * 4].reshape(h, w, 4)
+    return np.ascontiguousarray(padded[:, :, 3])
+
 
 def get_visible_bounds(pixmap: QPixmap) -> tuple:
     """Scan pet pixmap and return (top, bottom, left, right) of actual visible pixels.
-    
+
     Returns offsets relative to the pixmap edges:
     - top: distance from top edge to first visible row
-    - bottom: distance from bottom edge to last visible row  
+    - bottom: distance from bottom edge to last visible row
     - left: distance from left edge to first visible column
     - right: distance from right edge to last visible column
-    
+
     Returns (0, 0, 0, 0) if pixmap is null or fully transparent.
     """
-    if pixmap.isNull():
+    alpha = _alpha_mask(pixmap)
+    if alpha is None:
         return (0, 0, 0, 0)
-    
-    img = pixmap.toImage().convertToFormat(QImage.Format.Format_ARGB32)
-    w, h = img.width(), img.height()
-    
-    if w == 0 or h == 0:
+
+    h, w = alpha.shape
+    visible = alpha > 20  # threshold: ignore near-transparent
+    rows = np.flatnonzero(visible.any(axis=1))
+    if rows.size == 0:
         return (0, 0, 0, 0)
-    
-    top_visible = h
-    bottom_visible = -1
-    
-    for y in range(h):
-        row_has_pixel = False
-        ptr = img.constScan(y)
-        for x in range(w):
-            pixel = img.pixelColor(x, y)
-            if pixel.alpha() > 20:  # threshold: ignore near-transparent
-                row_has_pixel = True
-                break
-        if row_has_pixel:
-            if y < top_visible:
-                top_visible = y
-            if y > bottom_visible:
-                bottom_visible = y
-    
-    if bottom_visible < 0:
+    cols = np.flatnonzero(visible.any(axis=0))
+    if cols.size == 0:
         return (0, 0, 0, 0)
-    
-    left_visible = w
-    right_visible = -1
-    
-    for x in range(w):
-        col_has_pixel = False
-        for y in range(top_visible, bottom_visible + 1):
-            pixel = img.pixelColor(x, y)
-            if pixel.alpha() > 20:
-                col_has_pixel = True
-                break
-        if col_has_pixel:
-            if x < left_visible:
-                left_visible = x
-            if x > right_visible:
-                right_visible = x
-    
-    if right_visible < 0:
-        return (0, 0, 0, 0)
-    
+
+    top_visible = int(rows[0])
+    bottom_visible = int(rows[-1])
+    left_visible = int(cols[0])
+    right_visible = int(cols[-1])
+
     return (
-        top_visible,           # pixels from top edge to first visible row
-        h - 1 - bottom_visible, # pixels from bottom edge to last visible row
+        top_visible,            # pixels from top edge to first visible row
+        h - 1 - bottom_visible,  # pixels from bottom edge to last visible row
         left_visible,           # pixels from left edge to first visible col
-        w - 1 - right_visible   # pixels from right edge to last visible col
+        w - 1 - right_visible,  # pixels from right edge to last visible col
     )
 
 def get_content_rect(pixmap: QPixmap) -> tuple:
