@@ -300,3 +300,34 @@ class SettingsManager:
     @flow_mode_enabled.setter
     def flow_mode_enabled(self, value):
         self._settings.setValue("flow/enabled", value)
+
+    # ── 悬浮计时小窗 ────────────────────────────────────────
+    @property
+    def mini_timer_enabled(self):
+        val = self._settings.value("flow/mini_timer", True)
+        if isinstance(val, str):
+            return val.lower() == "true"
+        return bool(val)
+
+    @mini_timer_enabled.setter
+    def mini_timer_enabled(self, value):
+        self._settings.setValue("flow/mini_timer", value)
+
+    @property
+    def mini_timer_pos(self):
+        """小窗位置；没记录过返回 None，由窗口自己挑一个默认角落。"""
+        val = self._settings.value("flow/mini_timer_pos", None)
+        if isinstance(val, str) and "," in val:
+            try:
+                x, y = val.split(",")
+                return int(x), int(y)
+            except ValueError:
+                return None
+        return None
+
+    @mini_timer_pos.setter
+    def mini_timer_pos(self, value):
+        if value is None:
+            self._settings.remove("flow/mini_timer_pos")
+        else:
+            self._settings.setValue("flow/mini_timer_pos", "%d,%d" % (value[0], value[1]))

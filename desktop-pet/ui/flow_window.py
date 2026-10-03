@@ -133,6 +133,7 @@ class FlowWindow(QMainWindow):
         # 计划项独立计时：{日期: {任务文本: 累计秒数}}，以及当前正在计时的项
         self._flow_timers = load_flow_timers()
         self._active_task = None
+        self._last_task = None
         self._plan_time_labels = {}
         self._timer_dirty = False
         self.setWindowTitle("心流模式 · ToYu")
@@ -365,9 +366,20 @@ class FlowWindow(QMainWindow):
         if self._active_task == text:
             self._active_task = None
             self._status.setText("已暂停计时")
+            # 暂停后小窗改为显示"已暂停"，不再显示倒计时
+            self.show_mini_timer("计划计时 · %s" % text[:16], "countup",
+                                 pause=self.pause_task_timer,
+                                 resume=self.resume_last_task_timer,
+                                 stop=self.stop_task_timer)
         else:
             self._active_task = text
+            self._last_task = text
             self._status.setText("正在计时：%s" % text[:20])
+            self._maybe_show_mini(
+                "计划计时 · %s" % text[:16], "countup",
+                pause=self.pause_task_timer,
+                resume=self.resume_last_task_timer,
+                stop=self.stop_task_timer)
         self._refresh_plan()
 
     def _tick_task_timer(self):
@@ -550,18 +562,51 @@ class FlowWindow(QMainWindow):
             self._main._switch_tools_page(sub)
 
     def start_focus(self, minutes):
-        timer = getattr(self._main, "_timer_widget", None)
-        if timer is None:
-            return
-        timer._set_preset(minutes)
-        timer._on_start()
+        self._main.start_focus_session(minutes)
         self._state_label.setText("专注中 · %d 分钟" % minutes)
-        pet = getattr(self._main, "_pet", None)
-        if pet is not None:
-            try:
-                pet.trigger_dance(2.0)
-            except RuntimeError:
-                pass
+        self._maybe_show_mini(
+            "专注倒计时", "countdown",
+            pause=self._main.pause_focus_session,
+            resume=self._main.resume_focus_session,
+            stop=self._main.stop_focus_session)
+
+    def pause_task_timer(self):
+        """外部（悬浮小窗）要求暂停计划项计时。"""
+        if self._active_task:
+            self._active_task = None
+            self._refresh_plan()
+
+    def resume_last_task_timer(self):
+        text = getattr(self, "_last_task", None)
+        if not text:
+            return False
+        # 直接置为激活项：避免再次走 toggle 的"弹小窗"分支造成递归
+        self._active_task = text
+        self._status.setText("正在计时：%s" % text[:20])
+        self._refresh_plan()
+        return True
+
+    def stop_task_timer(self, flush=True):
+        self._active_task = None
+        self._refresh_plan()
+        if flush:
+            self._flush_timers()
+        # 计划项计时结束，让倒计时（若还在跑）重新接管悬浮小窗
+        refresh = getattr(self._main, "refresh_mini_timer", None)
+        if refresh is not None:
+            refresh()
+
+    # ── 悬浮计时小窗 ────────────────────────────────────────
+    def _maybe_show_mini(self, title, mode, **actions):
+        """弹出悬浮计时小窗（统一由主窗口持有，避免出现两个小窗）。"""
+        self.show_mini_timer(title, mode, **actions)
+
+    def show_mini_timer(self, title, mode, pause=None, resume=None, stop=None):
+        self._main.show_mini_timer(title, mode, pause=pause, resume=resume,
+                                   stop=stop)
+
+    def hide_mini_timer(self):
+        self._main.hide_mini_timer()
 
     def _on_toggle_dark(self):
         self._main._toggle_dark_mode()

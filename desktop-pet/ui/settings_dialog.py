@@ -467,6 +467,19 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(pomo_group)
 
+        # ── 悬浮计时小窗 ────────────────────────────────────
+        mini_group = QGroupBox("悬浮计时小窗")
+        mini_layout = QVBoxLayout(mini_group)
+
+        self._mini_timer = QCheckBox("开始计时时弹出圆角小窗（置顶显示剩余时间）")
+        mini_layout.addWidget(self._mini_timer)
+
+        hint = QLabel("💡 小窗可拖动调整位置；双击小窗或点「回到窗口」收起")
+        hint.setStyleSheet(f"color: {TEXT_SEC}; font-size: 10px;")
+        mini_layout.addWidget(hint)
+
+        layout.addWidget(mini_group)
+
         startup_group = QGroupBox("启动")
         startup_layout = QVBoxLayout(startup_group)
 
@@ -531,6 +544,8 @@ class SettingsDialog(QDialog):
         self._pomo_enabled.setChecked(self.settings.pomodoro_enabled)
         self._pomo_interval.setValue(self.settings.pomodoro_interval)
 
+        self._mini_timer.setChecked(self.settings.mini_timer_enabled)
+
         self._auto_start.setChecked(self.settings.auto_start)
 
     def _save_settings(self):
@@ -552,6 +567,8 @@ class SettingsDialog(QDialog):
         self.settings.pomodoro_enabled = self._pomo_enabled.isChecked()
         self.settings.pomodoro_interval = self._pomo_interval.value()
 
+        self.settings.mini_timer_enabled = self._mini_timer.isChecked()
+
         self.settings.auto_start = self._auto_start.isChecked()
 
     def _reset_defaults(self):
@@ -564,6 +581,7 @@ class SettingsDialog(QDialog):
         self._house_enabled.setChecked(False)
         self._pomo_enabled.setChecked(False)
         self._pomo_interval.setValue(25)
+        self._mini_timer.setChecked(True)
         self._auto_start.setChecked(False)
         self._opacity_slider.setValue(100)
 

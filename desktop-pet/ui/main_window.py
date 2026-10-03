@@ -228,6 +228,7 @@ class MainWindow(QMainWindow):
         self._is_dark_mode = False
         self._flow_active = False
         self._flow_window = None          # 心流模式是一个独立的顶层窗口
+        self._mini_timer = None           # 悬浮计时小窗
 
         self._init_ui()
         self._init_tray()
@@ -1130,6 +1131,13 @@ class MainWindow(QMainWindow):
         from ui.timer_widget import TimerWidget
         self._timer_widget = TimerWidget()
         self._timer_widget.timer_complete.connect(self._on_timer_complete)
+        # 从倒计时器直接点「开始」也要弹出悬浮小窗，并且暂停/继续要接上真实逻辑
+        self._timer_widget.started.connect(
+            lambda: self.show_mini_timer(
+                "专注倒计时", "countdown",
+                pause=self.pause_focus_session,
+                resume=self.resume_focus_session,
+                stop=self.stop_focus_session))
         # 放进容器里，方便心流模式把同一个实例借走（共用状态，不复制）
         self._timer_slot = QWidget()
         self._timer_slot.setStyleSheet("background: transparent;")
@@ -2505,6 +2513,89 @@ class MainWindow(QMainWindow):
             return
         interval = self.settings.pomodoro_interval
         self._pomodoro_status.setText(f"每 {interval} 分钟提醒休息")
+
+    # ── 计时控制（主页 / 心流窗口 / 悬浮小窗共用同一套逻辑）────
+    def start_focus_session(self, minutes):
+        """开始一段专注倒计时，并按设置弹出悬浮小窗。"""
+        timer = getattr(self, "_timer_widget", None)
+        if timer is None:
+            return
+        timer._set_preset(minutes)
+        timer._on_start()
+        pet = getattr(self, "_pet", None)
+        if pet is not None:
+            try:
+                pet.trigger_dance(2.0)
+            except RuntimeError:
+                pass
+        # 小窗的暂停/继续必须接上真实计时逻辑，否则按钮点了没反应
+        self.show_mini_timer(
+            "专注倒计时", "countdown",
+            pause=self.pause_focus_session,
+            resume=self.resume_focus_session,
+            stop=self.stop_focus_session)
+
+    def pause_focus_session(self):
+        timer = getattr(self, "_timer_widget", None)
+        if timer is not None and timer.get_is_running():
+            timer._on_pause()
+
+    def resume_focus_session(self):
+        timer = getattr(self, "_timer_widget", None)
+        if timer is not None and not timer.get_is_running() \
+                and timer.get_remaining_seconds() > 0:
+            timer._on_start()
+
+    def stop_focus_session(self):
+        timer = getattr(self, "_timer_widget", None)
+        if timer is not None:
+            timer._on_reset()
+        self.hide_mini_timer()
+
+    # ── 悬浮计时小窗 ────────────────────────────────────────
+    def show_mini_timer(self, title, mode, **actions):
+        """弹出圆角矩形悬浮计时小窗（唯一入口，避免多处各建一个）。
+
+        小窗同一时间只显示一件事：切入新计时时先停掉旧的刷新回调，
+        避免上一个计时的暂停/结束回调被误触发。
+        """
+        if not self.settings.mini_timer_enabled:
+            return None
+        if self._mini_timer is None:
+            from ui.mini_timer import MiniTimerWindow
+            self._mini_timer = MiniTimerWindow(
+                self, restore_cb=self._restore_main_window)
+        self._mini_timer.configure(title, mode, **actions)
+        self._mini_timer.show()
+        self._mini_timer.raise_()
+        return self._mini_timer
+
+    def hide_mini_timer(self):
+        if self._mini_timer is not None:
+            self._mini_timer.hide()
+
+    def refresh_mini_timer(self):
+        """计划项计时结束后，让倒计时（若还在跑）重新接管小窗。"""
+        if self._mini_timer is None or not self._mini_timer.isVisible():
+            return
+        timer = getattr(self, "_timer_widget", None)
+        if timer is not None and (timer.get_is_running()
+                                  or timer.get_remaining_seconds() > 0):
+            self.show_mini_timer("专注倒计时", "countdown")
+        else:
+            self.hide_mini_timer()
+
+    def _restore_main_window(self):
+        """小窗上的「回到窗口」：收起小窗并把 ToYu 主窗口带到前台。"""
+        self.hide_mini_timer()
+        if self._flow_active and self._flow_window is not None:
+            self._flow_window.show()
+            self._flow_window.raise_()
+            self._flow_window.activateWindow()
+            return
+        self.show()
+        self.raise_()
+        self.activateWindow()
 
     def _on_timer_complete(self):
         """Handle timer completion with pet bubble notification."""

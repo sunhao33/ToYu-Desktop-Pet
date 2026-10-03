@@ -27,6 +27,7 @@ class TimerWidget(QWidget):
     """Countdown timer widget with pet notifications."""
     
     timer_complete = pyqtSignal()
+    started = pyqtSignal()
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -315,6 +316,8 @@ class TimerWidget(QWidget):
         self._status_label.setText("倒计时中...")
         
         self._timer.start(1000)  # Update every second
+        # 通知外部（主窗口据此弹出悬浮计时小窗）
+        self.started.emit()
     
     def _on_pause(self):
         """Pause the timer."""

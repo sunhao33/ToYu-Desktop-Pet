@@ -24,6 +24,7 @@ TESTS = [
     ("心流模式", "_test_flow_mode.py"),
     ("心流计划栏交互", "_test_flow_plan.py"),
     ("心流计划项独立计时", "_test_flow_task_timer.py"),
+    ("悬浮计时小窗", "_test_mini_timer.py"),
 ]
 
 env = dict(os.environ)
