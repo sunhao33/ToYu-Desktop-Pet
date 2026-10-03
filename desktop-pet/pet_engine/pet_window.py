@@ -477,6 +477,10 @@ class PetWindow(QMainWindow):
             self._sprite_content_ratio = get_content_ratio(self._pet_pixmap)
         else:
             self._sprite_content_ratio = {'top': 0.15, 'bottom': 0.05, 'left': 0.1, 'right': 0.1}
+        # 立刻同步给配件层：否则换上另一张宠物图后，帽子/雨伞仍按上一张图的
+        # 内容区对齐，会明显歪掉（以前只在添加配件时才设置）
+        if getattr(self, '_accessory_layer', None):
+            self._accessory_layer.set_content_ratio(self._sprite_content_ratio)
 
     def _load_pet_image(self, path=None):
         if path:

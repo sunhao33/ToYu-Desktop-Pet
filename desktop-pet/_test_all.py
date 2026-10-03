@@ -18,6 +18,7 @@ TESTS = [
     ("宠物图保存（原子写入/并发）", "_test_image_save.py"),
     ("覆层随宠物回家清理", "_test_overlays.py"),
     ("学习统计图表刷新", "_test_charts.py"),
+    ("配件层对齐与内容区比例", "_test_accessory_align.py"),
 ]
 
 env = dict(os.environ)
