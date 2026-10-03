@@ -40,16 +40,37 @@ class _ScaledLabel(QLabel):
         self._src_pixmap = pixmap
 
     def setRawPixmap(self, pixmap):
-        """Store the original pixmap and scale to current width."""
+        """Store the original pixmap and scale to current width.
+
+        pixmap 传 None 表示清空图表（例如所选日期没有数据），
+        此时也要把已显示的旧图清掉，否则界面上会残留上一次的图。
+        """
         self._src_pixmap = pixmap
-        self._do_scale()
+        if pixmap is None:
+            self._clear_pixmap()
+        else:
+            self._do_scale()
 
     def resizeEvent(self, event):
         super().resizeEvent(event)
         self._do_scale()
 
+    def _clear_pixmap(self):
+        """丢弃当前显示的图，并顺带清掉文本。
+
+        注意 QLabel.setPixmap(空) 会把文本一起清空，所以这里同时清文本；
+        调用方若需要显示提示文字，应在清图之后再 setText()。
+        """
+        self._src_pixmap = None
+        super().setPixmap(QPixmap())
+        self.setText("")
+
     def _do_scale(self):
-        if self._src_pixmap and not self._src_pixmap.isNull():
+        # 没有源图时什么都不做：这里若去清 pixmap 会把提示文本一起清掉，
+        # 而本方法会被 resizeEvent 频繁调用（文字刚设置好就被抹掉）
+        if self._src_pixmap is None:
+            return
+        if not self._src_pixmap.isNull():
             w = max(self.width() - 4, 60)
             scaled = self._src_pixmap.scaledToWidth(w, Qt.TransformationMode.SmoothTransformation)
             super().setPixmap(scaled)
@@ -2361,6 +2382,9 @@ class MainWindow(QMainWindow):
             layout.addWidget(empty_lbl)
             layout.addStretch()
             self._history_scroll.setWidget(container)
+            # 不能在这里 return：图表更新在函数末尾，提前返回会让两幅图保持上一次的
+            # 内容甚至一直空着（用户看到的就是"图不显示了"）
+            self._finish_calendar_selection(date_str, tasks)
             return
 
         CARD_BG = "#FFFFFF"
@@ -2419,10 +2443,25 @@ class MainWindow(QMainWindow):
         layout.addStretch()
         self._history_scroll.setWidget(container)
 
+        self._finish_calendar_selection(date_str, tasks)
+
+    def _finish_calendar_selection(self, date_str, tasks):
+        """日历选日期后统一收尾：刷新两张统计图。
+
+        「有记录」和「无记录」两条分支都必须走到这里，
+        否则图表会停留在上一次的选择上（表现为图不刷新或一直空白）。
+        """
         try:
             self._update_charts(date_str, tasks)
         except Exception as e:
-            print(f"Chart update error: {e}")
+            # 不能只 print：windowed 程序没有控制台，用户只会看到一片空白，
+            # 必须把失败原因显示在图表位置上，并交给崩溃防护记入日志
+            # 顺序很重要：QLabel.setPixmap(None) 会顺手清空文本，所以先清图再写字
+            self._pie_label.setRawPixmap(None)
+            self._bar_label.setRawPixmap(None)
+            self._bar_label.setText("")
+            self._pie_label.setText(f"图表生成失败\n{type(e).__name__}: {str(e)[:80]}")
+            raise
 
     def _switch_stat_tab(self, idx):
         """Switch between study stats and screen time."""
@@ -2638,10 +2677,15 @@ class MainWindow(QMainWindow):
             if sec >= 60: return f"{sec//60}m{sec%60}s"
             return f"{sec}s"
 
-        if not tasks:
-            self._pie_label.setText(f"{date_str}\n暂无数据")
-            self._bar_label.setText("")
-            return
+        # 判断环形图有没有数据，但不提前返回：
+        # 以前这里直接 return，导致两个后果——
+        #   1) 上一次的旧图残留在 _ScaledLabel 上，看起来"图不对/不刷新"
+        #   2) 连"近 7 天活动"柱状图也一起不画了
+        has_pie_data = bool(tasks)
+        if not has_pie_data:
+            # setRawPixmap(None) 会清掉旧图，避免残留
+            self._pie_label.setRawPixmap(None)
+            self._pie_label.setText(f"{date_str}\n暂无完成记录\n（完成待办后会出现在这里）")
 
         task_time = defaultdict(int)
         for t in tasks:
@@ -2669,7 +2713,10 @@ class MainWindow(QMainWindow):
                 handlelength=0.8, handletextpad=0.3
             )
         else:
-            ax1.text(0.5, 0.5, '暂无', ha='center', va='center', fontsize=14, color='#8B7355')
+            # 无数据时不要留坐标轴边框和刻度，只显示一句提示
+            ax1.axis('off')
+            ax1.text(0.5, 0.5, '暂无完成记录', ha='center', va='center',
+                     fontsize=13, color='#8B7355')
         ax1.set_title(f'{date_str}', fontsize=12, color='#8B7355', pad=10)
         fig1.subplots_adjust(left=0.02, right=0.98, top=0.88, bottom=0.15)
 
