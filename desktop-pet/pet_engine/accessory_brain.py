@@ -101,6 +101,12 @@ class AccessoryBrain:
         """Main behavior evaluation — runs every 2 min."""
         if not self._enabled:
             return
+        # 宠物进房子或隐藏时不产生新行为：否则雨滴/配件会出现在空无一物的桌面上
+        try:
+            if not self.pet.isVisible():
+                return
+        except RuntimeError:
+            return
         try:
             now = time.localtime()
             hour = now.tm_hour

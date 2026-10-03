@@ -16,6 +16,7 @@ TESTS = [
     ("会话合并与启动行为", "_test_compact.py"),
     ("主窗口标签切换", "_test_tab_switch.py"),
     ("宠物图保存（原子写入/并发）", "_test_image_save.py"),
+    ("覆层随宠物回家清理", "_test_overlays.py"),
 ]
 
 env = dict(os.environ)

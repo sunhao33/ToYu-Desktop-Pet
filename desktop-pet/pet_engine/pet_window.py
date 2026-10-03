@@ -717,8 +717,9 @@ class PetWindow(QMainWindow):
                 sprite_bottom = self.y() + self.height() // 2 + int(self._pet_pixmap.height() * self._scale) // 2
                 sprite_pt = QPoint(sprite_cx, sprite_bottom)
                 if self._house.is_door_overlap(sprite_pt):
-                    self.hide()
                     self._house.set_pet_inside(True)
+                    self._hide_overlays()
+                    self.hide()
                     self.state_machine.transition_to(PetState.IDLE)
                     return
 
@@ -926,14 +927,31 @@ class PetWindow(QMainWindow):
         self._show_companion_bubble(message)
         self._reset_auto_home_timer()
 
+    def _hide_overlays(self):
+        """宠物从屏幕上消失时，同步清掉跟随它的独立覆层窗口。
+
+        粒子层与配件层都是独立的顶层窗口（屏幕全局坐标），
+        只隐藏宠物本体的话，雨滴/星星/配件会留在原地继续显示。
+        """
+        if getattr(self, '_effects', None):
+            self._effects.clear()
+        if getattr(self, '_accessory_layer', None):
+            self._accessory_layer.clear_all()
+        if self._companion_bubble:
+            self._companion_bubble.close()
+            self._companion_bubble = None
+        if self._chat_bubble and self._chat_bubble.isVisible():
+            self._chat_bubble.hide_chat()
+        if self._bubble:
+            self._bubble.hide()
+
     def _go_home(self):
         """Pet goes into the house."""
         self._show_go_home_popup()
         if self._house:
             self._house.set_pet_inside(True)
+            self._hide_overlays()
             self.hide()
-        if self._bubble:
-            self._bubble.hide()
 
     def _show_go_home_popup(self):
         """Show contextual popup when pet goes home."""

@@ -63,6 +63,16 @@ class ParticleSystem(QWidget):
         self._timer.setInterval(33)
         self.hide()
 
+    def clear(self):
+        """立刻清空所有粒子并隐藏覆盖层。
+
+        宠物回家 / 隐藏时必须调用：本层是独立的顶层窗口且用屏幕全局坐标，
+        不清的话雨滴、星星会留在原地，宠物已经不见了特效还在下雨。
+        """
+        self.particles = []
+        self._timer.stop()
+        self.hide()
+
     def emit_at(self, pet_global_x, pet_global_y, chars, colors, count=5, **kwargs):
         """Position overlay centered on pet, spawn particles at center."""
         ox = pet_global_x - OVERLAY_W // 2
