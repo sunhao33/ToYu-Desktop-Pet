@@ -1,9 +1,8 @@
 # Build / Packaging
 desktop-pet/build/
+desktop-pet/build_*/
 desktop-pet/dist/
-desktop-pet/build_dir/
-desktop-pet/build_debug/
-desktop-pet/dist_dir/
+desktop-pet/dist_*/
 desktop-pet/_staging/
 *.spec.bak
 __pycache__/

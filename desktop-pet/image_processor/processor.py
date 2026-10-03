@@ -210,6 +210,12 @@ def process_image(image_path, threshold=200, use_ai=False, output_size=None):
 def process_and_save(input_path, output_dir, threshold=200, use_ai=False):
     """Process image and save to output directory.
 
+    写入策略：内容没变就不写；确实要写时先写临时文件再原子替换。
+    直接覆盖原文件有两个坑：
+      1. 另一个 ToYu 实例（或上一次运行）正在读这张图时会抛
+         [Errno 13] Permission denied，用户看到「处理失败」弹窗；
+      2. 写到一半崩溃会留下损坏的图片。
+
     Args:
         input_path: path to input image
         output_dir: directory to save processed image
@@ -219,6 +225,8 @@ def process_and_save(input_path, output_dir, threshold=200, use_ai=False):
     Returns:
         str: path to saved processed image
     """
+    import io
+
     img = process_image(input_path, threshold=threshold, use_ai=use_ai,
                         output_size=(256, 256))
 
@@ -228,7 +236,45 @@ def process_and_save(input_path, output_dir, threshold=200, use_ai=False):
     while basename.endswith('_pet'):
         basename = basename[:-4]
     output_path = os.path.join(output_dir, f"{basename}_pet.png")
-    img.save(output_path, "PNG")
+
+    buffer = io.BytesIO()
+    img.save(buffer, "PNG")
+    payload = buffer.getvalue()
+
+    # 已经是最新结果就跳过写入：避免每次启动都重写同一文件，
+    # 也顺带消除多实例读写同一文件的冲突
+    try:
+        with open(output_path, "rb") as fh:
+            if fh.read() == payload:
+                return output_path
+    except OSError:
+        pass
+
+    tmp_path = f"{output_path}.{os.getpid()}.tmp"
+
+    def _write_once():
+        with open(tmp_path, "wb") as fh:
+            fh.write(payload)
+        os.replace(tmp_path, output_path)
+
+    try:
+        _write_once()
+    except OSError:
+        # 图片正被占用（另一个 ToYu 实例或图片查看器），让一步再试
+        import time as _time
+        _time.sleep(0.25)
+        try:
+            _write_once()
+        except OSError as exc:
+            if os.path.exists(tmp_path):
+                try:
+                    os.remove(tmp_path)
+                except OSError:
+                    pass
+            raise OSError(
+                f"宠物图片被占用，无法写入：{os.path.basename(output_path)}。"
+                "请关闭其他 ToYu 窗口或正在查看该图片的程序后重试。"
+            ) from exc
 
     return output_path
 

@@ -11,7 +11,7 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    noarchive=False,
+    noarchive=True,  # 同 ToYuDir.spec：避免生成 base_library.zip 被杀软删除
     optimize=0,
 )
 pyz = PYZ(a.pure)

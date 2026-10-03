@@ -11,7 +11,8 @@ a = Analysis(
     hooksconfig={},
     runtime_hooks=[],
     excludes=[],
-    noarchive=False,
+    noarchive=True,  # 不打包 base_library.zip：火绒会把内嵌 zip 当威胁删除，
+                     # 导致 "Failed to import encodings module" 无法启动
     optimize=0,
 )
 pyz = PYZ(a.pure)

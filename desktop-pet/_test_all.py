@@ -15,6 +15,7 @@ TESTS = [
     ("屏幕时间会话记录与小时分布", "_test_screen_time.py"),
     ("会话合并与启动行为", "_test_compact.py"),
     ("主窗口标签切换", "_test_tab_switch.py"),
+    ("宠物图保存（原子写入/并发）", "_test_image_save.py"),
 ]
 
 env = dict(os.environ)
