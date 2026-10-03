@@ -15,7 +15,7 @@ from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QIcon, QPixmap
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
-    QFrame, QStackedWidget, QScrollArea
+    QFrame, QStackedWidget, QScrollArea, QCheckBox, QLineEdit
 )
 
 FOCUS_PRESETS = (25, 45, 60, 90)
@@ -127,6 +127,9 @@ class FlowWindow(QMainWindow):
         self._refresh_timer.timeout.connect(self._tick)
         self._refresh_timer.start(1000)
 
+        # 待办在主页被增删改时，计划栏要跟着刷新
+        self._connect_todo_signals()
+
     # ── 取色（与主窗口同一套）────────────────────────────────
     def _c(self, key):
         return self._main._c(key)
@@ -215,17 +218,53 @@ class FlowWindow(QMainWindow):
             }}
         """
 
-    # ── 左：今日计划 ────────────────────────────────────────
+    # ── 左：今日计划（可交互）────────────────────────────────
     def _build_plan_card(self):
         card = self._make_card("🎯 今日计划")
         layout = card.layout()
         layout.setSpacing(8)
 
-        self._plan_hint = QLabel("与 ToYu 主页「效率工具」里的待办实时同步")
+        self._plan_hint = QLabel("勾选即完成（用时会计入今日统计）")
         self._plan_hint.setWordWrap(True)
         self._plan_hint.setStyleSheet(
             f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
         layout.addWidget(self._plan_hint)
+
+        # 就地添加待办，不用跑回主页
+        add_row = QHBoxLayout()
+        add_row.setSpacing(6)
+        self._plan_input = QLineEdit()
+        self._plan_input.setPlaceholderText("添加待办…")
+        self._plan_input.setFixedHeight(34)
+        # 明确给出边框与底色：默认样式在浅色卡片上几乎看不见
+        self._plan_input.setStyleSheet(f"""
+            QLineEdit {{
+                background: {self._c('input_bg')};
+                border: 1px solid {self._c('border')};
+                border-radius: 8px;
+                padding: 4px 10px;
+                font-size: 12px;
+                color: {self._c('text')};
+            }}
+            QLineEdit:focus {{
+                border-color: {self._c('accent')};
+            }}
+        """)
+        self._plan_input.returnPressed.connect(self._on_add_task)
+        add_row.addWidget(self._plan_input, 1)
+        self._plan_add_btn = QPushButton("＋")
+        self._plan_add_btn.setObjectName("secondaryBtn")
+        self._plan_add_btn.setFixedSize(34, 34)
+        self._plan_add_btn.setToolTip("添加这条待办（Enter 也可以）")
+        self._plan_add_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._plan_add_btn.clicked.connect(self._on_add_task)
+        add_row.addWidget(self._plan_add_btn)
+        layout.addLayout(add_row)
+
+        self._plan_progress = QLabel("")
+        self._plan_progress.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
+        layout.addWidget(self._plan_progress)
 
         self._plan_scroll = QScrollArea()
         self._plan_scroll.setWidgetResizable(True)
@@ -244,13 +283,61 @@ class FlowWindow(QMainWindow):
         self._plan_scroll.setWidget(self._plan_container)
         layout.addWidget(self._plan_scroll, 1)
 
-        btn = QPushButton("去 ToYu 添加待办")
-        btn.setObjectName("secondaryBtn")
-        btn.setFixedHeight(28)
-        btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.clicked.connect(lambda: self._goto_main("工具", sub=0))
-        layout.addWidget(btn)
+        tip = QLabel("提示：先选中一条待办再开始专注，完成后勾选会把专注用时一起记上")
+        tip.setWordWrap(True)
+        tip.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 10px; background: transparent;")
+        layout.addWidget(tip)
         return card
+
+    def _on_add_task(self):
+        text = self._plan_input.text().strip()
+        if not text:
+            return
+        todo = getattr(self._main, "_todo_widget", None)
+        if todo is None:
+            return
+        try:
+            todo._input.setText(text)
+            todo._on_add()
+            self._plan_input.clear()
+        except RuntimeError:
+            return
+        QTimer.singleShot(200, self._refresh_plan)
+
+    def _on_toggle_task(self, todo, checked):
+        """勾选完成/取消完成，并同步到主页待办。
+
+        完成时若计时器有已用时长，就一起记进历史 —— 这样「今日已完成任务
+        累计时长」反映的是真实投入，而不是一律 0。
+        """
+        widget = getattr(self._main, "_todo_widget", None)
+        if widget is None:
+            return
+        try:
+            if bool(todo.done) != bool(checked):
+                if checked:
+                    elapsed = 0
+                    timer = getattr(self._main, "_timer_widget", None)
+                    if timer is not None:
+                        elapsed = timer.get_elapsed_seconds()
+                        timer._on_reset()          # 一段专注结束，计时器归位
+                    widget._toggle_todo_by_ref(todo, elapsed_seconds=elapsed)
+                else:
+                    widget._toggle_todo_by_ref(todo)
+        except RuntimeError:
+            return
+        QTimer.singleShot(200, self._refresh_plan)
+
+    def _on_delete_task(self, todo):
+        widget = getattr(self._main, "_todo_widget", None)
+        if widget is None:
+            return
+        try:
+            widget._delete_todo_by_ref(todo)
+        except RuntimeError:
+            return
+        QTimer.singleShot(200, self._refresh_plan)
 
     # ── 中：专注 ────────────────────────────────────────────
     def _build_focus_card(self):
@@ -272,12 +359,13 @@ class FlowWindow(QMainWindow):
             f"color: {self._c('text2')}; font-size: 12px; background: transparent;")
         layout.addWidget(self._state_label)
 
+        # 心流模式自带的快捷按钮（计时器里的 9 个预设会被隐藏，避免两套并存）
         preset_row = QHBoxLayout()
         preset_row.setSpacing(6)
         for minutes in FOCUS_PRESETS:
             b = QPushButton("%d 分钟" % minutes)
             b.setObjectName("secondaryBtn")
-            b.setFixedHeight(28)
+            b.setFixedHeight(30)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setToolTip("立即开始 %d 分钟专注" % minutes)
             b.clicked.connect(lambda checked=False, m=minutes: self.start_focus(m))
@@ -405,6 +493,21 @@ class FlowWindow(QMainWindow):
             " background: transparent;")
         self._plan_hint.setStyleSheet(
             f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
+        self._plan_progress.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
+        self._plan_input.setStyleSheet(f"""
+            QLineEdit {{
+                background: {self._c('input_bg')};
+                border: 1px solid {self._c('border')};
+                border-radius: 8px;
+                padding: 4px 10px;
+                font-size: 12px;
+                color: {self._c('text')};
+            }}
+            QLineEdit:focus {{
+                border-color: {self._c('accent')};
+            }}
+        """)
         self._state_label.setStyleSheet(
             f"color: {self._c('text2')}; font-size: 12px; background: transparent;")
         self._mood_label.setStyleSheet(
@@ -487,40 +590,78 @@ class FlowWindow(QMainWindow):
         self._clear_plan_rows()
 
         todo = getattr(self._main, "_todo_widget", None)
-        entries = []
+        pending, done_count, total = [], 0, 0
         if todo is not None:
             try:
-                entries = [t for t in todo.todos if not t.done]
+                all_todos = list(todo.todos)
+                total = len(all_todos)
+                done_count = sum(1 for t in all_todos if t.done)
+                pending = [t for t in all_todos if not t.done]
             except RuntimeError:
-                entries = []
+                pending = []
 
-        if not entries:
-            empty = QLabel("暂无未完成待办")
+        if total:
+            self._plan_progress.setText("进度 %d/%d 已完成" % (done_count, total))
+        else:
+            self._plan_progress.setText("还没有待办")
+
+        if not pending:
+            empty = QLabel("全部完成啦 🎉" if total else "还没有待办，上面加一条试试")
             empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            empty.setWordWrap(True)
             empty.setStyleSheet(
                 f"color: {self._c('text2')}; font-size: 12px; padding: 20px;"
                 " background: transparent;")
             self._plan_list.insertWidget(0, empty)
             return
 
-        for i, item in enumerate(entries[:20]):
+        for i, item in enumerate(pending[:30]):
             frame = QFrame()
             frame.setStyleSheet(
                 f"QFrame {{ background: {self._c('tab_bg')};"
                 f" border: 1px solid {self._c('border')}; border-radius: 8px; }}")
             row = QHBoxLayout(frame)
-            row.setContentsMargins(10, 6, 8, 6)
-            row.setSpacing(8)
-            mark = QLabel("○")
-            mark.setStyleSheet(
-                f"color: {self._c('accent')}; font-size: 12px; background: transparent;")
-            row.addWidget(mark)
+            row.setContentsMargins(8, 5, 6, 5)
+            row.setSpacing(6)
+
+            box = QCheckBox()
+            box.setChecked(False)
+            box.setCursor(Qt.CursorShape.PointingHandCursor)
+            box.setToolTip("标记为已完成（会把专注用时记入今日统计）")
+            box.clicked.connect(
+                lambda checked=False, t=item: self._on_toggle_task(t, checked))
+            row.addWidget(box)
+
             text = QLabel(item.text)
             text.setWordWrap(True)
             text.setStyleSheet(
                 f"color: {self._c('text')}; font-size: 12px; background: transparent;")
             row.addWidget(text, 1)
+
+            del_btn = QPushButton("✕")
+            del_btn.setFixedSize(20, 20)
+            del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            del_btn.setToolTip("删除这条待办")
+            del_btn.setStyleSheet(
+                "QPushButton { background: transparent; border: none;"
+                f" color: {self._c('text2')}; font-size: 11px; }}"
+                "QPushButton:hover { color: #D9534F; }")
+            del_btn.clicked.connect(lambda checked=False, t=item: self._on_delete_task(t))
+            row.addWidget(del_btn)
             self._plan_list.insertWidget(i, frame)
+
+    def _connect_todo_signals(self):
+        """待办变化时自动刷新计划栏（主页添加/删除也会同步过来）。"""
+        todo = getattr(self._main, "_todo_widget", None)
+        if todo is None:
+            return
+        for sig in ("task_added", "task_completed"):
+            s = getattr(todo, sig, None)
+            if s is not None:
+                try:
+                    s.connect(self._refresh_plan)
+                except TypeError:
+                    pass
 
     def refresh_all(self):
         self._stage.refresh()
@@ -534,10 +675,17 @@ class FlowWindow(QMainWindow):
         timer.setParent(None)
         self._timer_holder.addWidget(timer)
         timer.show()
+        # 心流页自带快捷按钮，隐藏计时器里那 9 个预设与自定义时间输入
+        setter = getattr(timer, "set_compact_mode", None)
+        if setter is not None:
+            setter(True)
 
     def detach_timer(self):
         timer = getattr(self._main, "_timer_widget", None)
         if timer is not None:
+            setter = getattr(timer, "set_compact_mode", None)
+            if setter is not None:
+                setter(False)      # 还给主页时恢复完整模式
             self._timer_holder.removeWidget(timer)
             timer.setParent(None)
         return timer

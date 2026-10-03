@@ -226,10 +226,11 @@ class TodoWidget(QWidget):
         self._refresh_list()
         QTimer.singleShot(100, self.task_added.emit)
 
-    def _toggle_todo_by_ref(self, todo):
+    def _toggle_todo_by_ref(self, todo, elapsed_seconds=0):
+        """切换完成状态。elapsed_seconds 用于记录实际投入时长（心流模式会传）。"""
         todo.done = not todo.done
         if todo.done:
-            self._record_task_done(todo.text)
+            self._record_task_done(todo.text, elapsed_seconds)
             QTimer.singleShot(100, self.task_completed.emit)
         self._save_todos()
         self._refresh_list()

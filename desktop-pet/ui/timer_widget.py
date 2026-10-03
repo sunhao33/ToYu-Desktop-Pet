@@ -20,6 +20,8 @@ TEXT_SEC = "#8B7355"
 BORDER = "#E8D5C0"
 SUCCESS = "#6B9B37"
 DANGER = "#C0392B"
+# 紧凑模式（心流窗口）下的最大高度：大字显示框 + 状态 + 操作按钮 + 进度条
+COMPACT_MAX_HEIGHT = 340
 
 class TimerWidget(QWidget):
     """Countdown timer widget with pet notifications."""
@@ -85,6 +87,9 @@ class TimerWidget(QWidget):
         preset_label = QLabel("快捷设置")
         preset_label.setStyleSheet(f"color: {TEXT}; font-size: 12px; font-weight: bold;")
         layout.addWidget(preset_label)
+        # 记下引用：心流模式会隐藏这一整块（那边有自己的快捷按钮，
+        # 两套预设同时出现会重复占掉一半竖直空间）
+        self._preset_label = preset_label
         
         preset_grid = QGridLayout()
         preset_grid.setSpacing(8)
@@ -95,6 +100,7 @@ class TimerWidget(QWidget):
             ("30分钟", 30), ("45分钟", 45), ("60分钟", 60)
         ]
         
+        self._preset_buttons = []
         for i, (text, mins) in enumerate(presets):
             btn = QPushButton(text)
             btn.setStyleSheet(f"""
@@ -117,13 +123,17 @@ class TimerWidget(QWidget):
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.clicked.connect(lambda checked, m=mins: self._set_preset(m))
             preset_grid.addWidget(btn, i // 3, i % 3)
+            self._preset_buttons.append(btn)
         
         layout.addLayout(preset_grid)
+        self._preset_grid = preset_grid
         
         custom_label = QLabel("自定义时间")
         custom_label.setStyleSheet(f"color: {TEXT}; font-size: 12px; font-weight: bold;")
         layout.addWidget(custom_label)
-        
+        # 紧凑模式下与预设区一起隐藏（心流模式不需要两套输入）
+        self._custom_label = custom_label
+
         custom_row = QHBoxLayout()
         custom_row.setSpacing(8)
         
@@ -171,8 +181,17 @@ class TimerWidget(QWidget):
             }}
         """)
         custom_row.addWidget(self._sec_spin)
-        
-        layout.addLayout(custom_row)
+
+        # 用容器包住自定义时间这一行，紧凑模式下可以整块隐藏
+        self._custom_row_widget = QWidget()
+        self._custom_row_widget.setStyleSheet("background: transparent;")
+        _crl = QHBoxLayout(self._custom_row_widget)
+        _crl.setContentsMargins(0, 0, 0, 0)
+        _crl.setSpacing(8)
+        _crl.addWidget(self._hour_spin)
+        _crl.addWidget(self._min_spin)
+        _crl.addWidget(self._sec_spin)
+        layout.addWidget(self._custom_row_widget)
         
         btn_row = QHBoxLayout()
         btn_row.setSpacing(12)
@@ -385,3 +404,31 @@ class TimerWidget(QWidget):
     def get_remaining_seconds(self):
         """Get remaining seconds."""
         return self._remaining_seconds
+
+    def get_elapsed_seconds(self):
+        """已经过的时间（用于记录任务实际用时）。"""
+        if self._total_seconds <= 0:
+            return 0
+        return max(0, int(self._total_seconds - self._remaining_seconds))
+
+    def set_compact_mode(self, compact=True):
+        """紧凑模式：隐藏「快捷设置」预设区与「自定义时间」。
+
+        心流模式自带快捷按钮，两套预设同时出现会重复占掉近一半竖直空间，
+        所以那边进入时切到紧凑模式。
+
+        注意：布局项被 setVisible(False) 后仍占着原本的 stretch 空间，
+        会留下一大片空白。所以这里同时限制自身最大高度，
+        让计时器收紧成「大字时间 + 状态 + 操作按钮」这一块。
+        """
+        for w in getattr(self, "_preset_buttons", []):
+            w.setVisible(not compact)
+        for name in ("_preset_label", "_custom_label", "_custom_row_widget"):
+            w = getattr(self, name, None)
+            if w is not None:
+                w.setVisible(not compact)
+
+        if compact:
+            self.setMaximumHeight(COMPACT_MAX_HEIGHT)
+        else:
+            self.setMaximumHeight(16777215)      # Qt 默认上限，恢复可伸展
