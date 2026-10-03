@@ -510,9 +510,19 @@ class MainWindow(QMainWindow):
         header_layout.addWidget(self._start_btn, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         # 心流模式：切换到一个只看专注与进度的工作台（与主页共用同一套数据）
-        self._flow_btn = QPushButton("🧘 心流模式")
+        # 图标用 ToYu 自己的图，与心流窗口头部保持一致
+        self._flow_btn = QPushButton(" 心流模式")
         self._flow_btn.setObjectName("flowModeBtn")
         self._flow_btn.setFixedHeight(38)
+        try:
+            from ui.flow_window import app_icon
+            _flow_icon = app_icon()
+            if not _flow_icon.isNull():
+                self._flow_btn.setIcon(_flow_icon)
+                self._flow_btn.setIconSize(QSize(20, 20))
+        except Exception:
+            # 图标加载失败时退回 emoji，保证按钮不出现空白
+            self._flow_btn.setText("🥔 心流模式")
         self._flow_btn.setToolTip("进入心流工作台：专注计时 + 今日进度，宠物状态保持不变")
         self._flow_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         self._flow_btn.setStyleSheet(f"""
@@ -2231,7 +2241,7 @@ class MainWindow(QMainWindow):
         self._flow_window.show()
         self._flow_window.raise_()
         self._flow_window.activateWindow()
-        self._flow_btn.setText("↩ 已进入心流模式")
+        self._flow_btn.setText(" 已进入心流模式")
 
     def exit_flow_mode(self):
         """关闭心流窗口，回到 ToYu 主窗口（计时与宠物状态继续保留）。"""
@@ -2252,7 +2262,7 @@ class MainWindow(QMainWindow):
         self.show()
         self.raise_()
         self.activateWindow()
-        self._flow_btn.setText("🧘 心流模式")
+        self._flow_btn.setText(" 心流模式")
         self._status.setText("ToYu 运行中")
 
     def _on_mode_change_val(self, mode_val):

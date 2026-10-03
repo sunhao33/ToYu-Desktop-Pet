@@ -30,8 +30,12 @@ RESOURCE_DIR = os.path.join(
 HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".desktop_pet", "task_history.json")
 
 
-def _app_icon():
-    """程序图标：优先用 128px 版本，回退到 ico。"""
+def app_icon():
+    """程序图标：优先用 128px 版本，回退到 ico。
+
+    心流窗口头部与主窗口「心流模式」按钮共用这一个图标，
+    保证两处视觉一致。
+    """
     for name in ("toyu_128.png", "toyu_icon.ico", "icon.ico"):
         path = os.path.join(RESOURCE_DIR, name)
         if os.path.exists(path):
@@ -39,6 +43,10 @@ def _app_icon():
             if not icon.isNull():
                 return icon
     return QIcon()
+
+
+# 兼容旧调用名
+_app_icon = app_icon
 
 
 def _fmt_duration(seconds):
