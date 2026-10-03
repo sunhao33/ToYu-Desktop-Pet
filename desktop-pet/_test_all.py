@@ -19,6 +19,7 @@ TESTS = [
     ("覆层随宠物回家清理", "_test_overlays.py"),
     ("学习统计图表刷新", "_test_charts.py"),
     ("配件层对齐与内容区比例", "_test_accessory_align.py"),
+    ("宠物始终留在屏幕内", "_test_pet_onscreen.py"),
 ]
 
 env = dict(os.environ)

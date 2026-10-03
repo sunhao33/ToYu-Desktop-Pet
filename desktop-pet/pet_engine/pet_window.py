@@ -520,6 +520,9 @@ class PetWindow(QMainWindow):
                 (w, h),
                 sprite_bottom_offset=self._sprite_bottom_offset
             )
+            # 窗口尺寸变了必须重新钳制：换宠物图或改缩放后窗口会变大，
+            # 原来合法的位置可能把宠物顶到屏幕外（宠物会"消失"在任务栏下方）
+            self._clamp_to_screen()
 
     def _restore_position(self):
         saved = self.settings.pet_position
@@ -534,6 +537,9 @@ class PetWindow(QMainWindow):
             )
         self.move(self._position)
         self._clamp_to_screen()
+        # 位置可能被钳制过，立刻同步回去，避免界面上看着在屏幕内、
+        # 注册表里存的却是屏幕外的坐标
+        self.settings.pet_position = self._position
 
     def _clamp_to_screen(self):
         screen = QApplication.primaryScreen().geometry()
