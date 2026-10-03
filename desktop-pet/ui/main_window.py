@@ -230,11 +230,50 @@ class MainWindow(QMainWindow):
         self._init_ui()
         self._init_tray()
         self._restore_state()
+        self._apply_content_minimum_width()
 
         self._screen_tracker = ScreenTimeTracker()
         self._screen_tracker.start()
 
         self._init_tools_hub()
+
+    def _apply_content_minimum_width(self):
+        """最小宽度必须容得下内容，否则窗口缩小后右侧内容会被推出可视区。
+
+        各页内容真实需要的宽度不同（宠物页约 780、效率工具 741、数据面板 972），
+        而 _init_ui 里设的 680 太窄：缩到那个尺寸时横向滚动条出现，
+        用户看到的就是「内容框里的东西看不见」。
+
+        注意：隐藏页面的 minimumSizeHint() 是过期值（未重新布局），
+        所以这里先做两次延迟估算，并在每次切页时用「已显示页面」的实测值复核。
+        """
+        self._content_min_width = 800
+        self.setMinimumWidth(800)
+        self._page_stack.currentChanged.connect(lambda _i: self._update_content_min_width())
+        QTimer.singleShot(120, self._update_content_min_width)
+        QTimer.singleShot(700, self._update_content_min_width)
+
+    def _update_content_min_width(self):
+        """用当前可见页面实测所需宽度，必要时抬高窗口最小宽度。"""
+        try:
+            page = self._page_stack.currentWidget()
+            if page is None:
+                return
+            needed = page.minimumSizeHint().width()
+            # 工具页内部还有子页，取当前子页
+            if self._tools_stack.count():
+                sub = self._tools_stack.currentWidget()
+                if sub is not None:
+                    needed = max(needed, sub.minimumSizeHint().width())
+            needed += 40          # 滚动条与边距余量
+            needed = max(680, min(needed, 1100))
+            if needed > self._content_min_width:
+                self._content_min_width = needed
+                self.setMinimumWidth(int(needed))
+                if self.width() < needed:
+                    self.resize(int(needed), self.height())
+        except RuntimeError:
+            pass
 
     def _restore_state(self):
         saved = self.settings.pet_image_path
@@ -1984,9 +2023,12 @@ class MainWindow(QMainWindow):
             btn.setChecked(i == idx)
         if idx == 1:
             self._refresh_desktop_tools()
+            # 子页内容比主页更宽时也要抬高下限，避免右侧被切
+            self._update_content_min_width()
         elif idx == 2:
             # 进数据面板就把学习统计的图先画出来，不用再点日历才有图
             self._ensure_study_charts()
+            self._update_content_min_width()
 
     # ── 桌面工具（剪贴板历史 / 护眼提醒）────────────────────
     def _init_tools_hub(self):

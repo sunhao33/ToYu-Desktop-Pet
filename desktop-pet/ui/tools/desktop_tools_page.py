@@ -1,12 +1,15 @@
 """Desktop-tools page: clipboard history and eye-care reminder."""
 
 from PyQt6.QtCore import Qt
+from PyQt6.QtGui import QFontMetrics
 from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QCheckBox, QScrollArea, QFrame, QApplication, QSpinBox
 )
 
 CLIP_PREVIEW_CHARS = 60
+# 预览标签的最小宽度：给它一个明确下限，行宽才不会被长文本撑开
+CLIP_PREVIEW_MIN_W = 120
 
 
 def _preview(text):
@@ -14,6 +17,34 @@ def _preview(text):
     if len(one_line) > CLIP_PREVIEW_CHARS:
         return one_line[:CLIP_PREVIEW_CHARS] + "…"
     return one_line
+
+
+class _ElideLabel(QLabel):
+    """单行显示、超宽自动省略，且最小宽度固定。
+
+    普通 QLabel 的最小宽度由文字长度决定：复制一段长文本就会把整行撑宽，
+    进而把卡片撑出可视区（表现为右侧内容看不见）。这里改成按控件宽度省略。
+    """
+
+    def __init__(self, text="", parent=None):
+        super().__init__(text, parent)
+        self._full_text = text
+        self.setMinimumWidth(CLIP_PREVIEW_MIN_W)
+        self.setTextInteractionFlags(Qt.TextInteractionFlag.NoTextInteraction)
+
+    def setFullText(self, text):
+        self._full_text = text
+        self.setToolTip(text[:2000])
+        self._apply_elide()
+
+    def resizeEvent(self, event):
+        super().resizeEvent(event)
+        self._apply_elide()
+
+    def _apply_elide(self):
+        fm = QFontMetrics(self.font())
+        avail = max(self.width() - 4, 40)
+        super().setText(fm.elidedText(self._full_text, Qt.TextElideMode.ElideRight, avail))
 
 
 class DesktopToolsPage(QWidget):
@@ -160,8 +191,8 @@ class DesktopToolsPage(QWidget):
         layout.setSpacing(8)
 
         text = entry.get("text", "")
-        preview = QLabel(_preview(text))
-        preview.setToolTip(text[:2000])
+        preview = _ElideLabel(_preview(text))
+        preview.setFullText(_preview(text))
         preview.setStyleSheet(f"color: {self.owner._c('text')}; font-size: 12px; background: transparent;")
         layout.addWidget(preview, 1)
 
@@ -172,6 +203,7 @@ class DesktopToolsPage(QWidget):
         copy_btn = QPushButton("复制")
         copy_btn.setObjectName("secondaryBtn")
         copy_btn.setFixedHeight(24)
+        copy_btn.setMinimumWidth(44)
         copy_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         copy_btn.clicked.connect(lambda checked=False, t=text: self._copy_again(t))
         layout.addWidget(copy_btn)
