@@ -2251,6 +2251,10 @@ class MainWindow(QMainWindow):
         self.settings.flow_mode_enabled = False
 
         if self._flow_window is not None:
+            # 计划项计时的进度先落盘，再切回主页
+            flush = getattr(self._flow_window, "_flush_timers", None)
+            if flush is not None:
+                flush()
             timer = self._flow_window.detach_timer()
             if timer is not None:
                 self._timer_slot_layout.addWidget(timer)

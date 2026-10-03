@@ -23,6 +23,7 @@ TESTS = [
     ("窗口缩放不裁切内容", "_test_window_resize.py"),
     ("心流模式", "_test_flow_mode.py"),
     ("心流计划栏交互", "_test_flow_plan.py"),
+    ("心流计划项独立计时", "_test_flow_task_timer.py"),
 ]
 
 env = dict(os.environ)

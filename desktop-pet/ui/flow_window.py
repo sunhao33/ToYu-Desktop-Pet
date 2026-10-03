@@ -9,6 +9,7 @@
 """
 
 import os
+import json
 from datetime import date
 
 from PyQt6.QtCore import Qt, QTimer
@@ -28,6 +29,33 @@ ICON_SIZE = 34
 RESOURCE_DIR = os.path.join(
     os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources")
 HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".desktop_pet", "task_history.json")
+# 每个计划项的累计计时（按日期 + 任务文本记录，可跨窗口/重启保留）
+FLOW_TIMER_FILE = os.path.join(
+    os.path.expanduser("~"), "AppData", "Roaming", "ToYu", "flow_timers.json")
+
+
+def load_flow_timers():
+    """读取 {日期: {任务文本: 累计秒数}}。"""
+    try:
+        if os.path.exists(FLOW_TIMER_FILE):
+            with open(FLOW_TIMER_FILE, "r", encoding="utf-8") as fh:
+                data = json.load(fh)
+            if isinstance(data, dict):
+                return data
+    except Exception:
+        pass
+    return {}
+
+
+def save_flow_timers(data):
+    try:
+        os.makedirs(os.path.dirname(FLOW_TIMER_FILE), exist_ok=True)
+        tmp = FLOW_TIMER_FILE + ".tmp"
+        with open(tmp, "w", encoding="utf-8") as fh:
+            json.dump(data, fh, ensure_ascii=False, indent=1)
+        os.replace(tmp, FLOW_TIMER_FILE)
+    except Exception:
+        pass
 
 
 def app_icon():
@@ -56,6 +84,12 @@ def _fmt_duration(seconds):
     if seconds >= 60:
         return "%d 分钟" % (seconds // 60)
     return "%d 秒" % seconds
+
+
+def _fmt_clock(seconds):
+    """计划项用时：紧凑的 时:分:秒 形式。"""
+    seconds = int(max(0, seconds))
+    return "%02d:%02d:%02d" % (seconds // 3600, (seconds % 3600) // 60, seconds % 60)
 
 
 class _PetStage(QLabel):
@@ -96,6 +130,11 @@ class FlowWindow(QMainWindow):
         super().__init__()
         self._main = main_window
         self.settings = main_window.settings
+        # 计划项独立计时：{日期: {任务文本: 累计秒数}}，以及当前正在计时的项
+        self._flow_timers = load_flow_timers()
+        self._active_task = None
+        self._plan_time_labels = {}
+        self._timer_dirty = False
         self.setWindowTitle("心流模式 · ToYu")
         self.setWindowIcon(_app_icon())
         self.setMinimumSize(*MIN_SIZE)
@@ -115,7 +154,8 @@ class FlowWindow(QMainWindow):
         row = QHBoxLayout(body)
         row.setSpacing(14)
         row.setContentsMargins(20, 16, 20, 10)
-        row.addWidget(self._build_plan_card(), 3)
+        # 计划栏有「勾选框 + 任务名 + 计时 + 两个按钮」，比另两栏更需要宽度
+        row.addWidget(self._build_plan_card(), 4)
         row.addWidget(self._build_focus_card(), 4)
         row.addWidget(self._build_stats_card(), 3)
         root.addWidget(body, 1)
@@ -224,7 +264,7 @@ class FlowWindow(QMainWindow):
         layout = card.layout()
         layout.setSpacing(8)
 
-        self._plan_hint = QLabel("勾选即完成（用时会计入今日统计）")
+        self._plan_hint = QLabel("点「▶ 计时」给某一项单独计时，同一时刻只跑一项；勾选完成会把该项用时记入今日统计")
         self._plan_hint.setWordWrap(True)
         self._plan_hint.setStyleSheet(
             f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
@@ -305,11 +345,60 @@ class FlowWindow(QMainWindow):
             return
         QTimer.singleShot(200, self._refresh_plan)
 
+    # ── 计划项计时 ──────────────────────────────────────────
+    def _task_secs(self, text):
+        """该任务今天的累计用时（秒）。"""
+        return int(self._flow_timers.get(date.today().isoformat(), {}).get(text, 0))
+
+    def _add_task_secs(self, text, secs):
+        day = date.today().isoformat()
+        bucket = self._flow_timers.setdefault(day, {})
+        bucket[text] = int(bucket.get(text, 0)) + int(secs)
+        save_flow_timers(self._flow_timers)
+
+    def toggle_task_timer(self, text):
+        """开始/暂停某个计划项的计时。
+
+        同一时刻只跑一个任务：点另一个任务会自动把上一个暂停
+        （避免两个任务同时累加时间，那会让统计失真）。
+        """
+        if self._active_task == text:
+            self._active_task = None
+            self._status.setText("已暂停计时")
+        else:
+            self._active_task = text
+            self._status.setText("正在计时：%s" % text[:20])
+        self._refresh_plan()
+
+    def _tick_task_timer(self):
+        """每秒给当前计时的计划项累加 1 秒。"""
+        if not self._active_task:
+            return
+        day = date.today().isoformat()
+        bucket = self._flow_timers.setdefault(day, {})
+        bucket[self._active_task] = int(bucket.get(self._active_task, 0)) + 1
+        self._timer_dirty = True
+        for text, label in self._plan_time_labels.items():
+            if text == self._active_task:
+                label.setText(_fmt_clock(bucket[self._active_task]))
+                if not label.isVisible():
+                    label.setVisible(True)
+        # 定期落盘：程序异常退出时不至于丢掉未保存的计时
+        self._since_save = getattr(self, "_since_save", 0) + 1
+        if self._since_save >= 15:
+            self._flush_timers()
+
+    def _flush_timers(self):
+        if getattr(self, "_timer_dirty", False):
+            save_flow_timers(self._flow_timers)
+            self._timer_dirty = False
+            self._since_save = 0
+
     def _on_toggle_task(self, todo, checked):
         """勾选完成/取消完成，并同步到主页待办。
 
-        完成时若计时器有已用时长，就一起记进历史 —— 这样「今日已完成任务
-        累计时长」反映的是真实投入，而不是一律 0。
+        完成时优先记该计划项自己的计时（累计用时的**新增部分**），
+        没有用过计划项计时才退回共享计时器的已用时长。
         """
         widget = getattr(self._main, "_todo_widget", None)
         if widget is None:
@@ -317,11 +406,13 @@ class FlowWindow(QMainWindow):
         try:
             if bool(todo.done) != bool(checked):
                 if checked:
-                    elapsed = 0
-                    timer = getattr(self._main, "_timer_widget", None)
-                    if timer is not None:
-                        elapsed = timer.get_elapsed_seconds()
-                        timer._on_reset()          # 一段专注结束，计时器归位
+                    elapsed = self._task_secs(todo.text)
+                    if elapsed <= 0:
+                        timer = getattr(self._main, "_timer_widget", None)
+                        if timer is not None:
+                            elapsed = timer.get_elapsed_seconds()
+                    if self._active_task == todo.text:
+                        self._active_task = None
                     widget._toggle_todo_by_ref(todo, elapsed_seconds=elapsed)
                 else:
                     widget._toggle_todo_by_ref(todo)
@@ -536,6 +627,7 @@ class FlowWindow(QMainWindow):
                     "已暂停 · 剩余 %s" % _fmt_duration(timer.get_remaining_seconds()))
             else:
                 self._state_label.setText("准备开始")
+        self._tick_task_timer()
         self._stage.refresh()
         self._refresh_stats()
 
@@ -579,6 +671,7 @@ class FlowWindow(QMainWindow):
         必须先 takeAt 把控件从布局摘掉、再 setParent(None)，
         只用 deleteLater() 的话控件在重绘前仍可见，会出现"渲染两份"的残影。
         """
+        self._plan_time_labels = {}
         while self._plan_list.count() > 1:
             item = self._plan_list.takeAt(0)
             w = item.widget()
@@ -627,7 +720,7 @@ class FlowWindow(QMainWindow):
             box = QCheckBox()
             box.setChecked(False)
             box.setCursor(Qt.CursorShape.PointingHandCursor)
-            box.setToolTip("标记为已完成（会把专注用时记入今日统计）")
+            box.setToolTip("标记为已完成（会把这项的计时一起记入今日统计）")
             box.clicked.connect(
                 lambda checked=False, t=item: self._on_toggle_task(t, checked))
             row.addWidget(box)
@@ -637,6 +730,37 @@ class FlowWindow(QMainWindow):
             text.setStyleSheet(
                 f"color: {self._c('text')}; font-size: 12px; background: transparent;")
             row.addWidget(text, 1)
+
+            # 每个计划项自己的计时开关与累计用时（没有用时就不占位）
+            active = self._active_task == item.text
+            secs = self._task_secs(item.text)
+
+            time_label = QLabel(_fmt_clock(secs) if (secs or active) else "")
+            time_label.setVisible(bool(secs or active))
+            time_label.setStyleSheet(
+                f"color: {self._c('accent') if active else self._c('text2')};"
+                " font-size: 11px; background: transparent;")
+            time_label.setToolTip("这一项今天累计专注的时长")
+            row.addWidget(time_label)
+            self._plan_time_labels[item.text] = time_label
+
+            t_btn = QPushButton("⏸ 计时中" if active else "▶ 计时")
+            t_btn.setFixedHeight(24)
+            t_btn.setMinimumWidth(64 if not active else 74)
+            t_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            t_btn.setToolTip("暂停这一项的计时" if active else "开始给这一项单独计时")
+            t_btn.setStyleSheet(
+                "QPushButton {"
+                f" background: {self._c('accent') if active else 'transparent'};"
+                f" border: 1px solid {self._c('accent') if active else self._c('border')};"
+                " border-radius: 6px; padding: 2px 6px;"
+                f" color: {'#FFFFFF' if active else self._c('text2')};"
+                " font-size: 11px; }"
+                f"QPushButton:hover {{ border-color: {self._c('accent_h')};"
+                f" color: {'#FFFFFF' if active else self._c('accent')}; }}")
+            t_btn.clicked.connect(
+                lambda checked=False, t=item.text: self.toggle_task_timer(t))
+            row.addWidget(t_btn)
 
             del_btn = QPushButton("✕")
             del_btn.setFixedSize(20, 20)
@@ -692,8 +816,14 @@ class FlowWindow(QMainWindow):
 
     def closeEvent(self, event):
         """关掉心流窗口等于回到 ToYu（用户按 X 时不能把程序留成"没有窗口"）。"""
+        self._flush_timers()
         if self._main._flow_active:
             event.ignore()
             self._main.exit_flow_mode()
             return
         super().closeEvent(event)
+
+    def hideEvent(self, event):
+        """隐藏时也要落盘：切回主窗口时正在计时的进度不能丢。"""
+        self._flush_timers()
+        super().hideEvent(event)
