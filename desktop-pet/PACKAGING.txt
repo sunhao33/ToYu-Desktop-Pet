@@ -2,37 +2,43 @@ ToYu 打包规范
 =============
 
 ## 版本号
-- 每次功能更新 +0.01，命名格式：YoTu0.XX.zip（例：YoTu0.30.zip）
-- 满 10 个版本时，创建文件夹（如 0.21-0.30）并将这 10 个 zip 移入归档
+- 每次功能更新 +0.01，changelog.txt 最上面写一条 `v0.XX (日期)`
+- 打包脚本从 changelog.txt 自动读取版本号，不需要改脚本
 
 ## 输出位置
-- zip 文件放到 C:\Users\34338\Desktop\003\ 目录下（003 根目录）
+- zip 输出到项目根目录（desktop-pet 的上一级），命名 `ToYu_v0.XX.zip`
+- 例：`TUYO文件\tuyo\ToYu_v0.65.zip`
 
 ## 打包步骤
 
-### 1. 更新资源列表
-- 检查 ToYu.spec 的 datas 列表，确保所有新资源文件都加入：
-  - resources/ 下的所有图片、音频等
+### 1. 更新 changelog
+- 在 desktop-pet/changelog.txt 顶部插入本次版本条目
 
-### 2. 构建
+### 2. 检查资源列表
+- ToYu.spec 的 datas 需包含 resources/ 下所有新图片、音频、配件 png
+
+### 3. 构建 exe
 ```bash
-cd "C:\Users\34338\Desktop\003\desktop-pet"
+cd desktop-pet
 python -m PyInstaller ToYu.spec --noconfirm
 ```
+产物：`desktop-pet/dist/ToYu.exe`（约 67 MB，单文件）
 
-### 3. 创建 zip
-- 根目录放：ToYu.exe、changelog.txt
-- desktop-pet/ 子目录放完整源码：
-  - main.py
-  - requirements.txt
-  - changelog.txt
-  - image_processor/
-  - pet_engine/
-  - resources/
-  - ui/
-- 格式参考上次成功的打包（如 v0.29），用 zipfile.ZIP_DEFLATED 压缩
+### 4. 打包 zip
+```bash
+cd desktop-pet
+python _package.py
+```
+自动完成：复制 exe + changelog 到根目录，附带完整源码到 `desktop-pet/`，
+排除 build/dist/__pycache__/临时脚本，最后打印条目数与根目录内容。
 
-### 4. 验证
-- 确认 zip 内 ToYu.exe 在根目录
-- 确认 changelog.txt 在根目录
-- 确认 desktop-pet/ 下有完整源码
+### 5. 验证
+- zip 根目录含：ToYu.exe、changelog.txt
+- zip 内 `desktop-pet/` 含：main.py、requirements.txt、changelog.txt、
+  image_processor/、pet_engine/、ui/、resources/、ToYu.spec
+- 双击 exe 能起（首次启动默认从收藏夹里的 ToYu / TV 小电视开始）
+
+## 依赖
+- 运行：PyQt6、Pillow、numpy（rembg + onnxruntime 仅 AI 抠图需要）
+- 打包：pyinstaller
+- `.gitignore` 排除 *.zip / build / dist，exe 不进 git，只进发布包

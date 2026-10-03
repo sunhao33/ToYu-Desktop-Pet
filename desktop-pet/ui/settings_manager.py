@@ -224,3 +224,67 @@ class SettingsManager:
     @auto_home_timeout.setter
     def auto_home_timeout(self, value):
         self._settings.setValue("pet/auto_home_timeout", int(value))
+
+    # ── 桌面工具 ────────────────────────────────────────────
+    @property
+    def clipboard_enabled(self):
+        val = self._settings.value("tools/clipboard_enabled", False)
+        if isinstance(val, str):
+            return val.lower() == "true"
+        return bool(val)
+
+    @clipboard_enabled.setter
+    def clipboard_enabled(self, value):
+        self._settings.setValue("tools/clipboard_enabled", value)
+
+    @property
+    def clipboard_history(self):
+        import json
+        val = self._settings.value("tools/clipboard_history")
+        if not val:
+            return []
+        try:
+            data = json.loads(val)
+        except Exception:
+            return []
+        return data if isinstance(data, list) else []
+
+    @clipboard_history.setter
+    def clipboard_history(self, items):
+        import json
+        self._settings.setValue("tools/clipboard_history", json.dumps(items))
+
+    @property
+    def eye_care_enabled(self):
+        val = self._settings.value("tools/eye_care_enabled", False)
+        if isinstance(val, str):
+            return val.lower() == "true"
+        return bool(val)
+
+    @eye_care_enabled.setter
+    def eye_care_enabled(self, value):
+        self._settings.setValue("tools/eye_care_enabled", value)
+
+    @property
+    def eye_care_work_minutes(self):
+        return int(self._settings.value("tools/eye_care_work_minutes", 45))
+
+    @eye_care_work_minutes.setter
+    def eye_care_work_minutes(self, value):
+        self._settings.setValue("tools/eye_care_work_minutes", int(value))
+
+    @property
+    def eye_care_rest_minutes(self):
+        return int(self._settings.value("tools/eye_care_rest_minutes", 5))
+
+    @eye_care_rest_minutes.setter
+    def eye_care_rest_minutes(self, value):
+        self._settings.setValue("tools/eye_care_rest_minutes", int(value))
+
+    @property
+    def eye_care_deadline(self):
+        return float(self._settings.value("tools/eye_care_deadline", 0.0))
+
+    @eye_care_deadline.setter
+    def eye_care_deadline(self, value):
+        self._settings.setValue("tools/eye_care_deadline", float(value))

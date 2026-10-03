@@ -197,6 +197,7 @@ class MainWindow(QMainWindow):
         self._input_path = ""
         self._first_launch = False
         self._bead_editor = None
+        self._tools_hub = None
         self._pulse_phase = 0.0
         self._pulse_timer = QTimer(self)
         self._pulse_timer.timeout.connect(self._pulse_status)
@@ -211,6 +212,8 @@ class MainWindow(QMainWindow):
 
         self._screen_tracker = ScreenTimeTracker()
         self._screen_tracker.start()
+
+        self._init_tools_hub()
 
     def _restore_state(self):
         saved = self.settings.pet_image_path
@@ -947,7 +950,7 @@ class MainWindow(QMainWindow):
                 font-weight: bold;
             }
         """
-        for idx, (name, icon) in enumerate([("效率工具", "📋"), ("数据面板", "📊")]):
+        for idx, (name, icon) in enumerate([("效率工具", "📋"), ("桌面工具", "🖥"), ("数据面板", "📊")]):
             btn = QPushButton(f"{icon} {name}")
             btn.setCheckable(True)
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
@@ -1093,6 +1096,10 @@ class MainWindow(QMainWindow):
         right_card_layout.addWidget(self._calendar)
 
         tools_p2_layout.addWidget(right_card, 1)  # right half = 1/2
+
+        from ui.tools.desktop_tools_page import DesktopToolsPage
+        self._desktop_tools_page = DesktopToolsPage(self)
+        self._tools_stack.addWidget(self._desktop_tools_page)
 
         self._tools_stack.addWidget(tools_p2)
 
@@ -1950,6 +1957,51 @@ class MainWindow(QMainWindow):
         self._tools_stack.setCurrentIndex(idx)
         for i, btn in self._tools_tab_btns.items():
             btn.setChecked(i == idx)
+        if idx == 1:
+            self._refresh_desktop_tools()
+
+    # ── 桌面工具（剪贴板历史 / 护眼提醒）────────────────────
+    def _init_tools_hub(self):
+        from ui.tools.hub import DesktopToolsHub
+
+        self._tools_hub = DesktopToolsHub(
+            self.settings,
+            notify=self._on_tools_notify,
+            pet=self._pet,
+        )
+        self._tools_hub.set_listeners(
+            clipboard_cb=lambda history: self._desktop_tools_page.refresh_clipboard(history),
+            eyedata_cb=lambda eye_care: self._desktop_tools_page.refresh_eye_care(eye_care),
+        )
+        self._tools_hub.start()
+        self._desktop_tools_page.refresh_clipboard(self._tools_hub.clipboard.history)
+        self._desktop_tools_page.refresh_eye_care(self._tools_hub.eye_care)
+
+    def attach_tools_hub_pet(self, pet):
+        """Let the hub talk to the pet so reminders pop above it."""
+        if self._tools_hub:
+            self._tools_hub.pet = pet
+
+    def _refresh_desktop_tools(self):
+        if not self._tools_hub:
+            return
+        self._desktop_tools_page.refresh_clipboard(self._tools_hub.clipboard.history)
+        self._desktop_tools_page.refresh_eye_care(self._tools_hub.eye_care)
+
+    def _on_tools_notify(self, kind, title, body):
+        pet = self._pet if self._pet and self._pet.isVisible() else None
+        if not pet:
+            self._status.setText(f"{title} {body}")
+            return
+        from pet_engine.pet_bubble import PomodoroNotificationBubble
+
+        bubble = PomodoroNotificationBubble(pet, title=title, subtitle=body)
+        bubble.show_near(pet)
+        setattr(self, f"_notify_bubble_{kind}", bubble)
+        if kind == "eye_rest":
+            pet.trigger_dance(2.5)
+        else:
+            pet.trigger_sparkle_burst()
 
     def _on_page_switch(self, idx, label):
         """Switch page and enforce mutually exclusive tab highlighting."""
@@ -2040,6 +2092,7 @@ class MainWindow(QMainWindow):
                 )
 
             self._pet.show()
+            self.attach_tools_hub_pet(self._pet)
             if self.settings.house_enabled:
                 self._spawn_house()
             self._show_btn.setEnabled(True)
@@ -2108,6 +2161,9 @@ class MainWindow(QMainWindow):
 
     def _on_app_exit(self):
         self._screen_tracker.stop()
+        if self._tools_hub:
+            self._tools_hub.flush()
+            self._tools_hub.stop()
         if self._pet:
             self._pet.close()
         QApplication.quit()
@@ -3311,6 +3367,9 @@ class MainWindow(QMainWindow):
 
         if hasattr(self, '_drop_zone'):
             self._drop_zone.set_dark(self._is_dark_mode)
+
+        if getattr(self, '_desktop_tools_page', None) is not None:
+            self._desktop_tools_page.restyle()
 
         self.update()
 
