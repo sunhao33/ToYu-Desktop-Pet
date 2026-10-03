@@ -269,4 +269,149 @@ def build_default_registry(main_window) -> ToolRegistry:
         returns="今日任务完成情况、累计时长、屏幕时间",
     ))
 
+    # ── 屏幕时间明细 ────────────────────────────────────────
+    def get_screen_time_detail(top: int = 5) -> str:
+        if main_window is None:
+            return "失败：主窗口不可用"
+        tracker = getattr(main_window, "_screen_tracker", None)
+        if tracker is None:
+            return "失败：屏幕统计组件不可用"
+        try:
+            today = tracker.get_today_data()
+            if not today:
+                return "今天还没有屏幕使用记录"
+            ranked = sorted(today, key=lambda p: p[1], reverse=True)[:max(1, min(top, 10))]
+            lines = ["今日屏幕时间前 %d 名：" % len(ranked)]
+            for app, secs in ranked:
+                lines.append("· %s：%d 分钟" % (app, int(secs) // 60))
+            try:
+                focus = tracker.get_focus_stats()
+                if isinstance(focus, dict) and focus.get("sessions"):
+                    lines.append("共 %d 段记录，最长一段 %d 分钟"
+                                 % (focus.get("sessions", 0),
+                                    int(focus.get("longest_secs", 0)) // 60))
+            except Exception:  # noqa: BLE001 — 附加信息取不到不影响主结果
+                pass
+            return "\n".join(lines)
+        except (RuntimeError, AttributeError, TypeError):
+            return "失败：读取屏幕统计时出错"
+
+    reg.register(ToolSpec(
+        name="get_screen_time_detail",
+        description="查询今天各应用的使用时长排名。用户问「我今天都在用什么」"
+                    "「哪个软件用得最多」时使用。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "top": {
+                    "type": "integer", "default": 5, "minimum": 1, "maximum": 10,
+                    "description": "返回前几名，默认 5",
+                },
+            },
+        },
+        handler=get_screen_time_detail,
+        returns="按使用时长排序的应用列表",
+    ))
+
+    # ── 日历标注 ────────────────────────────────────────────
+    def add_calendar_note(date: str, text: str) -> str:
+        if main_window is None:
+            return "失败：主窗口不可用"
+        calendar = getattr(main_window, "_calendar", None)
+        if calendar is None:
+            return "失败：日历组件不可用"
+
+        # 让模型可以只说"今天/明天"，由这里换算成真实日期
+        from datetime import date as _date, timedelta as _timedelta
+        key = (date or "").strip()
+        aliases = {"今天": 0, "今日": 0, "明天": 1, "明日": 1, "后天": 2}
+        if key in aliases:
+            key = (_date.today() + _timedelta(days=aliases[key])).isoformat()
+        elif not key:
+            key = _date.today().isoformat()
+        else:
+            import re as _re
+            if not _re.match(r"^\d{4}-\d{2}-\d{2}$", key):
+                return "失败：日期格式应为 YYYY-MM-DD，或使用 今天/明天/后天"
+
+        try:
+            events = getattr(calendar, "_events", None)
+            if not isinstance(events, dict):
+                return "失败：日历数据不可读"
+            events.setdefault(key, []).append({"text": text, "color": "yellow"})
+            calendar._save_events()
+            try:
+                calendar._update_calendar()
+            except Exception:  # noqa: BLE001 — 刷新失败不影响已写入的数据
+                pass
+        except (RuntimeError, AttributeError, TypeError):
+            return "失败：写入日历时出错"
+        return "已在 %s 添加标注「%s」" % (key, text)
+
+    reg.register(ToolSpec(
+        name="add_calendar_note",
+        description="在日历上给某一天加标注（比如考试、截止日期）。"
+                    "用户说「记一下周五要交报告」「下周三有考试」时使用。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "date": {
+                    "type": "string", "default": "今天",
+                    "description": "日期，格式 YYYY-MM-DD；也可以直接说 今天/明天/后天",
+                },
+                "text": dict(_TODO_TEXT, description="标注内容"),
+            },
+            "required": ["text"],
+        },
+        handler=add_calendar_note,
+        returns="写入结果与最终使用的日期",
+    ))
+
+    # ── 宠物行为 ────────────────────────────────────────────
+    _PET_ACTIONS = ("dance", "celebrate", "tired", "sleep", "sparkle")
+
+    def set_pet_behavior(action: str = "dance") -> str:
+        if main_window is None:
+            return "失败：主窗口不可用"
+        pet = getattr(main_window, "_pet", None)
+        if pet is None:
+            return "失败：宠物还没有启动"
+        mapping = {
+            "dance": ("trigger_dance", "跳舞"),
+            "celebrate": ("trigger_celebrate", "庆祝"),
+            "tired": ("trigger_tired", "累了"),
+            "sleep": ("trigger_sleep", "睡觉"),
+            "sparkle": ("trigger_sparkle_burst", "闪光"),
+        }
+        if action not in mapping:
+            return "失败：action 只能是 %s" % "、".join(_PET_ACTIONS)
+        method_name, label = mapping[action]
+        method = getattr(pet, method_name, None)
+        if method is None:
+            return "失败：宠物不支持这个动作"
+        try:
+            method()
+        except (RuntimeError, TypeError):
+            return "失败：执行动作时出错"
+        return "宠物正在%s" % label
+
+    reg.register(ToolSpec(
+        name="set_pet_behavior",
+        description="让桌面宠物做一个动作（跳舞/庆祝/累了/睡觉/闪光）。"
+                    "用户完成目标想庆祝、或说「跳个舞」「庆祝一下」时使用。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "action": {
+                    "type": "string",
+                    "enum": list(_PET_ACTIONS),
+                    "default": "dance",
+                    "description": "动作类型",
+                },
+            },
+        },
+        handler=set_pet_behavior,
+        returns="动作是否已触发",
+    ))
+
     return reg

@@ -197,7 +197,33 @@ class AICompanion:
         self._tool_registry = tool_registry
         self._tool_runtime = tool_runtime
         self._on_trace: Optional[Callable[[str], None]] = None
+        # 上下文提供者：返回"桌面状态块"文本。为 None 时退回旧行为
+        self._context_provider: Optional[Callable[[], str]] = None
+        self._context = ""          # 兼容旧的 inject_context（一次性附注）
         self._load_history()
+
+    # ── 上下文注入 ──────────────────────────────────────────
+    def set_context_provider(self, provider):
+        """注入上下文提供者。每次对话实时取一次，避免状态过期。"""
+        self._context_provider = provider
+
+    def build_state_block(self) -> str:
+        """取一次最新的桌面状态块。取不到就返回空串，绝不影响聊天。"""
+        if self._context_provider is None:
+            return ""
+        try:
+            return (self._context_provider() or "").strip()
+        except Exception as exc:  # noqa: BLE001
+            print("[Context] 状态块构建失败: %s" % exc)
+            return ""
+
+    def compose_system_prompt(self) -> str:
+        """人格提示 + 桌面状态 + 一次性附注。"""
+        parts = [self.get_system_prompt_with_context()]
+        block = self.build_state_block()
+        if block:
+            parts.append(block)
+        return "\n\n".join(p for p in parts if p)
 
     # ── 工具能力 ────────────────────────────────────────────
     def set_tools(self, registry, runtime):
@@ -231,7 +257,7 @@ class AICompanion:
         if len(self._history) > self.config.max_history:
             self._history = self._history[-self.config.max_history:]
 
-        system_prompt = self.get_system_prompt_with_context()
+        system_prompt = self.compose_system_prompt()
 
         # 有工具时走 Agent 主循环：模型可以多轮调用工具再回答
         if self.tools_enabled:

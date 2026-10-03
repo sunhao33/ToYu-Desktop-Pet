@@ -480,6 +480,28 @@ class SettingsDialog(QDialog):
 
         layout.addWidget(mini_group)
 
+        # ── AI 上下文隐私 ───────────────────────────────────
+        privacy_group = QGroupBox("AI 能看到什么")
+        privacy_layout = QVBoxLayout(privacy_group)
+
+        hint = QLabel("待办、学习时长、日历、宠物状态默认提供给 AI（用于回答你的问题）")
+        hint.setWordWrap(True)
+        hint.setStyleSheet(f"color: {TEXT_SEC}; font-size: 10px;")
+        privacy_layout.addWidget(hint)
+
+        self._ctx_clipboard = QCheckBox("允许 AI 看到剪贴板最近内容")
+        privacy_layout.addWidget(self._ctx_clipboard)
+
+        self._ctx_foreground = QCheckBox("允许 AI 看到当前使用的应用名称")
+        privacy_layout.addWidget(self._ctx_foreground)
+
+        warn = QLabel("💡 这两项属于隐私敏感信息，默认关闭。开启后仅用于当次对话，不会上传到别处")
+        warn.setWordWrap(True)
+        warn.setStyleSheet(f"color: {TEXT_SEC}; font-size: 10px;")
+        privacy_layout.addWidget(warn)
+
+        layout.addWidget(privacy_group)
+
         startup_group = QGroupBox("启动")
         startup_layout = QVBoxLayout(startup_group)
 
@@ -546,6 +568,9 @@ class SettingsDialog(QDialog):
 
         self._mini_timer.setChecked(self.settings.mini_timer_enabled)
 
+        self._ctx_clipboard.setChecked(self.settings.context_clipboard_enabled)
+        self._ctx_foreground.setChecked(self.settings.context_foreground_enabled)
+
         self._auto_start.setChecked(self.settings.auto_start)
 
     def _save_settings(self):
@@ -569,6 +594,9 @@ class SettingsDialog(QDialog):
 
         self.settings.mini_timer_enabled = self._mini_timer.isChecked()
 
+        self.settings.context_clipboard_enabled = self._ctx_clipboard.isChecked()
+        self.settings.context_foreground_enabled = self._ctx_foreground.isChecked()
+
         self.settings.auto_start = self._auto_start.isChecked()
 
     def _reset_defaults(self):
@@ -582,6 +610,8 @@ class SettingsDialog(QDialog):
         self._pomo_enabled.setChecked(False)
         self._pomo_interval.setValue(25)
         self._mini_timer.setChecked(True)
+        self._ctx_clipboard.setChecked(False)
+        self._ctx_foreground.setChecked(False)
         self._auto_start.setChecked(False)
         self._opacity_slider.setValue(100)
 

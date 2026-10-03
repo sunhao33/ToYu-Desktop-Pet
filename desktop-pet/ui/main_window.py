@@ -3601,14 +3601,33 @@ class MainWindow(QMainWindow):
             pass
 
     def _bind_agent_tools(self):
-        """把工具能力接到当前 AI 实例上。"""
+        """把工具能力与上下文注入接到当前 AI 实例上。"""
         runtime = self._ensure_agent_tools()
-        if runtime is None or self._pet is None:
+        if self._pet is None:
             return
         ai = getattr(self._pet, "_ai", None)
-        if ai is not None:
+        if ai is None:
+            return
+        if runtime is not None:
             ai.set_tools(self._tool_registry, runtime)
-            ai.set_trace_callback(self._on_agent_trace)
+        ai.set_trace_callback(self._on_agent_trace)
+        # 上下文注入：每次对话实时构建"桌面状态块"（带 400 token 预算）
+        ai.set_context_provider(self._build_ai_context)
+
+    def _build_ai_context(self) -> str:
+        """构建给 AI 的桌面状态块。"""
+        if getattr(self, "_context_builder", None) is None:
+            try:
+                from pet_engine.agent.context import DesktopContextBuilder
+                self._context_builder = DesktopContextBuilder(self, self.settings)
+            except Exception as exc:  # noqa: BLE001
+                print("[Context] 构建器初始化失败: %s" % exc)
+                return ""
+        try:
+            return self._context_builder.build()
+        except Exception as exc:  # noqa: BLE001
+            print("[Context] 状态块构建失败: %s" % exc)
+            return ""
 
     def _save_ai_settings(self):
         """Save AI settings from the AI page."""

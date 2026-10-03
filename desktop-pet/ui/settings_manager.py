@@ -331,3 +331,27 @@ class SettingsManager:
             self._settings.remove("flow/mini_timer_pos")
         else:
             self._settings.setValue("flow/mini_timer_pos", "%d,%d" % (value[0], value[1]))
+
+    # ── AI 上下文隐私开关 ───────────────────────────────────
+    # 剪贴板内容与前台应用名属于隐私敏感信息，默认**不**提供给 AI
+    @property
+    def context_clipboard_enabled(self):
+        return self._bool("context/clipboard_enabled", False)
+
+    @context_clipboard_enabled.setter
+    def context_clipboard_enabled(self, value):
+        self._settings.setValue("context/clipboard_enabled", bool(value))
+
+    @property
+    def context_foreground_enabled(self):
+        return self._bool("context/foreground_enabled", False)
+
+    @context_foreground_enabled.setter
+    def context_foreground_enabled(self, value):
+        self._settings.setValue("context/foreground_enabled", bool(value))
+
+    def _bool(self, key, default=False):
+        val = self._settings.value(key, default)
+        if isinstance(val, str):
+            return val.lower() == "true"
+        return bool(val)

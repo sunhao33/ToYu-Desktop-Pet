@@ -41,6 +41,7 @@ TESTS = [
     ("悬浮计时小窗", "_test_mini_timer.py"),
     ("智能体工具调用", "_test_agent_tools.py"),
     ("智能体端到端集成", "_test_agent_integration.py"),
+    ("智能体上下文注入", "_test_agent_context.py"),
 ]
 
 env = dict(os.environ)

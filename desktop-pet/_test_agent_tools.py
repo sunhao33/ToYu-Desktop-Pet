@@ -132,9 +132,16 @@ check("非列表输入不崩", parse_tool_calls({"weird": True}) == [])
 # 3. 工具注册表
 # ══════════════════════════════════════════════════════════
 reg = build_default_registry(None)
-check("首批注册了 6 个工具", len(reg) == 6, "实际 %d 个：%s" % (len(reg), reg.names()))
-expected_tools = {"add_todo", "complete_todo", "list_todos",
-                  "start_focus", "stop_focus", "get_learning_stats"}
+# 第 1 批 6 个 + 第 2 批 3 个（屏幕时间明细 / 日历标注 / 宠物行为）
+check("工具已注册（第 1+2 批共 9 个）", len(reg) == 9,
+      "实际 %d 个：%s" % (len(reg), reg.names()))
+expected_tools = {
+    # 第 1 批
+    "add_todo", "complete_todo", "list_todos",
+    "start_focus", "stop_focus", "get_learning_stats",
+    # 第 2 批
+    "get_screen_time_detail", "add_calendar_note", "set_pet_behavior",
+}
 check("工具名符合预期", set(reg.names()) == expected_tools, str(reg.names()))
 
 schemas = reg.schemas()
