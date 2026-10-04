@@ -22,13 +22,19 @@ import zipfile
 PET_DIR = os.path.dirname(os.path.abspath(__file__))
 PROJECT_ROOT = os.path.dirname(PET_DIR)
 DIST_ONEFILE = os.path.join(PET_DIR, "dist", "ToYu.exe")
-DIST_ONEDIR = os.path.join(PET_DIR, "dist_dir2", "ToYu")
+
+# 产物目录可用环境变量覆盖，默认仍是 dist_dir2。
+# 存在的意义：从历史快照批量重建发布包时，不想覆盖现有的构建产物，
+# 也不想为了复用本脚本去改源码里的路径。
+DIST_DIRNAME = os.environ.get("TOYU_DIST_DIR", "dist_dir2")
+DIST_ONEDIR = os.path.join(PET_DIR, DIST_DIRNAME, "ToYu")
 CHANGELOG_PATH = os.path.join(PET_DIR, "changelog.txt")
 STAGING = os.path.join(PET_DIR, "_staging")
 
 EXCLUDE_DIRS = {"dist", "dist_dir", "build", "build_dir", "build_debug", "__pycache__",
                 ".git", ".claude", "_staging", "build_dir2", "dist_dir2",
-                "build_debug2", "dist_onedir", "_work", "media", "temp", "backup"}
+                "build_debug2", "dist_onedir", "_work", "media", "temp", "backup",
+                "dist_rebuild", "build_rebuild"}
 EXCLUDE_EXTS = {".zip", ".pyc", ".log", ".bak"}
 
 # 运行时数据文件：**绝不能进发布包**。
