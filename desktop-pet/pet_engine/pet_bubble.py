@@ -571,6 +571,10 @@ class ChatBubble(QWidget):
         self._drag_pos = None
         self._user_dragged = False  # True after user drags the bubble
         self._paint_rect = QRectF()  # updated in paintEvent
+        # 流式显示状态（打字机效果）
+        self._stream_label = None
+        self._stream_text = ""
+        self._stream_animator = None
 
         self._init_ui()
 
@@ -784,6 +788,46 @@ class ChatBubble(QWidget):
         self._msg_layout.insertWidget(self._msg_layout.count() - 1, bubble)
 
         QTimer.singleShot(50, self._scroll_to_bottom)
+        return bubble
+
+    # ── 流式显示 ────────────────────────────────────────────
+    def begin_stream(self) -> QLabel:
+        """开一个空气泡准备逐字填充，返回气泡控件。
+
+        用户点一下气泡可以跳过动画直接看全文。
+        """
+        if getattr(self, "_stream_label", None) is not None:
+            self.finish_stream()
+        label = self._add_message("ai", "")
+        label.setToolTip("点一下可以直接看完整回复")
+        label.mousePressEvent = lambda event: self.finish_stream()  # type: ignore
+        self._stream_label = label
+        self._stream_text = ""
+        return label
+
+    def append_stream(self, chunk: str):
+        """往当前流式气泡追加一段文本。"""
+        label = getattr(self, "_stream_label", None)
+        if label is None:
+            return
+        try:
+            self._stream_text = (getattr(self, "_stream_text", "") or "") + chunk
+            label.setText(self._stream_text)
+            self._scroll_to_bottom()
+        except RuntimeError:
+            self._stream_label = None
+
+    def finish_stream(self):
+        """结束流式显示（补齐剩余文本并清理状态）。"""
+        label = getattr(self, "_stream_label", None)
+        if label is None:
+            return
+        try:
+            if hasattr(self, "_stream_animator") and self._stream_animator is not None:
+                self._stream_animator.finish_now()
+        except RuntimeError:
+            pass
+        self._stream_label = None
 
     def _scroll_to_bottom(self):
         """Scroll to the bottom of the message list."""
@@ -792,7 +836,22 @@ class ChatBubble(QWidget):
 
     def show_response(self, text: str):
         """Show AI response in chat history."""
+        # 如果正在流式填充，先把动画收尾，避免出现两个气泡
+        self.finish_stream()
         self._add_message("ai", text)
+
+    def show_response_streamed(self, text: str, animator=None):
+        """以打字机效果显示回复。
+
+        animator 为 None 或文本过长时退回一次性显示。
+        """
+        self.finish_stream()
+        if animator is None or not text:
+            self._add_message("ai", text)
+            return
+        self.begin_stream()
+        self._stream_animator = animator
+        animator.start(text)
 
     def load_history(self, messages):
         """Load chat history from AI companion."""

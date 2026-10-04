@@ -62,6 +62,8 @@ class AgentLoop:
         self._runtime = runtime
         self._transport = transport
         self._on_trace = on_trace
+        # 本次运行的统计（供指标采集）
+        self.stats: dict = {}
 
     # ── 系统提示 ────────────────────────────────────────────
     def build_tool_prompt(self) -> str:
@@ -87,6 +89,12 @@ class AgentLoop:
         schemas = self._registry.schemas()
         deadline = time.time() + TOTAL_TIMEOUT_SECONDS
         final_text = ""
+        started = time.time()
+
+        # 本次运行的统计（供指标采集）
+        self.stats = {"rounds": 0, "tool_calls": 0, "tool_ok": 0,
+                      "model_ms": 0, "tool_ms": 0, "hit_round_limit": False,
+                      "timed_out": False, "transport_error": ""}
 
         # 熔断状态按「一条用户消息」为周期重置。
         # 否则第一条消息里某工具失败两次，之后所有消息都会被永久熔断。
@@ -94,19 +102,28 @@ class AgentLoop:
 
         for round_index in range(MAX_ROUNDS):
             if time.time() > deadline:
+                self.stats["timed_out"] = True
+                self.stats["model_ms"] = int((time.time() - started) * 1000)
                 return self._with_note(
                     final_text, "（思考时间过长，我先停下了。可以再说一次让我继续）")
 
+            self.stats["rounds"] = round_index + 1
             try:
+                call_started = time.time()
                 reply = self._transport(messages, schemas)
+                self.stats["model_ms"] += int((time.time() - call_started) * 1000)
             except Exception as exc:  # noqa: BLE001
+                self.stats["transport_error"] = str(exc)[:120]
+                self.stats["model_ms"] = int((time.time() - started) * 1000)
                 return self._with_note(final_text, "[调用模型失败: %s]" % exc)
 
             if reply is None:
                 return self._with_note(final_text, "[模型没有返回内容]")
 
             if not reply.has_tools:
-                return (reply.content or final_text or "（我没想出该说什么）").strip()
+                text = (reply.content or final_text or "（我没想出该说什么）").strip()
+                self._finish_stats(text, started)
+                return text
 
             # 有工具调用：先记下模型这轮的正文（有些模型会边想边说）
             if reply.content:
@@ -154,8 +171,12 @@ class AgentLoop:
                     call_id=call.call_id, name=call.name,
                     arguments=cleaned, spec=spec, arg_error=err))
 
+            tool_started = time.time()
             results = self._runtime.submit_and_wait(
                 requests, timeout=TOOL_TIMEOUT_SECONDS)
+            self.stats["tool_ms"] += int((time.time() - tool_started) * 1000)
+            self.stats["tool_calls"] += len(results)
+            self.stats["tool_ok"] += sum(1 for r in results if r.ok)
             for result in results:
                 messages.append(result.to_message())
                 self._trace("  %s → %s" % (result.name, result.content[:80]))
@@ -163,10 +184,16 @@ class AgentLoop:
             final_text = self._summarise_after_tools(results, final_text)
 
         # 到达轮数上限
+        self.stats["hit_round_limit"] = True
+        self._finish_stats(final_text, started)
         return self._with_note(
             final_text,
             "（这件事需要多步操作，我已经完成了上面的部分。"
             "还需要继续的话，再说一句就行）")
+
+    def _finish_stats(self, text: str, started: float):
+        self.stats["reply_chars"] = len(text or "")
+        self.stats["total_ms"] = int((time.time() - started) * 1000)
 
     # ── 辅助 ────────────────────────────────────────────────
     def _summarise_after_tools(self, results: list[ToolResult], fallback: str) -> str:

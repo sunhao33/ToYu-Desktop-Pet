@@ -144,6 +144,9 @@ class PetWindow(QMainWindow):
         self._ai = AICompanion(self._ai_config)
         # 一轮对话结束后的回调（主窗口用它做长期记忆抽取）
         self._on_turn_finished: Optional[Callable[[str], None]] = None
+        # 打字机效果（可在设置里关闭）
+        self._typing_enabled = True
+        self._typing = None
         self._chat_bubble = ChatBubble(self)
         self._chat_bubble.message_sent.connect(self._on_ai_message)
 
@@ -1226,7 +1229,15 @@ class PetWindow(QMainWindow):
 
         def on_response(ai_text: str):
             self._chat_bubble.clear_status()
-            self._chat_bubble.show_response(ai_text)
+            # 打字机效果：逐字展开，点气泡可跳过
+            if getattr(self, "_typing_enabled", True) and ai_text:
+                from pet_engine.agent.typing import TypingAnimator
+                if self._typing is None:
+                    self._typing = TypingAnimator(self)
+                    self._typing.chunk.connect(self._chat_bubble.append_stream)
+                self._chat_bubble.show_response_streamed(ai_text, self._typing)
+            else:
+                self._chat_bubble.show_response(ai_text)
             self._show_companion_bubble(ai_text)
             # 这一轮已经结束，后台抽取稳定偏好（不阻塞界面）
             if self._on_turn_finished is not None:

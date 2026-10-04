@@ -1455,6 +1455,40 @@ class MainWindow(QMainWindow):
 
         ai_layout.addWidget(self._memory_card)
 
+        # ── 运行指标 ────────────────────────────────────────
+        # 这些数字是"用数据论证效果"用的：工具成功率、记忆命中率、延迟
+        self._metrics_card = self._make_card("📊 运行指标")
+        metrics_layout = self._metrics_card.layout()
+        metrics_layout.setSpacing(8)
+
+        self._metrics_label = QLabel("正在统计…")
+        self._metrics_label.setWordWrap(True)
+        self._metrics_label.setStyleSheet(
+            f"color: {self._c('text')}; font-size: 11px; background: transparent;"
+            "line-height: 150%;")
+        metrics_layout.addWidget(self._metrics_label)
+
+        metrics_btns = QHBoxLayout()
+        metrics_btns.setSpacing(8)
+        refresh_metrics = QPushButton("刷新统计")
+        refresh_metrics.setObjectName("secondaryBtn")
+        refresh_metrics.setFixedHeight(28)
+        refresh_metrics.setCursor(Qt.CursorShape.PointingHandCursor)
+        refresh_metrics.clicked.connect(self._refresh_metrics_card)
+        metrics_btns.addWidget(refresh_metrics)
+
+        clear_metrics = QPushButton("清空记录")
+        clear_metrics.setObjectName("secondaryBtn")
+        clear_metrics.setFixedHeight(28)
+        clear_metrics.setCursor(Qt.CursorShape.PointingHandCursor)
+        clear_metrics.setToolTip("删除全部指标记录")
+        clear_metrics.clicked.connect(self._clear_metrics)
+        metrics_btns.addWidget(clear_metrics)
+        metrics_btns.addStretch()
+        metrics_layout.addLayout(metrics_btns)
+
+        ai_layout.addWidget(self._metrics_card)
+
         ai_layout.addStretch()
         self._page_stack.addWidget(ai_page)
 
@@ -3674,10 +3708,20 @@ class MainWindow(QMainWindow):
         ai.set_context_provider(self._build_ai_context)
         # 长期记忆：把记忆块拼进系统提示 + 每轮结束抽取偏好
         ai.set_memory_provider(self._build_memory_block)
+        # 指标采集（评审要的量化数据）
+        if ai.metrics is None:
+            try:
+                from pet_engine.agent.metrics import MetricsRecorder
+                ai.metrics = MetricsRecorder()
+            except Exception as exc:  # noqa: BLE001
+                print("[Metrics] 初始化失败: %s" % exc)
+        # 打字机效果跟随设置
+        self._pet._typing_enabled = bool(getattr(self.settings, "typing_enabled", True))
         store = self._ensure_memory()
         if store is not None:
             self._pet._on_turn_finished = self._extract_memories_async
             self._refresh_memory_card()
+        self._refresh_metrics_card()
 
     def _build_memory_block(self, query: str) -> str:
         """按当前问题召回相关记忆。"""
@@ -3890,6 +3934,56 @@ class MainWindow(QMainWindow):
             self._status.setText(
                 "已清空 %d 条记忆%s" % (count, ("，备份在 " + os.path.basename(backup))
                                        if backup else ""))
+        except Exception as exc:  # noqa: BLE001
+            self._status.setText("清空失败: %s" % exc)
+
+    def _refresh_metrics_card(self):
+        """刷新「运行指标」卡片 —— 评审要的量化数据。"""
+        label = getattr(self, "_metrics_label", None)
+        if label is None:
+            return
+        try:
+            ai = getattr(getattr(self, "_pet", None), "_ai", None)
+            recorder = getattr(ai, "metrics", None) if ai else None
+            if recorder is None:
+                label.setText("指标采集未启用")
+                return
+            s = recorder.summary(days=30)
+            if not s.get("turns"):
+                label.setText("还没有对话记录。和宠物聊几句后这里会显示统计。")
+                return
+            lines = [
+                "近 %d 天共 %d 轮对话，其中 %d 轮触发了工具调用"
+                % (s["days"], s["turns"], s["turns_with_tools"]),
+                "工具调用 %d 次，成功率 %d%%"
+                % (s["tool_calls_total"], round(s["tool_success_rate"] * 100)),
+                "平均每轮调用工具 %.2f 次" % s["tool_calls_avg_per_turn"],
+                "记忆命中率 %d%%（%d 轮用上了长期记忆）"
+                % (round(s["recall_rate"] * 100), s["recall_turns"]),
+                "平均模型耗时 %.1f 秒 · 平均工具耗时 %.2f 秒"
+                % (s["avg_model_ms"] / 1000.0, s["avg_tool_ms"] / 1000.0),
+                "平均端到端延迟 %.1f 秒 · 平均回复 %d 字"
+                % (s["avg_perceived_ms"] / 1000.0, s["avg_reply_chars"]),
+            ]
+            if s["degraded_turns"]:
+                lines.append("有 %d 轮走了降级路径（模型不可用时的规则兜底）"
+                             % s["degraded_turns"])
+            label.setText("\n".join(lines))
+        except RuntimeError:
+            pass
+        except Exception as exc:  # noqa: BLE001
+            print("[Metrics] 刷新卡片失败: %s" % exc)
+
+    def _clear_metrics(self):
+        """清空指标记录。"""
+        try:
+            ai = getattr(getattr(self, "_pet", None), "_ai", None)
+            recorder = getattr(ai, "metrics", None) if ai else None
+            if recorder is None:
+                return
+            recorder.clear()
+            self._refresh_metrics_card()
+            self._status.setText("指标记录已清空")
         except Exception as exc:  # noqa: BLE001
             self._status.setText("清空失败: %s" % exc)
 

@@ -359,6 +359,15 @@ class SettingsManager:
     def memory_enabled(self, value):
         self._settings.setValue("memory/enabled", bool(value))
 
+    # ── 打字机效果 ──────────────────────────────────────────
+    @property
+    def typing_enabled(self):
+        return self._bool("ui/typing_enabled", True)
+
+    @typing_enabled.setter
+    def typing_enabled(self, value):
+        self._settings.setValue("ui/typing_enabled", bool(value))
+
     def _bool(self, key, default=False):
         val = self._settings.value(key, default)
         if isinstance(val, str):

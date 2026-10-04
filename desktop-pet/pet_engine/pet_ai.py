@@ -7,6 +7,7 @@ OpenAI-compatible endpoint. Users provide their own API key.
 import json
 import os
 import threading
+import time
 from typing import Optional, Callable
 
 from PyQt6.QtCore import QObject, pyqtSignal
@@ -169,6 +170,7 @@ class AIAgentWorker(QObject):
         self._loop = loop
         self._messages = messages
         self._runtime = runtime
+        self.stats: dict = {}
 
     def start(self):
         threading.Thread(target=self._run, daemon=True).start()
@@ -176,6 +178,7 @@ class AIAgentWorker(QObject):
     def _run(self):
         try:
             text = self._loop.run(self._messages)
+            self.stats = dict(getattr(self._loop, "stats", {}) or {})
             self.finished.emit(text or "（我没想出该说什么）")
         except Exception as exc:  # noqa: BLE001 — 子线程异常绝不能冒泡
             self.finished.emit("[出错了: %s]" % str(exc)[:120])
@@ -201,6 +204,10 @@ class AICompanion:
         self._context_provider: Optional[Callable[[], str]] = None
         # 记忆提供者：按当前问题返回相关的长期记忆文本
         self._memory_provider: Optional[Callable[[str], str]] = None
+        # 指标采集器（可注入；为 None 时不采集）
+        self.metrics = None
+        # 本轮开始时间，用于计算感知延迟
+        self._turn_started = 0.0
         self._context = ""          # 兼容旧的 inject_context（一次性附注）
         self._load_history()
 
@@ -247,6 +254,9 @@ class AICompanion:
             memory = self.build_memory_block(query)
             if memory:
                 parts.append(memory)
+                # 记录本轮召回了几条（供指标统计"记忆命中率"）
+                self._last_recall_count = sum(
+                    1 for line in memory.splitlines() if line.startswith("- "))
         return "\n\n".join(p for p in parts if p)
 
     # ── 工具能力 ────────────────────────────────────────────
@@ -277,6 +287,7 @@ class AICompanion:
             return
 
         self._history.append(AIMessage("user", user_input))
+        self._turn_started = time.time()
 
         if len(self._history) > self.config.max_history:
             self._history = self._history[-self.config.max_history:]
@@ -320,8 +331,36 @@ class AICompanion:
 
         self._agent_worker = AIAgentWorker(loop, messages, self._tool_runtime)
         self._agent_worker.finished.connect(
-            lambda text: self._on_response(text, on_response))
+            lambda text: self._on_agent_response(text, on_response))
         self._agent_worker.start()
+
+    def _on_agent_response(self, text: str, callback: Callable):
+        """Agent 回合结束：记录指标 + 把回复交给界面。"""
+        worker = self._agent_worker
+        stats = dict(getattr(worker, "stats", {}) or {}) if worker else {}
+        if self.metrics is not None:
+            try:
+                perceived = (int((time.time() - self._turn_started) * 1000)
+                             if self._turn_started else 0)
+                self.metrics.record(
+                    "turn",
+                    tool_calls=stats.get("tool_calls", 0),
+                    tool_ok=stats.get("tool_ok", 0),
+                    rounds=stats.get("rounds", 0),
+                    model_ms=stats.get("model_ms", 0),
+                    tool_ms=stats.get("tool_ms", 0),
+                    total_ms=stats.get("total_ms", 0),
+                    perceived_ms=perceived,
+                    reply_chars=stats.get("reply_chars", len(text or "")),
+                    recall=getattr(self, "_last_recall_count", 0),
+                    degraded=bool(stats.get("transport_error")),
+                    hit_round_limit=bool(stats.get("hit_round_limit")),
+                )
+                self.metrics.flush()
+            except Exception as exc:  # noqa: BLE001 — 埋点绝不能影响回复
+                print("[Metrics] 记录失败: %s" % exc)
+        self._last_recall_count = 0
+        self._on_response(text, callback)
 
     def _on_response(self, text: str, callback: Callable):
         self._history.append(AIMessage("assistant", text))

@@ -44,6 +44,7 @@ TESTS = [
     ("智能体上下文注入", "_test_agent_context.py"),
     ("长期记忆（槽位/契约/存储/召回）", "_test_agent_memory.py"),
     ("长期记忆界面集成", "_test_agent_memory_ui.py"),
+    ("流式显示与指标采集", "_test_agent_stream.py"),
 ]
 
 env = dict(os.environ)

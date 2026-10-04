@@ -495,6 +495,9 @@ class SettingsDialog(QDialog):
         self._ctx_foreground = QCheckBox("允许 AI 看到当前使用的应用名称")
         privacy_layout.addWidget(self._ctx_foreground)
 
+        self._typing_effect = QCheckBox("回复逐字显示（打字机效果，点气泡可跳过）")
+        privacy_layout.addWidget(self._typing_effect)
+
         warn = QLabel("💡 这两项属于隐私敏感信息，默认关闭。开启后仅用于当次对话，不会上传到别处")
         warn.setWordWrap(True)
         warn.setStyleSheet(f"color: {TEXT_SEC}; font-size: 10px;")
@@ -570,6 +573,7 @@ class SettingsDialog(QDialog):
 
         self._ctx_clipboard.setChecked(self.settings.context_clipboard_enabled)
         self._ctx_foreground.setChecked(self.settings.context_foreground_enabled)
+        self._typing_effect.setChecked(self.settings.typing_enabled)
 
         self._auto_start.setChecked(self.settings.auto_start)
 
@@ -596,6 +600,7 @@ class SettingsDialog(QDialog):
 
         self.settings.context_clipboard_enabled = self._ctx_clipboard.isChecked()
         self.settings.context_foreground_enabled = self._ctx_foreground.isChecked()
+        self.settings.typing_enabled = self._typing_effect.isChecked()
 
         self.settings.auto_start = self._auto_start.isChecked()
 
@@ -612,6 +617,7 @@ class SettingsDialog(QDialog):
         self._mini_timer.setChecked(True)
         self._ctx_clipboard.setChecked(False)
         self._ctx_foreground.setChecked(False)
+        self._typing_effect.setChecked(True)
         self._auto_start.setChecked(False)
         self._opacity_slider.setValue(100)
 
