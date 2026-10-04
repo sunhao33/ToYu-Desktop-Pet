@@ -27,17 +27,55 @@ CHANGELOG_PATH = os.path.join(PET_DIR, "changelog.txt")
 STAGING = os.path.join(PET_DIR, "_staging")
 
 EXCLUDE_DIRS = {"dist", "dist_dir", "build", "build_dir", "build_debug", "__pycache__",
-                ".git", ".claude", "_staging"}
-EXCLUDE_EXTS = {".zip", ".pyc", ".log"}
-SKIP_SCRIPTS = {
-    "_package.py", "_test_tools.py", "_smoke_real.py", "_debug2.py",
-    "_debug_launch.py", "_check_methods.py", "_fix_acc.py", "_path_matrix.py",
-    "_reliability.py", "_stress_exe.py", "_test_crash.py", "_test_pet.py",
-    "_test_run.py", "main_window.py.bak", "_ToYuDebug.spec",
-    # 稳定性测试与截图工具（开发期使用，不进发布包）
-    "_test_all.py", "_test_crash_guard.py", "_test_sprite_bounds.py",
-    "_soak.py", "_soak_phased.py", "_shots_render.py",
+                ".git", ".claude", "_staging", "build_dir2", "dist_dir2",
+                "build_debug2", "dist_onedir", "_work", "media", "temp", "backup"}
+EXCLUDE_EXTS = {".zip", ".pyc", ".log", ".bak"}
+
+# 运行时数据文件：**绝不能进发布包**。
+# ai_config.json 里存着用户的 API Key —— 参赛要提交完整源码与安装包，
+# 一旦打进去就等于把 key 公开了。其余几个是用户自己的使用记录，也不该外传。
+RUNTIME_DATA = {
+    "ai_config.json",
+    "ai_chat_history.json",
+    "calendar_events.json",
+    "weather_cache.json",
+    "task_history.json",
+    "screen_time.json",
+    "screen_sessions.json",
+    "affection_state.json",
+    "flow_timers.json",
+    "todos.json",
+    "errors.log",
 }
+
+# 开发期脚本：用**模式匹配**而不是手工列举。
+# 原来手工列了几个，结果项目里测试脚本越加越多（_test_agent_*.py、
+# _probe_*.py 等）全都漏进了包，评委打开源码会看到一堆开发工具。
+SKIP_PATTERNS = (
+    "_test_", "_probe_", "_soak", "_audit", "_shots", "_smoke", "_debug",
+    "_check_", "_fix_", "_reliability", "_stress", "_leak_hunt", "_bug_hunt",
+    "_path_matrix", "_compact", "main_window.py.bak", "_ToYuDebug.spec",
+    "code_audit.py", "fix_quotes.py", "check_attrs.py",
+    "PACKAGING.txt", "workspace-rule.md",
+    # 早期开发期的测试/截图脚本（命名不符合 _test_ 前缀，单列出来）
+    "test_all.py", "test_tabs.py", "test_auto_home.py", "review_test.py",
+    "screenshot_tabs.py", "_clean_imports.py", "_probe", "_soak", "_bug_",
+    "UI_OPTIMIZATION_PLAN.md", "UI_CHANGES_",
+)
+
+# 仍然保留的显式名单（名字不符合上面模式的）
+SKIP_SCRIPTS = {"_package.py", "_staging"}
+
+
+def _skip_source(item: str) -> bool:
+    """判断源码目录里的某个条目是否不该进包。"""
+    if item in EXCLUDE_DIRS or item in SKIP_SCRIPTS or item in RUNTIME_DATA:
+        return True
+    if os.path.splitext(item)[1] in EXCLUDE_EXTS:
+        return True
+    lowered = item.lower()
+    return any(pat.lower() in lowered for pat in SKIP_PATTERNS)
+
 
 README = r"""ToYu 桌面土豆宠物 — 使用说明
 ================================
@@ -102,8 +140,15 @@ def copy_tree(src, dst, ignore=None):
     shutil.copytree(src, dst, ignore=ignore)
 
 
-# 构建产物只跳过这些：_internal 里的 .pyc 一个都不能少
-ARTIFACT_IGNORE = shutil.ignore_patterns("__pycache__", "tmp*")
+# 构建产物只跳过这些：_internal 里的 .pyc 一个都不能少（少了程序起不来）
+# 但运行时数据与备份文件必须排掉 —— 程序启动时会把 weather_cache.json
+# 之类写进源码目录，PyInstaller 打包时连带进了产物，最后混进交付包。
+ARTIFACT_IGNORE = shutil.ignore_patterns(
+    "__pycache__", "tmp*", "*.bak", "*.log",
+    "ai_config.json", "ai_chat_history.json", "calendar_events.json",
+    "weather_cache.json", "task_history.json", "screen_sessions.json",
+    "screen_time.json", "affection_state.json", "todos.json", "flow_timers.json",
+)
 
 
 def main():
@@ -126,7 +171,12 @@ def main():
     if have_onedir:
         app_dst = os.path.join(STAGING, "ToYu")
         os.makedirs(app_dst)
+        # 顶层文件也要过一遍黑名单：程序启动时会把运行时数据写进源码目录，
+        # PyInstaller 打包时连带进了产物顶层，直接复制就会混进交付包。
         for name in os.listdir(DIST_ONEDIR):
+            if name in RUNTIME_DATA or os.path.splitext(name)[1] in EXCLUDE_EXTS:
+                print("  跳过产物顶层文件:", name)
+                continue
             src = os.path.join(DIST_ONEDIR, name)
             dst = os.path.join(app_dst, name)
             if os.path.isdir(src):
@@ -140,9 +190,7 @@ def main():
     src_root = os.path.join(STAGING, "desktop-pet")
     os.makedirs(src_root)
     for item in sorted(os.listdir(PET_DIR)):
-        if item in EXCLUDE_DIRS or item in SKIP_SCRIPTS:
-            continue
-        if os.path.splitext(item)[1] in EXCLUDE_EXTS:
+        if _skip_source(item):
             continue
         src = os.path.join(PET_DIR, item)
         dst = os.path.join(src_root, item)
@@ -161,6 +209,7 @@ def main():
 
     with zipfile.ZipFile(zip_path) as zf:
         names = zf.namelist()
+        problems = audit_zip(zf, names)
     shutil.rmtree(STAGING)
 
     print(f"版本: v{version}")
@@ -176,6 +225,59 @@ def main():
     print("包内 _internal 文件数:", sum(1 for n in names if n.startswith("ToYu/_internal/")))
     if sum(1 for n in names if n.startswith("ToYu/_internal/")) < 1000:
         print("⚠️ _internal 文件数偏少，可能被杀软删过文件，请检查后再发布")
+
+    # 交付前安全自检
+    if problems:
+        print("\n" + "=" * 60)
+        print("❌ 交付前自检未通过，包内仍有不该出现的文件：")
+        for p in problems:
+            print("   -", p)
+        print("=" * 60)
+        raise SystemExit(1)
+    print("\n✅ 交付前自检通过：无密钥泄露、无开发脚本残留")
+
+
+# 交付前自检：这些文件一旦进包，轻则显得不专业，重则泄露隐私
+SECRET_RE = re.compile(rb"sk-[A-Za-z0-9]{20,}")
+MUST_NOT_CONTAIN = (
+    "ai_config.json", "ai_chat_history.json", "calendar_events.json",
+    "weather_cache.json", "task_history.json", "screen_sessions.json",
+    "affection_state.json", "todos.json", "flow_timers.json",
+    "_test_", "_probe_", "_soak", "_audit", "code_audit.py",
+    "fix_quotes.py", "check_attrs.py", ".bak",
+)
+# 这些名字在第三方库里合法存在，不算问题
+ALLOWLIST = ("matplotlib/mpl-data", "_classic_test_patch")
+
+
+def audit_zip(zf, names):
+    """检查包内是否含运行时数据 / 开发脚本 / 明文密钥。返回问题清单。"""
+    problems = []
+    for name in names:
+        if any(a in name for a in ALLOWLIST):
+            continue
+        base = name.rsplit("/", 1)[-1]
+        for bad in MUST_NOT_CONTAIN:
+            if bad in base or bad in name:
+                problems.append("%s（含 %s）" % (name, bad))
+                break
+
+    # 扫描文本文件里有没有明文 API Key
+    for name in names:
+        if not name.lower().endswith((".json", ".py", ".txt", ".md", ".cfg", ".ini")):
+            continue
+        if any(a in name for a in ALLOWLIST):
+            continue
+        try:
+            data = zf.read(name)
+        except Exception:
+            continue
+        if len(data) > 2 * 1024 * 1024:
+            continue
+        if SECRET_RE.search(data):
+            problems.append("%s（疑似含明文 API Key）" % name)
+
+    return problems
 
 
 if __name__ == "__main__":
