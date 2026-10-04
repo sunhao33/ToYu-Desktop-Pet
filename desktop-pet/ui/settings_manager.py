@@ -350,6 +350,15 @@ class SettingsManager:
     def context_foreground_enabled(self, value):
         self._settings.setValue("context/foreground_enabled", bool(value))
 
+    # ── 长期记忆开关 ────────────────────────────────────────
+    @property
+    def memory_enabled(self):
+        return self._bool("memory/enabled", True)
+
+    @memory_enabled.setter
+    def memory_enabled(self, value):
+        self._settings.setValue("memory/enabled", bool(value))
+
     def _bool(self, key, default=False):
         val = self._settings.value(key, default)
         if isinstance(val, str):

@@ -142,6 +142,8 @@ class PetWindow(QMainWindow):
         self._ai_config = AIConfig()
         self._ai_config.load()
         self._ai = AICompanion(self._ai_config)
+        # 一轮对话结束后的回调（主窗口用它做长期记忆抽取）
+        self._on_turn_finished: Optional[Callable[[str], None]] = None
         self._chat_bubble = ChatBubble(self)
         self._chat_bubble.message_sent.connect(self._on_ai_message)
 
@@ -1226,6 +1228,12 @@ class PetWindow(QMainWindow):
             self._chat_bubble.clear_status()
             self._chat_bubble.show_response(ai_text)
             self._show_companion_bubble(ai_text)
+            # 这一轮已经结束，后台抽取稳定偏好（不阻塞界面）
+            if self._on_turn_finished is not None:
+                try:
+                    self._on_turn_finished(user_text)
+                except Exception:  # noqa: BLE001 — 记忆抽取失败不能影响对话
+                    pass
 
         def on_error(err: str):
             self._chat_bubble.show_status(err)

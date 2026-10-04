@@ -4,6 +4,7 @@ import os
 import sys
 import subprocess
 import re
+import threading
 from datetime import datetime
 from PyQt6.QtCore import Qt, QSize, QTimer
 from PyQt6.QtGui import (
@@ -1395,6 +1396,64 @@ class MainWindow(QMainWindow):
         """)
         save_ai_btn.clicked.connect(self._save_ai_settings)
         ai_layout.addWidget(save_ai_btn, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        # ── 它记住了什么 ────────────────────────────────────
+        # 长期记忆必须**可见、可删、可清空**：用户有权知道 AI 记住了什么，
+        # 也有权让它忘掉（对应评审表里的"精准遗忘与隐私保护"）
+        self._memory_card = self._make_card("🧠 它记住了什么")
+        memory_layout = self._memory_card.layout()
+        memory_layout.setSpacing(8)
+
+        self._memory_summary = QLabel("正在加载…")
+        self._memory_summary.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
+        memory_layout.addWidget(self._memory_summary)
+
+        self._memory_scroll = QScrollArea()
+        self._memory_scroll.setWidgetResizable(True)
+        self._memory_scroll.setFrameShape(QFrame.Shape.NoFrame)
+        self._memory_scroll.setMinimumHeight(120)
+        self._memory_scroll.setStyleSheet(
+            "QScrollArea { background: transparent; border: none; }"
+            "QScrollBar:vertical { width: 6px; background: transparent; }"
+            f"QScrollBar::handle:vertical {{ background: {self._c('handle')};"
+            " border-radius: 3px; min-height: 20px; }")
+        self._memory_container = QWidget()
+        self._memory_container.setStyleSheet("background: transparent;")
+        self._memory_list = QVBoxLayout(self._memory_container)
+        self._memory_list.setContentsMargins(0, 0, 0, 0)
+        self._memory_list.setSpacing(6)
+        self._memory_list.addStretch()
+        self._memory_scroll.setWidget(self._memory_container)
+        memory_layout.addWidget(self._memory_scroll, 1)
+
+        memory_btns = QHBoxLayout()
+        memory_btns.setSpacing(8)
+        self._refresh_memory_btn = QPushButton("刷新")
+        self._refresh_memory_btn.setObjectName("secondaryBtn")
+        self._refresh_memory_btn.setFixedHeight(28)
+        self._refresh_memory_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._refresh_memory_btn.clicked.connect(self._refresh_memory_card)
+        memory_btns.addWidget(self._refresh_memory_btn)
+
+        self._clear_memory_btn = QPushButton("全部忘掉")
+        self._clear_memory_btn.setObjectName("secondaryBtn")
+        self._clear_memory_btn.setFixedHeight(28)
+        self._clear_memory_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._clear_memory_btn.setToolTip("清空所有记忆（会先自动备份）")
+        self._clear_memory_btn.clicked.connect(self._forget_all_memories)
+        memory_btns.addWidget(self._clear_memory_btn)
+        memory_btns.addStretch()
+        memory_layout.addLayout(memory_btns)
+
+        hint = QLabel("置信度由证据文本推算（有「以后都…」这类明确表达才会记）；"
+                      "点 ✕ 可以单独忘掉某一条")
+        hint.setWordWrap(True)
+        hint.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 10px; background: transparent;")
+        memory_layout.addWidget(hint)
+
+        ai_layout.addWidget(self._memory_card)
 
         ai_layout.addStretch()
         self._page_stack.addWidget(ai_page)
@@ -3601,7 +3660,7 @@ class MainWindow(QMainWindow):
             pass
 
     def _bind_agent_tools(self):
-        """把工具能力与上下文注入接到当前 AI 实例上。"""
+        """把工具能力、上下文注入、长期记忆接到当前 AI 实例上。"""
         runtime = self._ensure_agent_tools()
         if self._pet is None:
             return
@@ -3613,6 +3672,23 @@ class MainWindow(QMainWindow):
         ai.set_trace_callback(self._on_agent_trace)
         # 上下文注入：每次对话实时构建"桌面状态块"（带 400 token 预算）
         ai.set_context_provider(self._build_ai_context)
+        # 长期记忆：把记忆块拼进系统提示 + 每轮结束抽取偏好
+        ai.set_memory_provider(self._build_memory_block)
+        store = self._ensure_memory()
+        if store is not None:
+            self._pet._on_turn_finished = self._extract_memories_async
+            self._refresh_memory_card()
+
+    def _build_memory_block(self, query: str) -> str:
+        """按当前问题召回相关记忆。"""
+        if self._memory_store is None:
+            return ""
+        try:
+            from pet_engine.agent.recall import build_memory_block
+            return build_memory_block(self._memory_store, query)
+        except Exception as exc:  # noqa: BLE001
+            print("[Memory] 召回失败: %s" % exc)
+            return ""
 
     def _build_ai_context(self) -> str:
         """构建给 AI 的桌面状态块。"""
@@ -3628,6 +3704,194 @@ class MainWindow(QMainWindow):
         except Exception as exc:  # noqa: BLE001
             print("[Context] 状态块构建失败: %s" % exc)
             return ""
+
+    # ── 长期记忆 ────────────────────────────────────────────
+    def _ensure_memory(self):
+        """创建记忆库与抽取器（惰性，失败不影响聊天）。"""
+        if getattr(self, "_memory_store", None) is not None:
+            return self._memory_store
+        try:
+            from pet_engine.agent.memory_extract import MemoryExtractor
+            from pet_engine.agent.memory_store import MemoryStore
+            self._memory_store = MemoryStore()
+            self._memory_store.purge_expired()
+            self._memory_extractor = MemoryExtractor(
+                transport=None, store=self._memory_store,
+                on_log=self._on_memory_log)
+            self._memory_extractor._transport = self._memory_transport
+            return self._memory_store
+        except Exception as exc:  # noqa: BLE001
+            print("[Memory] 初始化失败: %s" % exc)
+            self._memory_store = None
+            return None
+
+    def _memory_transport(self, messages):
+        """给记忆抽取器用的模型调用（复用用户配置的 API）。"""
+        config = getattr(getattr(self, "_pet", None), "_ai_config", None)
+        if config is None or not getattr(config, "api_key", ""):
+            raise RuntimeError("未配置 API")
+        from pet_engine.agent.transport import (
+            DEFAULT_TIMEOUT, openai_tool_transport,
+        )
+        # 抽取不需要工具，用同一套 OpenAI 兼容调用即可
+        call = openai_tool_transport(config, max_tokens=600,
+                                     timeout=min(30, DEFAULT_TIMEOUT))
+        reply = call(messages, [])
+        return reply.content
+
+    def _on_memory_log(self, level: str, message: str):
+        """记忆模块的日志：ERROR 级别的降级告警要让人看得见。"""
+        try:
+            if level == "ERROR":
+                self._status.setText("⚠ " + message[:60])
+            print("[Memory][%s] %s" % (level, message))
+        except RuntimeError:
+            pass
+
+    def _extract_memories_async(self, user_text: str):
+        """一轮对话后异步抽取偏好（不阻塞界面）。
+
+        注意：记忆写盘在子线程（纯文件 IO，安全），但**刷新界面必须回主线程**
+        —— Qt 控件不能在子线程碰。这里用 QTimer.singleShot 把刷新派回主线程。
+        """
+        if self._memory_store is None or self._memory_extractor is None:
+            return
+        if not getattr(self.settings, "memory_enabled", True):
+            return
+        text = (user_text or "").strip()
+        if len(text) < 4:
+            return
+        extractor = self._memory_extractor
+
+        def worker():
+            try:
+                result = extractor.extract(text)
+            except Exception as exc:  # noqa: BLE001 — 抽取失败绝不能影响聊天
+                print("[Memory] 抽取异常: %s" % exc)
+                return
+            changed = result.get("added", 0) + result.get("updated", 0)
+            if changed:
+                # 回到主线程刷新界面
+                QTimer.singleShot(0, self._refresh_memory_card)
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _refresh_memory_card(self):
+        """刷新「它记住了什么」卡片 —— 让用户能看见并管理被记住的内容。"""
+        card = getattr(self, "_memory_card", None)
+        if card is None:
+            return
+        try:
+            store = self._memory_store
+            if store is None:
+                self._memory_summary.setText("记忆功能未启用")
+                return
+            records = store.all()
+            stats = store.summary()
+            self._memory_summary.setText(
+                "已记住 %d 条（偏好 %d · 目标 %d · 事实 %d）"
+                % (stats["active"],
+                   stats["by_kind"].get("preference", 0),
+                   stats["by_kind"].get("goal", 0),
+                   stats["by_kind"].get("fact", 0)))
+            self._clear_memory_btn.setEnabled(bool(records))
+            self._rebuild_memory_rows(records)
+        except RuntimeError:
+            pass
+        except Exception as exc:  # noqa: BLE001
+            print("[Memory] 刷新卡片失败: %s" % exc)
+
+    def _rebuild_memory_rows(self, records):
+        """重建记忆列表。"""
+        from pet_engine.agent.slots import get_slot
+
+        while self._memory_list.count() > 1:
+            item = self._memory_list.takeAt(0)
+            w = item.widget()
+            if w is not None:
+                w.setParent(None)
+                w.deleteLater()
+
+        if not records:
+            empty = QLabel("还没有记住任何偏好。\n和宠物聊天时说到「以后都…」「我习惯…」，它就会记住。")
+            empty.setWordWrap(True)
+            empty.setAlignment(Qt.AlignmentFlag.AlignCenter)
+            empty.setStyleSheet(
+                f"color: {self._c('text2')}; font-size: 11px; padding: 18px;"
+                " background: transparent;")
+            self._memory_list.insertWidget(0, empty)
+            return
+
+        # 按更新时间倒序，最近的在前
+        for idx, record in enumerate(
+                sorted(records, key=lambda r: r.updated_at, reverse=True)[:60]):
+            frame = QFrame()
+            frame.setStyleSheet(
+                f"QFrame {{ background: {self._c('tab_bg')};"
+                f" border: 1px solid {self._c('border')}; border-radius: 8px; }}")
+            row = QHBoxLayout(frame)
+            row.setContentsMargins(10, 6, 8, 6)
+            row.setSpacing(8)
+
+            meta = get_slot(record.slot_id) or {}
+            desc = meta.get("description", record.slot_id)
+            value = record.value
+            if isinstance(value, bool):
+                value = "是" if value else "否"
+            elif isinstance(value, list):
+                value = "、".join(str(v) for v in value)
+
+            text = QLabel("<b>%s</b>：%s" % (desc, value))
+            text.setWordWrap(True)
+            text.setStyleSheet(
+                f"color: {self._c('text')}; font-size: 12px; background: transparent;")
+            text.setToolTip("槽位 %s\n置信度 %.2f\n依据：%s"
+                            % (record.slot_id, record.confidence, record.evidence))
+            row.addWidget(text, 1)
+
+            conf = QLabel("%d%%" % round(record.confidence * 100))
+            conf.setStyleSheet(
+                f"color: {self._c('text2')}; font-size: 10px; background: transparent;")
+            conf.setToolTip("置信度（由证据文本推算，不是模型自报）")
+            row.addWidget(conf)
+
+            del_btn = QPushButton("✕")
+            del_btn.setFixedSize(22, 22)
+            del_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            del_btn.setToolTip("忘掉这一条")
+            del_btn.setStyleSheet(
+                "QPushButton { background: transparent; border: none;"
+                f" color: {self._c('text2')}; font-size: 11px; }}"
+                "QPushButton:hover { color: #D9534F; }")
+            del_btn.clicked.connect(
+                lambda checked=False, sid=record.slot_id: self._forget_memory(sid))
+            row.addWidget(del_btn)
+            self._memory_list.insertWidget(idx, frame)
+
+    def _forget_memory(self, slot_id: str):
+        """忘掉单条记忆（精准遗忘）。"""
+        if self._memory_store is None:
+            return
+        try:
+            self._memory_store.forget(slot_id)
+            self._refresh_memory_card()
+            self._status.setText("已忘掉「%s」" % slot_id)
+        except Exception as exc:  # noqa: BLE001
+            self._status.setText("遗忘失败: %s" % exc)
+
+    def _forget_all_memories(self):
+        """一键清空（先备份，避免误操作不可恢复）。"""
+        if self._memory_store is None:
+            return
+        try:
+            backup = self._memory_store.backup()
+            count = self._memory_store.forget_all()
+            self._refresh_memory_card()
+            self._status.setText(
+                "已清空 %d 条记忆%s" % (count, ("，备份在 " + os.path.basename(backup))
+                                       if backup else ""))
+        except Exception as exc:  # noqa: BLE001
+            self._status.setText("清空失败: %s" % exc)
 
     def _save_ai_settings(self):
         """Save AI settings from the AI page."""

@@ -105,13 +105,29 @@ except Exception as exc:  # noqa: BLE001
 check("预算为 %d token" % TOKEN_BUDGET, TOKEN_BUDGET == 400)
 
 # 造一批超长待办把预算撑爆。注意待办块内部只列前 6 条（块内截断），
-# 所以要靠"每一条都很长"把 6 条的总长度就顶到预算之上，才能触发块级丢弃
+# 所以要靠"每一条都很长"把 6 条的总长度就顶到预算之上，才能触发块级丢弃。
+# 另外给屏幕统计塞确定性数据 —— 否则"学习情况"块的体积会随当天实际使用
+# 情况变化，测试会时好时坏（真实踩过一次）。
 long_tasks = ["上下文测试-" + ("很长的任务名称" * 13) + str(i) for i in range(6)]
 try:
     for text in long_tasks:
         mw._todo_widget._input.setText(text)
         mw._todo_widget._on_add()
     pump(400)
+
+    # 确定性地填充今日屏幕时间（8 个应用，各 30 分钟）
+    try:
+        from datetime import date as _date
+        today_key = _date.today().isoformat()
+        mw._screen_tracker._data[today_key] = {
+            "VS Code": 1800.0, "Chrome": 1800.0, "微信": 1800.0, "Word": 1800.0,
+            "PDF 阅读器": 1800.0, "Typora": 1800.0, "终端": 1800.0, "计算器": 1800.0,
+        }
+        mw._screen_tracker._save()
+    except Exception:
+        pass
+    pump(200)
+
     stats_big = builder.stats()
     total_raw = sum(v for k, v in stats_big.items() if not k.startswith("_"))
     check("确实构造出了超预算的原始数据", total_raw > CHAR_BUDGET,
