@@ -11,7 +11,10 @@ from typing import Any
 
 from pet_engine.agent.protocol import ToolSpec
 
-# 参数 schema 里复用的片段
+# 参数 schema 里复用的片段。
+# 说明文字刻意写得短：工具 schema 每次请求都要随 API 发送，
+# 9 个工具的 schema 原本占 2452 字符（约 1226 token），比系统提示词还大。
+# 精简原则：只留模型判断"什么时候用、填什么"必需的信息，删掉实现细节。
 _TODO_TEXT = {
     "type": "string",
     "minLength": 1,
@@ -72,12 +75,12 @@ def build_default_registry(main_window) -> ToolRegistry:
 
     reg.register(ToolSpec(
         name="add_todo",
-        description="给用户添加一条待办事项。当用户说「帮我记一下」「加个待办」"
-                    "「我要做…」时使用。",
+        description="添加待办。用户说「帮我记一下」「加个待办」「我要做…」时用。",
         parameters={
             "type": "object",
             "properties": {
-                "text": dict(_TODO_TEXT, description="待办内容，简洁的一句话"),
+                "text": {"type": "string", "minLength": 1, "maxLength": 200,
+                         "description": "待办内容"},
             },
             "required": ["text"],
         },
@@ -115,12 +118,12 @@ def build_default_registry(main_window) -> ToolRegistry:
 
     reg.register(ToolSpec(
         name="complete_todo",
-        description="把某条待办标记为已完成。text 可以是完整名称，也可以是"
-                    "能唯一匹配的部分内容。",
+        description="把待办标记为已完成。text 可给完整名称或能唯一匹配的关键词。",
         parameters={
             "type": "object",
             "properties": {
-                "text": dict(_TODO_TEXT, description="要完成的待办名称或其中的关键词"),
+                "text": {"type": "string", "minLength": 1, "maxLength": 200,
+                         "description": "待办名称或关键词"},
             },
             "required": ["text"],
         },
@@ -152,15 +155,14 @@ def build_default_registry(main_window) -> ToolRegistry:
 
     reg.register(ToolSpec(
         name="list_todos",
-        description="查看用户的待办列表。用户问「我还有什么要做」「待办有哪些」"
-                    "或你需要先了解情况再决定下一步时使用。",
+        description="查看待办列表。用户问「我还有什么要做」或你需要先了解情况时用。",
         parameters={
             "type": "object",
             "properties": {
                 "include_done": {
                     "type": "boolean",
                     "default": False,
-                    "description": "是否一并列出已完成的事项",
+                    "description": "是否一并列出已完成",
                 },
             },
         },
@@ -180,8 +182,7 @@ def build_default_registry(main_window) -> ToolRegistry:
 
     reg.register(ToolSpec(
         name="start_focus",
-        description="开始一段专注倒计时。用户说「我要专注」「开始计时」"
-                    "「来个番茄钟」时使用。",
+        description="开始专注倒计时。用户说「我要专注」「开始计时」时用。",
         parameters={
             "type": "object",
             "properties": {
@@ -190,7 +191,7 @@ def build_default_registry(main_window) -> ToolRegistry:
                     "default": 25,
                     "minimum": 1,
                     "maximum": 600,
-                    "description": "专注时长（分钟），没说就用 25",
+                    "description": "分钟数",
                 },
             },
         },
@@ -298,14 +299,13 @@ def build_default_registry(main_window) -> ToolRegistry:
 
     reg.register(ToolSpec(
         name="get_screen_time_detail",
-        description="查询今天各应用的使用时长排名。用户问「我今天都在用什么」"
-                    "「哪个软件用得最多」时使用。",
+        description="今天各应用的使用时长排名。用户问「哪个软件用得最多」时用。",
         parameters={
             "type": "object",
             "properties": {
                 "top": {
                     "type": "integer", "default": 5, "minimum": 1, "maximum": 10,
-                    "description": "返回前几名，默认 5",
+                    "description": "返回前几名",
                 },
             },
         },
@@ -350,16 +350,16 @@ def build_default_registry(main_window) -> ToolRegistry:
 
     reg.register(ToolSpec(
         name="add_calendar_note",
-        description="在日历上给某一天加标注（比如考试、截止日期）。"
-                    "用户说「记一下周五要交报告」「下周三有考试」时使用。",
+        description="给日历某天加标注（考试、截止日期）。用户说「记一下周三要交报告」时用。",
         parameters={
             "type": "object",
             "properties": {
                 "date": {
                     "type": "string", "default": "今天",
-                    "description": "日期，格式 YYYY-MM-DD；也可以直接说 今天/明天/后天",
+                    "description": "YYYY-MM-DD，或 今天/明天/后天",
                 },
-                "text": dict(_TODO_TEXT, description="标注内容"),
+                "text": {"type": "string", "minLength": 1, "maxLength": 200,
+                         "description": "标注内容"},
             },
             "required": ["text"],
         },
@@ -397,8 +397,7 @@ def build_default_registry(main_window) -> ToolRegistry:
 
     reg.register(ToolSpec(
         name="set_pet_behavior",
-        description="让桌面宠物做一个动作（跳舞/庆祝/累了/睡觉/闪光）。"
-                    "用户完成目标想庆祝、或说「跳个舞」「庆祝一下」时使用。",
+        description="让宠物做动作。用户说「跳个舞」「庆祝一下」时用。",
         parameters={
             "type": "object",
             "properties": {

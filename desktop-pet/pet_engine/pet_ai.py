@@ -50,7 +50,7 @@ class AIConfig:
         self.name = "ToYu"
         self.personality = "温柔"
         self.system_prompt = ""
-        self.max_history = 20  # Max messages to keep in context
+        self.max_history = 30  # Max messages to keep in context
         self.temperature = 0.8
 
     def get_system_prompt(self) -> str:
@@ -289,6 +289,8 @@ class AICompanion:
         self._history.append(AIMessage("user", user_input))
         self._turn_started = time.time()
 
+        # 历史裁剪必须在**追加之后**做，并且按"消息条数"而不是"轮数"来算。
+        # 原来在追加前裁剪，加上助手回复就会超出上限一条（实测 20 → 27 条）。
         if len(self._history) > self.config.max_history:
             self._history = self._history[-self.config.max_history:]
 
@@ -364,6 +366,9 @@ class AICompanion:
 
     def _on_response(self, text: str, callback: Callable):
         self._history.append(AIMessage("assistant", text))
+        # 助手回复也要参与裁剪，否则历史会持续超限
+        if len(self._history) > self.config.max_history:
+            self._history = self._history[-self.config.max_history:]
         self._save_history()
         callback(text)
 

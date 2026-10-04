@@ -59,8 +59,15 @@ _CN_NUM = {"一": 1, "两": 2, "二": 2, "三": 3, "四": 4, "五": 5,
 _SIGNAL = re.compile(
     r"以后|下次|今后|记住|默认|每次都|都按|我习惯|我通常|我一般|别再|不要再"
     r"|我(?:打|计)算|我计划|我准备|我的目标|打算每|计划每")
-# 目标类槽位额外接受"每天/每日"这类周期性表达
-_GOAL_SIGNAL = re.compile(r"每天|每日|天天|每周|每个月")
+
+# 目标类槽位额外接受"频率 + 动作"的表达。
+# 注意必须**同时**要求频率词和动作词：只匹配"每天"会把"今天天气不错"
+# 里的"天天"误当成频率词（真实踩过的坑），导致每条闲聊都白调一次模型。
+_FREQ = r"(?:每天|每日|天天|每周|每个月)"
+_ACTION = r"(?:学|专注|看|读|写|做|背|练|刷|复习|工作|背单词)"
+_GOAL_SIGNAL = re.compile(
+    r"%s[^，。；\n]{0,6}%s" % (_FREQ, _ACTION)
+    + r"|" + r"%s[^，。；\n]{0,6}%s" % (_ACTION, _FREQ))
 
 
 def _cn_to_int(token: str) -> int | None:
@@ -195,6 +202,25 @@ def extract_with_rules(text: str, source_text: str = "") -> list[dict]:
     return unique[:5]
 
 
+def has_extractable_signal(text: str) -> bool:
+    """这句里是否**可能**含稳定偏好。
+
+    这是抽取前的廉价前置过滤：没有信号就直接跳过，**不调模型**。
+
+    为什么必须有这道过滤：抽取要对每条用户消息调一次模型，而绝大多数
+    消息是"帮我加个待办""这个怎么修"这类即时指令，模型只会返回空数组。
+    实测（同一个假 transport 计数）——不过滤时连"今天天气不错"都会调一次
+    API，等于**每轮对话的 API 调用翻倍**，白花钱也白等。
+
+    取舍：宁可漏（少记一条偏好），不要错（多花一倍钱）。
+    用户真的说了"以后都…"这类显性表达时，一定能命中下面的信号。
+    """
+    text = (text or "").strip()
+    if len(text) < 4:
+        return False
+    return bool(_SIGNAL.search(text) or _GOAL_SIGNAL.search(text))
+
+
 class MemoryExtractor:
     """模型抽取 + 规则兜底。"""
 
@@ -208,7 +234,8 @@ class MemoryExtractor:
         self._degraded = False
         self._degraded_at = 0.0
         self._degrade_reason = ""
-        self._stats = {"model": 0, "rules": 0, "empty": 0, "failed": 0}
+        self._stats = {"model": 0, "rules": 0, "empty": 0, "failed": 0,
+                       "skipped": 0}
 
     # ── 状态 ────────────────────────────────────────────────
     def health(self) -> dict:
@@ -252,6 +279,13 @@ class MemoryExtractor:
 
         if len(text) < 4:
             self._stats["empty"] += 1
+            return result
+
+        # 前置过滤：没有"稳定偏好"信号的句子直接跳过，不调模型。
+        # 这一步把绝大多数即时指令挡在门外，避免每条消息白花一次 API 调用。
+        if not has_extractable_signal(text):
+            self._stats["skipped"] += 1
+            result["source"] = "skipped"
             return result
 
         raw_items: list[dict] = []

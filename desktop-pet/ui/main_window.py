@@ -3984,6 +3984,16 @@ class MainWindow(QMainWindow):
             if s["degraded_turns"]:
                 lines.append("有 %d 轮走了降级路径（模型不可用时的规则兜底）"
                              % s["degraded_turns"])
+            # 记忆抽取的节省情况：没有"稳定偏好"信号的消息会被前置过滤挡下，
+            # 不调用模型。这个数字直接反映省了多少次 API 调用。
+            extractor = getattr(self, "_memory_extractor", None)
+            if extractor is not None:
+                st = extractor.health().get("stats", {})
+                used = st.get("model", 0) + st.get("rules", 0)
+                skipped = st.get("skipped", 0)
+                if used or skipped:
+                    lines.append("记忆抽取：实际处理 %d 条，前置过滤省下 %d 次"
+                                 "模型调用" % (used, skipped))
             label.setText("\n".join(lines))
         except RuntimeError:
             pass
@@ -4091,6 +4101,10 @@ class MainWindow(QMainWindow):
             if persona_data:
                 config.personality = persona_data
             config.temperature = self._ai_temp_spin.value()
+            # 历史条数用当前代码里的默认值（老配置文件里存的是旧值 20，
+            # 直接沿用会让"提升到 30"对老用户不生效）
+            from pet_engine.pet_ai import AIConfig as _AIConfig
+            config.max_history = _AIConfig().max_history
             config.save()
 
             if self._pet:
