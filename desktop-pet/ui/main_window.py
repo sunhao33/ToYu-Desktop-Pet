@@ -279,10 +279,24 @@ class MainWindow(QMainWindow):
             need_h = max(hint.height(), min_hint.height())
 
             # 工具页内部还有子页，取当前子页
+            # 页面若被包在滚动区里，QScrollArea 的 sizeHint 不反映内部内容宽度
+            # （它只报一个很小值），必须取内部控件的尺寸，否则窗口最小宽度
+            # 会算得太小、内容在横向被裁（功能页/工具页真实踩过）
+            def _inner_hint(widget):
+                if isinstance(widget, QScrollArea):
+                    inner = widget.widget()
+                    if inner is not None:
+                        return inner.sizeHint(), inner.minimumSizeHint()
+                return widget.sizeHint(), widget.minimumSizeHint()
+
+            p_hint, p_min = _inner_hint(page)
+            need_w = max(need_w, p_hint.width(), p_min.width())
+            need_h = max(need_h, p_hint.height(), p_min.height())
+
             if self._tools_stack.count():
                 sub = self._tools_stack.currentWidget()
                 if sub is not None:
-                    s_hint, s_min = sub.sizeHint(), sub.minimumSizeHint()
+                    s_hint, s_min = _inner_hint(sub)
                     need_w = max(need_w, s_hint.width(), s_min.width())
                     need_h = max(need_h, s_hint.height(), s_min.height())
 
@@ -1267,7 +1281,7 @@ class MainWindow(QMainWindow):
         tools_main_layout.addWidget(self._tools_stack, 1)
         self._tools_tab_bar = tools_tab_bar
 
-        self._page_stack.addWidget(tools_page)
+        self._page_stack.addWidget(self._wrap_in_scroll(tools_page))
 
         ai_page = QWidget()
         ai_page.setStyleSheet("background: transparent;")
@@ -1490,7 +1504,9 @@ class MainWindow(QMainWindow):
         ai_layout.addWidget(self._metrics_card)
 
         ai_layout.addStretch()
-        self._page_stack.addWidget(ai_page)
+        # 包一层滚动区：AI 页内容（API 配置 + 性格 + 记忆 + 指标）高度
+        # 会超过可视区，不包的话 Qt 会把卡片压扁、按钮被挤掉
+        self._page_stack.addWidget(self._wrap_in_scroll(ai_page))
 
         self._page_btns["宠物"].setChecked(True)
         self._page_stack.setCurrentIndex(0)
@@ -3987,6 +4003,80 @@ class MainWindow(QMainWindow):
         except Exception as exc:  # noqa: BLE001
             self._status.setText("清空失败: %s" % exc)
 
+    def _wrap_in_scroll(self, inner: QWidget) -> QScrollArea:
+        """把页面内容包进纵向滚动区。
+
+        为什么需要：AI 页内容高度超过可视区时，Qt 会把卡片**压缩**到小于
+        最小高度，按钮和文字会被挤掉；没有滚动区就无法访问被挤出去的部分。
+        包一层滚动区后，任何窗口尺寸下所有内容都能滚到。
+
+        背景透明 + 无边框，保证视觉上与原页面一致。
+        """
+        area = QScrollArea()
+        area.setWidgetResizable(True)
+        area.setFrameShape(QFrame.Shape.NoFrame)
+        area.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        area.setStyleSheet(
+            "QScrollArea { background: transparent; border: none; }"
+            "QScrollBar:vertical { width: 8px; background: transparent; }"
+            f"QScrollBar::handle:vertical {{ background: {self._c('handle')};"
+            " border-radius: 4px; min-height: 30px; }"
+            f"QScrollBar::handle:vertical:hover {{ background: {self._c('handle_h')}; }}"
+            "QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical"
+            " { height: 0; }")
+        inner.setStyleSheet((inner.styleSheet() or "") + "\nbackground: transparent;")
+        area.setWidget(inner)
+        return area
+
+    def _toast(self, message: str, ms: int = 2600):
+        """在窗口内弹一条明显的提示（几秒后自动消失）。
+
+        只靠底部状态栏那一行小灰字，用户经常看不到 —— 保存这类操作
+        必须有**看得见**的反馈。
+        """
+        try:
+            label = getattr(self, "_toast_label", None)
+            if label is None:
+                label = QLabel(self)
+                label.setObjectName("toastLabel")
+                label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+                label.setWordWrap(True)
+                self._toast_label = label
+                self._toast_timer = QTimer(self)
+                self._toast_timer.setSingleShot(True)
+                self._toast_timer.timeout.connect(self._hide_toast)
+
+            label.setStyleSheet(f"""
+                QLabel#toastLabel {{
+                    background: {self._c('accent')};
+                    color: #FFFFFF;
+                    border-radius: 10px;
+                    padding: 10px 22px;
+                    font-size: 13px;
+                    font-weight: bold;
+                }}
+            """)
+            label.setText(message)
+            label.adjustSize()
+            label.setFixedWidth(min(max(label.width(), 200), max(240, self.width() - 120)))
+            label.adjustSize()
+            # 顶部居中，避开头部按钮
+            x = max(10, (self.width() - label.width()) // 2)
+            label.move(x, 96)
+            label.show()
+            label.raise_()
+            self._toast_timer.start(ms)
+        except Exception as exc:  # noqa: BLE001 — 提示失败不能影响主流程
+            print("[Toast] 显示失败: %s" % exc)
+
+    def _hide_toast(self):
+        label = getattr(self, "_toast_label", None)
+        if label is not None:
+            try:
+                label.hide()
+            except RuntimeError:
+                pass
+
     def _save_ai_settings(self):
         """Save AI settings from the AI page."""
         try:
@@ -4011,8 +4101,11 @@ class MainWindow(QMainWindow):
                     self._pet._proactive._ai = self._pet._ai
 
             self._status.setText("✅ AI 设置已保存")
+            # 只改状态栏那一行小字太不显眼，用户会以为"点了没反应"
+            self._toast("✅ AI 设置已保存")
         except Exception as e:
             self._status.setText(f"❌ 保存失败: {e}")
+            self._toast("❌ 保存失败：%s" % str(e)[:60])
 
     def _toggle_dark_mode(self):
         """切换深色模式"""

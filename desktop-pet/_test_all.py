@@ -45,6 +45,7 @@ TESTS = [
     ("长期记忆（槽位/契约/存储/召回）", "_test_agent_memory.py"),
     ("长期记忆界面集成", "_test_agent_memory_ui.py"),
     ("流式显示与指标采集", "_test_agent_stream.py"),
+    ("AI 页可见性与保存反馈", "_test_ai_page_visibility.py"),
 ]
 
 env = dict(os.environ)
