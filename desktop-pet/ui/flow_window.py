@@ -489,6 +489,22 @@ class FlowWindow(QMainWindow):
         layout = card.layout()
         layout.setSpacing(10)
 
+        # 每日目标进度环（与主页共用同一个 tracker，数据一致）
+        goal_row = QHBoxLayout()
+        goal_row.setSpacing(10)
+        from ui.widgets.progress_ring import ProgressRing
+        self._goal_ring = ProgressRing(size=76, thickness=7)
+        self._goal_ring.setToolTip("今日学习目标进度")
+        goal_row.addWidget(self._goal_ring)
+        self._goal_text = QLabel("统计中…")
+        self._goal_text.setWordWrap(True)
+        self._goal_text.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
+        goal_row.addWidget(self._goal_text, 1)
+        layout.addLayout(goal_row)
+
+        layout.addWidget(self._make_sep())
+
         self._big_focus = QLabel("0 分钟")
         self._big_focus.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._big_focus.setStyleSheet(
@@ -536,6 +552,42 @@ class FlowWindow(QMainWindow):
         return card
 
     # ── 状态栏 ──────────────────────────────────────────────
+    # ── 每日目标 ────────────────────────────────────────────
+    def refresh_goal(self, info: dict = None):
+        """刷新心流窗口里的目标环。info 为 None 时自己取一次。"""
+        ring = getattr(self, "_goal_ring", None)
+        if ring is None:
+            return
+        if info is None:
+            tracker = getattr(self._main, "_goal_tracker", None)
+            if tracker is None:
+                return
+            try:
+                info = tracker.progress()
+            except Exception:  # noqa: BLE001
+                return
+
+        accent = self._c('accent')
+        track = self._c('border')
+        fg = self._c('text')
+        if info.get("has_goal"):
+            ratio = info.get("ratio", 0.0)
+            ring.set_state(ratio, "%d%%" % round(ratio * 100), accent, track, fg,
+                           font_size=16,
+                           full_color="#4CAF50" if info.get("reached") else None)
+            if info.get("reached"):
+                self._goal_text.setText("今日目标已达成 🎉\n学习 %d 分钟"
+                                        % info.get("study_minutes", 0))
+            else:
+                self._goal_text.setText(
+                    "学习 %d / %d 分钟\n还差 %d 分钟"
+                    % (info.get("study_minutes", 0), info.get("goal_minutes", 0),
+                       info.get("remaining_minutes", 0)))
+        else:
+            ring.set_state(0.0, "未设", accent, track, fg, font_size=14, dim=True)
+            self._goal_text.setText("今日学习 %d 分钟\n（还没设每日目标）"
+                                    % info.get("study_minutes", 0))
+
     def _build_statusbar(self):
         bar = QWidget()
         bar.setObjectName("statusBar")
@@ -675,6 +727,7 @@ class FlowWindow(QMainWindow):
         self._tick_task_timer()
         self._stage.refresh()
         self._refresh_stats()
+        self.refresh_goal()
 
     def _refresh_stats(self):
         tasks = self._today_history()
@@ -836,6 +889,12 @@ class FlowWindow(QMainWindow):
         self._stage.refresh()
         self._refresh_plan()
         self._refresh_stats()
+        # 目标环随每秒刷新，学完一段就能看到进度动
+        self.refresh_goal()
+
+    def _refresh_goal_lightweight(self):
+        """_tick 里用的轻量刷新：只更新目标环，不重建计划栏。"""
+        self.refresh_goal()
 
     def attach_timer(self, timer):
         """接管共享计时器实例（不复制，状态自然延续）。"""

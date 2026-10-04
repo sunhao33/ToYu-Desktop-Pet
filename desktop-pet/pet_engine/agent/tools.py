@@ -413,4 +413,59 @@ def build_default_registry(main_window) -> ToolRegistry:
         returns="动作是否已触发",
     ))
 
+    # ── 学习报告 ────────────────────────────────────────────
+    def export_learning_report(period: str = "today",
+                               save_file: bool = False) -> str:
+        if main_window is None:
+            return "失败：主窗口不可用"
+        builder = None
+        ensure = getattr(main_window, "_ensure_report", None)
+        if callable(ensure):
+            builder = ensure()
+        if builder is None:
+            try:
+                from pet_engine.report import LearningReport
+                builder = LearningReport(main_window=main_window)
+            except Exception as exc:  # noqa: BLE001
+                return "失败：报告模块不可用（%s）" % exc
+        try:
+            if save_file:
+                path = builder.export(period, fmt="md")
+                # 顺便刷新界面预览，保证界面上看到的和 AI 说的是同一份
+                refresh = getattr(main_window, "_refresh_report_preview", None)
+                if callable(refresh):
+                    try:
+                        refresh(period)
+                    except Exception:  # noqa: BLE001
+                        pass
+                return "报告已导出到 %s\n\n%s" % (
+                    path, builder.render_text(period, max_chars=600))
+            return builder.render_text(period, max_chars=900)
+        except Exception as exc:  # noqa: BLE001
+            return "失败：生成报告时出错（%s）" % str(exc)[:80]
+
+    reg.register(ToolSpec(
+        name="export_learning_report",
+        description="生成学习报告（今日/本周/本月）并可选导出文件。"
+                    "用户说「帮我出一份学习报告」「这周学得怎么样」时用。",
+        parameters={
+            "type": "object",
+            "properties": {
+                "period": {
+                    "type": "string",
+                    "enum": ["today", "week", "month"],
+                    "default": "today",
+                    "description": "统计范围",
+                },
+                "save_file": {
+                    "type": "boolean",
+                    "default": False,
+                    "description": "是否导出成 Markdown 文件",
+                },
+            },
+        },
+        handler=export_learning_report,
+        returns="报告正文（或导出结果与路径）",
+    ))
+
     return reg

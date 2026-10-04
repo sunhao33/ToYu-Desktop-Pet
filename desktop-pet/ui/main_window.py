@@ -25,6 +25,7 @@ from pet_engine.pet_window import PetWindow
 from pet_engine.pet_state_machine import InteractionMode
 from pet_engine.pet_house import HouseWindow
 from pet_engine.pet_ai import AICompanion
+from ui.widgets.progress_ring import ProgressRing
 from ui.settings_manager import SettingsManager
 from ui.tray_icon import TrayIcon
 from ui.screen_time_tracker import ScreenTimeTracker
@@ -823,6 +824,29 @@ class MainWindow(QMainWindow):
         status_card_layout = status_card.layout()
         status_card_layout.setSpacing(8)
 
+        # 每日目标进度环（点一下可以改目标）
+        goal_row = QHBoxLayout()
+        goal_row.setSpacing(10)
+        self._goal_ring = ProgressRing(size=64, thickness=6)
+        self._goal_ring.setToolTip("今日学习目标进度 · 点一下可以设置目标")
+        self._goal_ring.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._goal_ring.mousePressEvent = lambda event: self._prompt_goal()  # type: ignore
+        goal_row.addWidget(self._goal_ring)
+        goal_box = QVBoxLayout()
+        goal_box.setSpacing(2)
+        goal_title = QLabel("今日学习目标")
+        goal_title.setStyleSheet(
+            f"color: {self._c('text')}; font-size: 11px; font-weight: bold;"
+            " background: transparent;")
+        goal_box.addWidget(goal_title)
+        self._goal_label = QLabel("统计中…")
+        self._goal_label.setWordWrap(True)
+        self._goal_label.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
+        goal_box.addWidget(self._goal_label)
+        goal_row.addLayout(goal_box, 1)
+        status_card_layout.addLayout(goal_row)
+
         action_row = QHBoxLayout()
         action_label = QLabel("当前动作:")
         action_label.setStyleSheet(f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
@@ -1258,6 +1282,9 @@ class MainWindow(QMainWindow):
 
         left_col.addWidget(left_bot_card, 1)  # 1/4
 
+        # 每日目标卡（放在数据面板左栏底部，一眼看到今天进度）
+        left_col.addWidget(self._build_goal_card())
+
         tools_p2_layout.addLayout(left_col, 1)  # left half = 1/2
 
         right_card = self._make_card("📅 日历")
@@ -1269,7 +1296,16 @@ class MainWindow(QMainWindow):
         self._calendar.date_selected.connect(self._on_calendar_date_selected)
         right_card_layout.addWidget(self._calendar)
 
-        tools_p2_layout.addWidget(right_card, 1)  # right half = 1/2
+        # 数据面板右栏：上面放学习报告，下面放日历
+        right_col = QWidget()
+        right_col.setStyleSheet("background: transparent;")
+        right_col_layout = QVBoxLayout(right_col)
+        right_col_layout.setContentsMargins(0, 0, 0, 0)
+        right_col_layout.setSpacing(12)
+        right_col_layout.addWidget(self._build_report_card(), 1)
+        right_col_layout.addWidget(right_card, 1)
+
+        tools_p2_layout.addWidget(right_col, 1)  # right half = 1/2
 
         from ui.tools.desktop_tools_page import DesktopToolsPage
         self._desktop_tools_page = DesktopToolsPage(self)
@@ -2233,6 +2269,9 @@ class MainWindow(QMainWindow):
         elif idx == 2:
             # 进数据面板就把学习统计的图先画出来，不用再点日历才有图
             self._ensure_study_charts()
+            # 学习报告与目标环也一起刷新（数据可能已经变了）
+            self._refresh_report_preview()
+            self._refresh_goal()
             self._update_content_min_width()
 
     # ── 桌面工具（剪贴板历史 / 护眼提醒）────────────────────
@@ -4086,6 +4125,308 @@ class MainWindow(QMainWindow):
                 label.hide()
             except RuntimeError:
                 pass
+
+    # ── 每日目标 ────────────────────────────────────────────
+    def _ensure_goal_tracker(self):
+        """创建每日目标追踪器（惰性）。"""
+        if getattr(self, "_goal_tracker", None) is not None:
+            return self._goal_tracker
+        try:
+            from pet_engine.goal import DailyGoalTracker
+            self._goal_tracker = DailyGoalTracker(
+                settings=self.settings,
+                tracker=getattr(self, "_screen_tracker", None),
+                memory_store=getattr(self, "_memory_store", None))
+        except Exception as exc:  # noqa: BLE001
+            print("[Goal] 初始化失败: %s" % exc)
+            self._goal_tracker = None
+        return self._goal_tracker
+
+    def _refresh_goal(self):
+        """刷新所有目标环（主页 / 心流窗口 / 数据面板）。"""
+        tracker = self._ensure_goal_tracker()
+        if tracker is None:
+            return
+        try:
+            info = tracker.progress()
+        except Exception as exc:  # noqa: BLE001
+            print("[Goal] 读取进度失败: %s" % exc)
+            return
+
+        accent = self._c('accent')
+        track = self._c('border')
+        fg = self._c('text')
+        text2 = self._c('text2')
+
+        if info["has_goal"]:
+            ratio = info["ratio"]
+            ring_text = "%d%%" % round(ratio * 100)
+            detail = tracker.text()
+            full = "#4CAF50"          # 达成用绿色
+            dim = False
+        else:
+            ratio = 0.0
+            ring_text = "未设"
+            detail = tracker.text()
+            full = None
+            dim = True
+
+        for ring in (getattr(self, "_goal_ring", None),
+                     getattr(self, "_data_goal_ring", None)):
+            if ring is not None:
+                ring.set_state(ratio, ring_text, accent, track, fg,
+                               font_size=15, dim=dim, full_color=full)
+        self._refresh_goal_history()
+
+        label = getattr(self, "_goal_label", None)
+        if label is not None:
+            label.setText(detail)
+            label.setStyleSheet(
+                f"color: {accent if info['reached'] else text2};"
+                " font-size: 11px; background: transparent;")
+        data_label = getattr(self, "_data_goal_label", None)
+        if data_label is not None:
+            data_label.setText(detail)
+            data_label.setStyleSheet(
+                f"color: {accent if info['reached'] else text2};"
+                " font-size: 11px; background: transparent;")
+
+        # 心流窗口
+        flow = getattr(self, "_flow_window", None)
+        if flow is not None and hasattr(flow, "refresh_goal"):
+            try:
+                flow.refresh_goal(info)
+            except RuntimeError:
+                pass
+
+        # 达成时庆祝一次（每天只一次）
+        if tracker.should_celebrate():
+            self._celebrate_goal(info)
+
+    def _celebrate_goal(self, info):
+        """达成每日目标：宠物庆祝 + 提示（每天只触发一次）。"""
+        pet = getattr(self, "_pet", None)
+        if pet is not None:
+            try:
+                pet.trigger_celebrate(3.0)
+            except (RuntimeError, AttributeError):
+                pass
+        self._toast("🎉 今日目标达成！已学习 %d 分钟" % info["study_minutes"])
+        try:
+            self._status.setText("🎉 今日学习目标达成（%d 分钟）"
+                                 % info["study_minutes"])
+        except RuntimeError:
+            pass
+
+    def _prompt_goal(self):
+        """点击目标环时设置目标（用输入对话框）。"""
+        tracker = self._ensure_goal_tracker()
+        if tracker is None:
+            return
+        from PyQt6.QtWidgets import QInputDialog
+        current = tracker.goal_minutes() or 120
+        minutes, ok = QInputDialog.getInt(
+            self, "设置每日学习目标",
+            "每天计划学习多少分钟？（填 0 表示不设目标）",
+            current, 0, 1440, 15)
+        if not ok:
+            return
+        tracker.set_goal_minutes(minutes)
+        self._refresh_goal()
+        if minutes:
+            self._toast("已设置每日目标：%d 分钟" % minutes)
+        else:
+            self._toast("已清除每日目标")
+
+    def _build_goal_card(self):
+        """数据面板里的每日目标卡片（含 7 天达成情况）。"""
+        card = self._make_card("🎯 每日目标")
+        layout = card.layout()
+        layout.setSpacing(8)
+
+        row = QHBoxLayout()
+        row.setSpacing(12)
+        self._data_goal_ring = ProgressRing(size=88, thickness=7)
+        self._data_goal_ring.setToolTip("点一下可以设置每日目标")
+        self._data_goal_ring.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._data_goal_ring.mousePressEvent = lambda event: self._prompt_goal()  # type: ignore
+        row.addWidget(self._data_goal_ring)
+
+        box = QVBoxLayout()
+        box.setSpacing(4)
+        self._data_goal_label = QLabel("统计中…")
+        self._data_goal_label.setWordWrap(True)
+        self._data_goal_label.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
+        box.addWidget(self._data_goal_label)
+
+        self._goal_history_label = QLabel("")
+        self._goal_history_label.setWordWrap(True)
+        self._goal_history_label.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 10px; background: transparent;")
+        box.addWidget(self._goal_history_label)
+        box.addStretch()
+        row.addLayout(box, 1)
+        layout.addLayout(row)
+
+        set_btn = QPushButton("设置目标")
+        set_btn.setObjectName("secondaryBtn")
+        set_btn.setFixedHeight(26)
+        set_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        set_btn.clicked.connect(self._prompt_goal)
+        layout.addWidget(set_btn)
+        return card
+
+    def _refresh_goal_history(self):
+        """最近 7 天的达成情况（一眼看出这周状态）。"""
+        label = getattr(self, "_goal_history_label", None)
+        tracker = getattr(self, "_goal_tracker", None)
+        if label is None or tracker is None:
+            return
+        goal = tracker.goal_minutes()
+        if not goal:
+            label.setText("设置目标后，这里会显示最近 7 天的达成情况")
+            return
+        from datetime import date, timedelta
+        marks = []
+        ok_days = 0
+        for i in range(6, -1, -1):
+            day = (date.today() - timedelta(days=i)).isoformat()
+            info = tracker.progress(day)
+            if info["reached"]:
+                marks.append("●")
+                ok_days += 1
+            elif info["study_minutes"] > 0:
+                marks.append("○")
+            else:
+                marks.append("·")
+        label.setText("近 7 天：%s  达成 %d/7 天"
+                      % (" ".join(marks), ok_days))
+
+    # ── 学习报告 ────────────────────────────────────────────
+    def _ensure_report(self):
+        if getattr(self, "_report_builder", None) is not None:
+            return self._report_builder
+        try:
+            from pet_engine.report import LearningReport
+            self._report_builder = LearningReport(
+                main_window=self,
+                tracker=getattr(self, "_screen_tracker", None),
+                todo_widget=getattr(self, "_todo_widget", None),
+                goal_tracker=self._ensure_goal_tracker())
+        except Exception as exc:  # noqa: BLE001
+            print("[Report] 初始化失败: %s" % exc)
+            self._report_builder = None
+        return self._report_builder
+
+    def _refresh_report_preview(self, period: str = None):
+        """刷新报告预览。"""
+        label = getattr(self, "_report_preview", None)
+        builder = self._ensure_report()
+        if label is None or builder is None:
+            return
+        period = period or getattr(self, "_report_period", "today")
+        self._report_period = period
+        try:
+            text = builder.render_markdown(period)
+        except Exception as exc:  # noqa: BLE001
+            label.setText("报告生成失败：%s" % exc)
+            return
+        # 预览只显示前若干行，完整内容导出后查看
+        lines = text.splitlines()
+        preview = "\n".join(lines[:28])
+        if len(lines) > 28:
+            preview += "\n…（完整报告请点「导出」）"
+        label.setText(preview)
+        # 同步按钮选中态
+        for key, btn in getattr(self, "_report_btns", {}).items():
+            btn.setChecked(key == period)
+
+    def _export_report(self, period: str = None):
+        """导出报告文件并提示路径。"""
+        builder = self._ensure_report()
+        if builder is None:
+            self._toast("❌ 报告模块不可用")
+            return
+        period = period or getattr(self, "_report_period", "today")
+        try:
+            path = builder.export(period, fmt="md")
+        except Exception as exc:  # noqa: BLE001
+            self._toast("❌ 导出失败：%s" % str(exc)[:60])
+            return
+        self._toast("✅ 已导出：%s" % os.path.basename(path))
+        try:
+            self._status.setText("报告已导出到 %s" % path)
+        except RuntimeError:
+            pass
+
+    def _build_report_card(self):
+        """数据面板里的学习报告卡片。"""
+        card = self._make_card("📄 学习报告")
+        layout = card.layout()
+        layout.setSpacing(8)
+
+        tabs = QHBoxLayout()
+        tabs.setSpacing(6)
+        self._report_btns = {}
+        for key, text in (("today", "今日"), ("week", "本周"), ("month", "本月")):
+            btn = QPushButton(text)
+            btn.setCheckable(True)
+            btn.setFixedHeight(26)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setStyleSheet(
+                f"QPushButton {{ background: {self._c('tab_bg')}; border: none;"
+                " border-radius: 6px; font-size: 11px; padding: 0 12px;"
+                f" color: {self._c('text')}; }}"
+                f"QPushButton:checked {{ background: {self._c('accent')};"
+                " color: white; }")
+            btn.clicked.connect(lambda checked=False, k=key: self._refresh_report_preview(k))
+            tabs.addWidget(btn)
+            self._report_btns[key] = btn
+        tabs.addStretch()
+
+        export_btn = QPushButton("导出")
+        export_btn.setObjectName("secondaryBtn")
+        export_btn.setFixedHeight(26)
+        export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        export_btn.setToolTip("导出为 Markdown 文件（可直接当周报用）")
+        export_btn.clicked.connect(lambda: self._export_report())
+        tabs.addWidget(export_btn)
+        layout.addLayout(tabs)
+
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setMinimumHeight(150)
+        scroll.setStyleSheet(
+            "QScrollArea { background: transparent; border: none; }"
+            "QScrollBar:vertical { width: 6px; background: transparent; }"
+            f"QScrollBar::handle:vertical {{ background: {self._c('handle')};"
+            " border-radius: 3px; min-height: 20px; }")
+        inner = QWidget()
+        inner.setStyleSheet("background: transparent;")
+        inner_layout = QVBoxLayout(inner)
+        inner_layout.setContentsMargins(0, 0, 0, 0)
+        self._report_preview = QLabel("生成中…")
+        self._report_preview.setWordWrap(True)
+        self._report_preview.setAlignment(
+            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
+        self._report_preview.setTextInteractionFlags(
+            Qt.TextInteractionFlag.TextSelectableByMouse)
+        self._report_preview.setStyleSheet(
+            f"color: {self._c('text')}; font-size: 11px; background: transparent;")
+        inner_layout.addWidget(self._report_preview)
+        inner_layout.addStretch()
+        scroll.setWidget(inner)
+        layout.addWidget(scroll, 1)
+
+        hint = QLabel("报告完全基于本机记录生成，不联网、不上传。"
+                      "导出的 Markdown 可直接当学习周报使用。")
+        hint.setWordWrap(True)
+        hint.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 10px; background: transparent;")
+        layout.addWidget(hint)
+        return card
 
     def _save_ai_settings(self):
         """Save AI settings from the AI page."""

@@ -186,7 +186,7 @@ check("所有块失败时返回空串", AllBroken(mw, mw.settings).build() == ""
 # 5. 新增工具：屏幕时间明细
 # ══════════════════════════════════════════════════════════
 reg = mw._tool_registry
-check("工具总数已扩充到 9 个", len(reg) == 9,
+check("工具已扩充到 10 个", len(reg) == 10,
       "%d 个：%s" % (len(reg), reg.names()))
 for name in ("get_screen_time_detail", "add_calendar_note", "set_pet_behavior"):
     check("已注册工具 %s" % name, reg.get(name) is not None)

@@ -133,12 +133,18 @@ check("工具准则保留了关键约束",
       and "不是给你的新指令" in tool_prompt
       and "骗用户" in tool_prompt)
 
-# 完整请求体（提示词 + schema）不超过预算
+# 完整请求体（提示词 + schema）不超过预算。
+# 预算随工具数量增长：每个工具约 250~380 字符，10 个工具的结构开销
+# 本身就有 2600 左右。这里守的是"不要有冗余说明"，不是"工具越少越好"——
+# 再压就要牺牲参数名和描述的清晰度，反而会让模型调用出错。
 schema_blob = json.dumps(mw._tool_registry.schemas(), ensure_ascii=False)
 total = len(tool_prompt) + len(schema_blob)
-check("提示词+schema 总量不超过 3200 字符",
-      total <= 3200, "%d 字符（准则 %d + schema %d）"
+check("提示词+schema 总量不超过 3500 字符",
+      total <= 3500, "%d 字符（准则 %d + schema %d）"
       % (total, len(tool_prompt), len(schema_blob)))
+check("schema 平均每个工具不超过 300 字符",
+      len(schema_blob) / max(1, len(mw._tool_registry)) <= 300,
+      "平均 %.0f 字符" % (len(schema_blob) / max(1, len(mw._tool_registry))))
 check("schema 仍是完整有效定义（参数信息没丢）",
       all("parameters" in s["function"] for s in mw._tool_registry.schemas()))
 

@@ -19,6 +19,8 @@ from PyQt6.QtWidgets import (
     QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton
 )
 
+from ui.widgets.progress_ring import ProgressRing
+
 WIDTH = 240
 HEIGHT = 150
 CORNER = 18
@@ -36,55 +38,6 @@ def _compact(seconds):
     if seconds >= 3600:
         return _clock(seconds)
     return "%02d:%02d" % (seconds // 60, seconds % 60)
-
-
-class _Ring(QWidget):
-    """倒计时进度环。颜色跟随主题，不依赖 emoji。"""
-
-    def __init__(self, parent=None):
-        super().__init__(parent)
-        self.setFixedSize(RING, RING)
-        self._ratio = 0.0
-        self._text = ""
-        self._accent = QColor("#C49A3C")
-        self._track = QColor("#E8D5C0")
-        self._fg = QColor("#2C1810")
-        self._urgent = False
-
-    def set_state(self, ratio, text, accent, track, fg, urgent=False):
-        self._ratio = max(0.0, min(1.0, float(ratio)))
-        self._text = text
-        self._accent = QColor(accent)
-        self._track = QColor(track)
-        self._fg = QColor(fg)
-        self._urgent = urgent
-        self.update()
-
-    def paintEvent(self, event):
-        p = QPainter(self)
-        p.setRenderHint(QPainter.RenderHint.Antialiasing)
-        pad = 5
-        rect = QRectF(pad, pad, self.width() - 2 * pad, self.height() - 2 * pad)
-
-        pen = QPen(self._track, 5)
-        pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-        p.setPen(pen)
-        p.drawArc(rect, 0, 360 * 16)
-
-        if self._ratio > 0:
-            pen = QPen(QColor("#E05A4F") if self._urgent else self._accent, 5)
-            pen.setCapStyle(Qt.PenCapStyle.RoundCap)
-            p.setPen(pen)
-            # 从 12 点方向顺时针
-            p.drawArc(rect, 90 * 16, -int(360 * 16 * self._ratio))
-
-        p.setPen(self._fg)
-        font = QFont()
-        font.setPointSize(13 if len(self._text) <= 5 else 11)
-        font.setBold(True)
-        font.setFamily("Consolas")
-        p.setFont(font)
-        p.drawText(self.rect(), Qt.AlignmentFlag.AlignCenter, self._text)
 
 
 class MiniTimerWindow(QWidget):
@@ -145,7 +98,7 @@ class MiniTimerWindow(QWidget):
 
         mid = QHBoxLayout()
         mid.setSpacing(10)
-        self._ring = _Ring()
+        self._ring = ProgressRing(size=RING, thickness=5)
         mid.addWidget(self._ring)
 
         info = QVBoxLayout()
@@ -266,7 +219,7 @@ class MiniTimerWindow(QWidget):
             self._tick_countup()
         else:
             accent, track, fg = self._ring_colors()
-            self._ring.set_state(0.0, "--:--", accent, track, fg)
+            self._ring.set_state(0.0, "--:--", accent, track, fg, dim=True)
             self._state_label.setText("计时已结束")
 
     def _ring_colors(self):
@@ -285,7 +238,7 @@ class MiniTimerWindow(QWidget):
         urgent = 0 < remaining <= 10
         accent, track, fg = self._ring_colors()
         self._ring.set_state(ratio, _compact(remaining), accent, track, fg,
-                             urgent=urgent)
+                             full_color="#E05A4F" if urgent else None)
 
         if remaining <= 0 and not running:
             self._state_label.setText("专注完成")
@@ -317,7 +270,7 @@ class MiniTimerWindow(QWidget):
             self._paused = False
             acc = self._main._c('accent')
             self._ring.set_state(1.0, _compact(secs), acc, acc,
-                                 self._main._c('text'))
+                                 self._main._c('text'), full_color=acc)
         else:
             last = getattr(flow, "_last_task", None)
             secs = flow._task_secs(last) if last else 0

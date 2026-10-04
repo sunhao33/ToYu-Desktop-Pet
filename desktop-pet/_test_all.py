@@ -47,6 +47,8 @@ TESTS = [
     ("流式显示与指标采集", "_test_agent_stream.py"),
     ("AI 页可见性与保存反馈", "_test_ai_page_visibility.py"),
     ("AI 路径开销优化", "_test_ai_efficiency.py"),
+    ("每日目标与进度环", "_test_daily_goal.py"),
+    ("学习报告生成与导出", "_test_learning_report.py"),
 ]
 
 env = dict(os.environ)
