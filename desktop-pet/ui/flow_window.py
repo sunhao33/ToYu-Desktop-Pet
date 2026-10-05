@@ -20,8 +20,9 @@ from PyQt6.QtWidgets import (
 )
 
 FOCUS_PRESETS = (25, 45, 60, 90)
-SPRITE_BOX = 150
-TIMER_MIN_HEIGHT = 300
+# 宠物区域：够看清动作即可，过高会把计时面板挤扁
+SPRITE_BOX = 118
+TIMER_MIN_HEIGHT = 268
 # 专注结束后自动进入的休息时长
 BREAK_MINUTES = 5
 # 尺寸与主窗口保持一致（方案 A：由实测内容需求决定）
@@ -454,11 +455,13 @@ class FlowWindow(QMainWindow):
     def _build_focus_card(self):
         card = self._make_card("⏱ 专注")
         layout = card.layout()
-        layout.setSpacing(8)
+        layout.setSpacing(10)
 
         self._stage = _PetStage(self)
         layout.addWidget(self._stage)
 
+        # 计时面板占满中间剩余空间：不要额外的 stretch，否则面板被压成
+        # 固定高度、上下出现两块不均匀的空白（之前就是这样）。
         self._timer_holder = QStackedWidget()
         self._timer_holder.setStyleSheet("QStackedWidget { background: transparent; }")
         self._timer_holder.setMinimumHeight(TIMER_MIN_HEIGHT)
@@ -480,54 +483,66 @@ class FlowWindow(QMainWindow):
         self._rounds_dots.setToolTip("每个圆点代表完成的一轮专注")
         rounds_row.addWidget(self._rounds_dots)
         rounds_row.addStretch()
+        # 本轮时长：倒计时一跑起来显示的就是"还剩多少"（25 分钟会立刻显示
+        # 24:5x），容易被误认为"选 25 却跳成 24"。这里标明选的是多久。
+        self._round_len_label = QLabel("")
+        self._round_len_label.setStyleSheet(
+            f"color: {self._c('text')}; font-size: 11px; background: transparent;")
+        rounds_row.addWidget(self._round_len_label)
         self._rounds_total = QLabel("今日 0 轮")
         self._rounds_total.setStyleSheet(
             f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
         rounds_row.addWidget(self._rounds_total)
         layout.addLayout(rounds_row)
 
-        self._state_label = QLabel("准备开始")
-        self._state_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        self._state_label.setStyleSheet(
-            f"color: {self._c('text2')}; font-size: 12px; background: transparent;")
-        layout.addWidget(self._state_label)
-
         # ── 今日专注时间轴 ──
         from ui.widgets.focus_timeline import FocusTimeline
         self._timeline = FocusTimeline(self._c)
         layout.addWidget(self._timeline)
 
-        # 心流模式自带的快捷按钮（计时器里的 9 个预设会被隐藏，避免两套并存）
-        preset_row = QHBoxLayout()
-        preset_row.setSpacing(6)
+        # 状态提示：只在需要说明时显示（空闲时不重复计时面板里的"准备开始"）
+        self._state_label = QLabel("")
+        self._state_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        self._state_label.setWordWrap(True)
+        self._state_label.setVisible(False)
+        self._state_label.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
+        layout.addWidget(self._state_label)
+
+        # 时长按钮：4 个预设一行，休息单独一行 —— 5 个挤一行时
+        # 文字会被压缩到显示不全
+        layout.addLayout(self._build_duration_row())
+        layout.addLayout(self._build_break_row())
+
+        return card
+
+    def _build_duration_row(self):
+        row = QHBoxLayout()
+        row.setSpacing(6)
         for minutes in FOCUS_PRESETS:
             b = QPushButton("%d 分钟" % minutes)
             b.setObjectName("secondaryBtn")
-            b.setFixedHeight(30)
+            b.setFixedHeight(32)
             b.setCursor(Qt.CursorShape.PointingHandCursor)
             b.setToolTip("立即开始 %d 分钟专注" % minutes)
             b.clicked.connect(lambda checked=False, m=minutes: self.start_focus(m))
-            preset_row.addWidget(b)
+            row.addWidget(b, 1)
+        return row
 
+    def _build_break_row(self):
+        row = QHBoxLayout()
+        row.setSpacing(6)
         # 休息按钮：专注结束后会自动进休息，也可以手动提前休息
         # （不用 ☕ 这类 emoji：在部分 Windows 上会渲染成空心方块/圆点）
         self._break_btn = QPushButton("休息 %d 分钟" % BREAK_MINUTES)
         self._break_btn.setObjectName("secondaryBtn")
         self._break_btn.setFixedHeight(30)
         self._break_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._break_btn.setToolTip("现在开始一段 %d 分钟休息" % BREAK_MINUTES)
+        self._break_btn.setToolTip("现在开始一段 %d 分钟休息；"
+                                   "专注结束后也会自动进入休息" % BREAK_MINUTES)
         self._break_btn.clicked.connect(lambda: self.start_break(BREAK_MINUTES))
-        preset_row.addWidget(self._break_btn)
-        layout.addLayout(preset_row)
-
-        tip = QLabel("计时与 ToYu 共用同一份状态，来回切换不会中断；"
-                     "专注结束后会自动进入休息")
-        tip.setWordWrap(True)
-        tip.setAlignment(Qt.AlignmentFlag.AlignCenter)
-        tip.setStyleSheet(
-            f"color: {self._c('text2')}; font-size: 10px; background: transparent;")
-        layout.addWidget(tip)
-        return card
+        row.addWidget(self._break_btn, 1)
+        return row
 
     # ── 右：今日概况 ────────────────────────────────────────
     def _build_stats_card(self):
@@ -558,27 +573,37 @@ class FlowWindow(QMainWindow):
             " background: transparent;")
         layout.addWidget(self._big_focus)
 
-        cap = QLabel("已完成任务累计时长")
+        cap = QLabel("今日完成的任务累计时长")
         cap.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        cap.setWordWrap(True)
         cap.setStyleSheet(
-            f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
+            f"color: {self._c('text2')}; font-size: 10px; background: transparent;")
         layout.addWidget(cap)
 
+        layout.addWidget(self._make_sep())
+
+        # 统计行：给固定行高与紧凑间距，避免右栏拉高后行距被撑开显得松散
+        rows_box = QVBoxLayout()
+        rows_box.setSpacing(7)
         self._stat_rows = {}
         for key, label in (("done", "已完成任务"), ("left", "未完成待办"),
-                           ("screen", "今日屏幕时间"), ("sessions", "记录段数")):
+                           ("screen", "今日屏幕时间"), ("sessions", "记录段数"),
+                           ("rounds", "专注轮次")):
             row = QHBoxLayout()
-            row.addWidget(QLabel(label))
-            row.itemAt(0).widget().setStyleSheet(
-                f"color: {self._c('text')}; font-size: 12px; background: transparent;")
+            row.setSpacing(8)
+            tag = QLabel(label)
+            tag.setStyleSheet(
+                f"color: {self._c('text')}; font-size: 11px; background: transparent;")
+            row.addWidget(tag)
             row.addStretch()
             val = QLabel("-")
             val.setStyleSheet(
                 f"color: {self._c('mid')}; font-size: 12px; font-weight: bold;"
                 " background: transparent;")
             row.addWidget(val)
-            layout.addLayout(row)
+            rows_box.addLayout(row)
             self._stat_rows[key] = val
+        layout.addLayout(rows_box)
 
         layout.addWidget(self._make_sep())
 
@@ -659,14 +684,31 @@ class FlowWindow(QMainWindow):
         if sub is not None:
             self._main._switch_tools_page(sub)
 
+    # ── 状态提示 ────────────────────────────────────────────
+    def _set_state(self, text: str, color: str = None):
+        """设置中间栏的状态提示。空文本时隐藏整行。
+
+        空闲时不显示 —— 计时面板里本来就有"准备开始"，
+        两处重复显示显得啰嗦。
+        """
+        label = getattr(self, "_state_label", None)
+        if label is None:
+            return
+        text = text or ""
+        label.setText(text)
+        label.setVisible(bool(text))
+        label.setStyleSheet(
+            "color: %s; font-size: 11px; background: transparent;"
+            % (color or self._c("text2")))
+
     def start_focus(self, minutes):
         self._main.start_focus_session(minutes)
         self._focus_started_at = datetime.now()
         self._focus_task = getattr(self, "_active_task", "") or ""
         self._round_kind = "focus"
-        self._state_label.setText("专注中 · %d 分钟" % minutes)
-        self._state_label.setStyleSheet(
-            f"color: {self._c('text2')}; font-size: 12px; background: transparent;")
+        self._round_len_label.setText("本轮 %d 分钟" % minutes)
+        self._set_state("专注中 · 已选 %d 分钟" % minutes)
+        self._refresh_rounds()
         self._maybe_show_mini(
             "专注倒计时", "countdown",
             pause=self._main.pause_focus_session,
@@ -692,10 +734,9 @@ class FlowWindow(QMainWindow):
         self._focus_started_at = datetime.now()
         self._focus_task = ""
         self._round_kind = "break"
-        self._state_label.setText("休息中 · %d 分钟（离开屏幕活动一下）" % minutes)
-        self._state_label.setStyleSheet(
-            f"color: {self._c('success')}; font-size: 12px; font-weight: bold;"
-            " background: transparent;")
+        self._round_len_label.setText("休息 %d 分钟" % minutes)
+        self._set_state("休息中 · %d 分钟（离开屏幕活动一下）" % minutes,
+                        color=self._c("success"))
         self._status.setText("休息中 · %d 分钟" % minutes)
         self._maybe_show_mini(
             "休息倒计时", "countdown",
@@ -740,10 +781,7 @@ class FlowWindow(QMainWindow):
         self._record_session()
         if kind == "break":
             self._status.setText("休息结束 · 可以从上面选一个时长开始下一轮")
-            self._state_label.setText("休息结束 · 准备开始下一轮")
-            self._state_label.setStyleSheet(
-                f"color: {self._c('text2')}; font-size: 12px;"
-                " background: transparent;")
+            self._set_state("休息结束 · 可以开始下一轮")
             self._round_kind = "focus"
             self._refresh_rounds()
             pet = getattr(self._main, "_pet", None)
@@ -858,7 +896,7 @@ class FlowWindow(QMainWindow):
             }}
         """)
         self._state_label.setStyleSheet(
-            f"color: {self._c('text2')}; font-size: 12px; background: transparent;")
+            f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
         self._mood_label.setStyleSheet(
             f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
         self.refresh_all()
@@ -879,14 +917,15 @@ class FlowWindow(QMainWindow):
         if timer is not None:
             is_break = getattr(self, "_round_kind", "focus") == "break"
             if timer.get_is_running():
-                self._state_label.setText(
-                    ("休息中 · 剩余 %s" if is_break else "专注中 · 剩余 %s")
-                    % _fmt_duration(timer.get_remaining_seconds()))
+                # 倒计时本身就在面板上显示剩余时间，这里只说清"在做什么"
+                self._set_state("休息中 · 到点会自动提示" if is_break
+                                else "专注中 · 加油",
+                                color=self._c("success") if is_break else None)
             elif timer.get_remaining_seconds() > 0:
-                self._state_label.setText(
-                    "已暂停 · 剩余 %s" % _fmt_duration(timer.get_remaining_seconds()))
+                self._set_state("已暂停")
             else:
-                self._state_label.setText("准备开始")
+                # 空闲不显示状态行：面板里已有"准备开始"，重复显得啰嗦
+                self._set_state("")
         self._tick_task_timer()
         self._stage.refresh()
         self._refresh_stats()
@@ -901,6 +940,12 @@ class FlowWindow(QMainWindow):
         tasks = self._today_history()
         self._big_focus.setText(_fmt_duration(sum(t.get("duration", 0) for t in tasks)))
         self._stat_rows["done"].setText(str(len(tasks)))
+
+        # 今日专注轮次（来自番茄记账，与"已完成任务"是两套统计）
+        try:
+            self._stat_rows["rounds"].setText(str(self._focus_log.rounds_today()))
+        except Exception:  # noqa: BLE001
+            self._stat_rows["rounds"].setText("-")
 
         todo = getattr(self._main, "_todo_widget", None)
         if todo is not None:
@@ -922,8 +967,7 @@ class FlowWindow(QMainWindow):
         if pet is not None:
             try:
                 self._mood_label.setText("宠物状态：好感度 %d · %s"
-                                         % (pet.affection.level,
-                                            pet.companion.get_status_text()))
+                                         % (pet.affection.level,                                            pet.companion.get_status_text()))
                 self._affection.setText("❤ %d/100" % pet.affection.level)
             except (RuntimeError, AttributeError):
                 self._mood_label.setText("")

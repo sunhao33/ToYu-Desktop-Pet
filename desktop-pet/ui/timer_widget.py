@@ -287,9 +287,15 @@ class TimerWidget(QWidget):
         layout.addStretch()
     
     def _set_preset(self, minutes):
-        """Set timer to preset minutes."""
-        self._hour_spin.setValue(0)
-        self._min_spin.setValue(minutes)
+        """设置倒计时时长。
+
+        必须**同时**处理小时框：分钟框上限是 59，只设分钟框的话
+        60 分钟会被截成 59 分钟、90 分钟也被截成 59 分钟
+        （用户选了 90 分钟却只跑 59 分钟，且看不出哪里不对）。
+        """
+        minutes = int(minutes)
+        self._hour_spin.setValue(minutes // 60)
+        self._min_spin.setValue(minutes % 60)
         self._sec_spin.setValue(0)
         self._update_display(minutes * 60)
     

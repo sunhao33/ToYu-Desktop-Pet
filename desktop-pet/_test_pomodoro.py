@@ -173,11 +173,83 @@ fw._focus_log.clear_today()
 check("心流窗口有轮次标签", getattr(fw, "_rounds_label", None) is not None)
 check("心流窗口有时间轴", getattr(fw, "_timeline", None) is not None)
 check("心流窗口有休息按钮", getattr(fw, "_break_btn", None) is not None)
+check("有本轮时长标签", getattr(fw, "_round_len_label", None) is not None)
+check("状态行默认隐藏（不重复计时面板的『准备开始』）",
+      not fw._state_label.isVisible() or fw._state_label.text() == "",
+      repr(fw._state_label.text()))
+check("状态行有统一设置入口", callable(getattr(fw, "_set_state", None)))
 check("休息按钮文案无 emoji（避免渲染成方块）",
       "分钟" in fw._break_btn.text() and "☕" not in fw._break_btn.text(),
       fw._break_btn.text())
 check("初始轮次为第 1 轮", "1" in fw._rounds_label.text(), fw._rounds_label.text())
 check("初始今日轮次为 0", "0" in fw._rounds_total.text(), fw._rounds_total.text())
+check("右栏有专注轮次一行", "rounds" in getattr(fw, "_stat_rows", {}),
+      str(list(getattr(fw, "_stat_rows", {}))))
+
+# ── 计时器预设时长（曾经 60/90 分钟被截成 59 分钟）──
+# 原因：_set_preset 只设分钟框（上限 59），从不使用小时框。
+# 注意 _set_preset 只更新三个 spin 框与显示，_remaining_seconds 是
+# 点"开始"时才设置的 —— 所以这里断言的应该是 spin 框的换算结果。
+timer_probe = mw._timer_widget
+
+
+def probe_total():
+    return (timer_probe._hour_spin.value() * 3600
+            + timer_probe._min_spin.value() * 60
+            + timer_probe._sec_spin.value())
+
+
+for minutes in (25, 45, 60, 90):
+    timer_probe._set_preset(minutes)
+    check("%d 分钟预设换算正确" % minutes, probe_total() == minutes * 60,
+          "实际 %d 秒（应为 %d）" % (probe_total(), minutes * 60))
+    check("%d 分钟显示正确" % minutes,
+          timer_probe._time_display.text()
+          == "%02d:%02d:00" % (minutes // 60, minutes % 60),
+          timer_probe._time_display.text())
+
+timer_probe._set_preset(90)
+check("90 分钟用小时框承载",
+      timer_probe._hour_spin.value() == 1 and timer_probe._min_spin.value() == 30,
+      "%d 时 %d 分" % (timer_probe._hour_spin.value(),
+                       timer_probe._min_spin.value()))
+timer_probe._set_preset(60)
+check("60 分钟用小时框承载",
+      timer_probe._hour_spin.value() == 1 and timer_probe._min_spin.value() == 0,
+      "%d 时 %d 分" % (timer_probe._hour_spin.value(),
+                       timer_probe._min_spin.value()))
+timer_probe._set_preset(25)
+check("不足 1 小时不用小时框",
+      timer_probe._hour_spin.value() == 0 and timer_probe._min_spin.value() == 25,
+      "%d 时 %d 分" % (timer_probe._hour_spin.value(),
+                       timer_probe._min_spin.value()))
+
+# 真跑一次，确认 _on_start 用的是修正后的值
+timer_probe._set_preset(60)
+timer_probe._on_start()
+pump(1200)
+check("60 分钟开始后剩余接近 1 小时",
+      timer_probe._remaining_seconds >= 3595,
+      "%d 秒" % timer_probe._remaining_seconds)
+timer_probe._on_reset()
+pump(200)
+
+# 状态行：设置文本时显示，清空时隐藏
+fw._set_state("测试状态")
+check("设置状态后显示", fw._state_label.isVisible()
+      and fw._state_label.text() == "测试状态")
+fw._set_state("")
+check("清空状态后隐藏", not fw._state_label.isVisible())
+
+# 开始专注后应标明本轮时长（避免"选 25 却看到 24 分"的误解）
+fw.start_focus(25)
+pump(400)
+check("开始专注后标明本轮时长",
+      "25" in fw._round_len_label.text(), fw._round_len_label.text())
+check("开始专注后状态行有内容", bool(fw._state_label.text()),
+      repr(fw._state_label.text()))
+mw.stop_focus_session()
+pump(300)
 
 fw.refresh_timeline()
 fw._refresh_rounds()
