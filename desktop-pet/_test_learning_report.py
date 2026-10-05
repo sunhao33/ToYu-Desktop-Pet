@@ -353,6 +353,66 @@ with open(p_empty, encoding="utf-8") as fh:
     check("空数据导出含说明", "还没有" in fh.read())
 
 # ══════════════════════════════════════════════════════════
+# 7. 数据过少的判定与提示
+#     背景：用户选"本月"导出，而本月只有 1 天有记录 —— 报告几乎全是 0，
+#     打开文件会以为导出失败或者文件坏了。
+# ══════════════════════════════════════════════════════════
+check("多天区间只有 1 天数据时判为稀疏",
+      LearningReport.is_sparse({
+          "has_data": True, "days": ["d1", "d2", "d3", "d4", "d5"],
+          "daily": {"d1": 0, "d2": 0, "d3": 3600, "d4": 0, "d5": 0}}) is True)
+check("多天都有数据时不算稀疏",
+      LearningReport.is_sparse({
+          "has_data": True, "days": ["d1", "d2"],
+          "daily": {"d1": 3600, "d2": 1800}}) is False)
+check("完全没有数据也算稀疏",
+      LearningReport.is_sparse({"has_data": False, "days": ["d1"],
+                                "daily": {}}) is True)
+check("单天区间不算稀疏（今日报告本来就短）",
+      LearningReport.is_sparse({"has_data": True, "days": ["d1"],
+                                "daily": {"d1": 600}}) is False)
+
+# 稀疏报告应在文件里说明原因，避免拿到文件的人以为报告坏了。
+# 注意要用**真正稀疏**的数据源：FakeTracker 在很多天都有数据，
+# 拿它测"本月"会得到 7 天记录 —— 那本来就不稀疏。
+class OneDayTracker:
+    """只有今天有记录，其余日期为空（模拟"刚开始用"的账号）。"""
+
+    def __init__(self):
+        self._today = date.today().isoformat()
+
+    def get_sessions(self, date_str=None):
+        if date_str == self._today:
+            return [{"app": "Code.exe", "title": "a.py", "secs": 3600.0}]
+        return []
+
+    def get_hourly_data(self, date_str=None):
+        data = [0.0] * 24
+        data[10] = 3600.0
+        return data
+
+    def get_focus_stats(self, date_str=None):
+        return {"sessions": 1, "meaningful": 1, "longest_secs": 3600.0,
+                "total_secs": 3600.0}
+
+
+sparse_report = LearningReport(tracker=OneDayTracker(), todo_widget=None)
+sparse_data = sparse_report.collect(PERIOD_MONTH)
+check("只有 1 天记录的本月报告判为稀疏",
+      LearningReport.is_sparse(sparse_data) is True,
+      "有数据天数 %d" % sum(1 for v in sparse_data["daily"].values() if v > 0))
+
+p_sparse = sparse_report.export(PERIOD_MONTH, directory=tmp)
+with open(p_sparse, encoding="utf-8") as fh:
+    sparse_text = fh.read()
+check("稀疏报告导出时带说明",
+      "记录到的学习数据很少" in sparse_text and "不是报告出错" in sparse_text,
+      sparse_text[:70].replace("\n", " "))
+check("数据充足的报告不带该说明",
+      "记录到的学习数据很少" not in report.render_markdown(PERIOD_WEEK),
+      "7 天都有记录的周报告不该被判为稀疏")
+
+# ══════════════════════════════════════════════════════════
 # 4. 界面与 AI 工具
 # ══════════════════════════════════════════════════════════
 from ui.main_window import MainWindow  # noqa: E402
@@ -377,6 +437,24 @@ check("有 AI 分析按钮", getattr(mw, "_report_ai_btn", None) is not None)
 check("AI 按钮初始文案", "AI 分析" in mw._report_ai_btn.text(),
       mw._report_ai_btn.text())
 
+
+def _find_btn(text):
+    from PyQt6.QtWidgets import QPushButton
+    for b in mw.findChildren(QPushButton):
+        if b.text() == text:
+            return b
+    return None
+
+
+check("有导出按钮", _find_btn("导出") is not None)
+check("有打开导出目录按钮", _find_btn("📁") is not None,
+      "缺少打开目录入口，用户找不到导出的文件在哪")
+_folder = _find_btn("📁")
+if _folder is not None:
+    check("目录按钮有说明性提示",
+          "导出目录" in (_folder.toolTip() or ""), _folder.toolTip())
+check("有打开目录的方法", callable(getattr(mw, "_open_report_folder", None)))
+
 mw._refresh_report_preview("week")
 pump(300)
 
@@ -391,6 +469,9 @@ def view_text(view):
 # 原因：时段分布只统计"当天"（多天叠加会失真），而测试运行时 ToYu
 # 通常没在采集屏幕时间，当天 hourly 为空 —— 那一段就（正确地）不渲染。
 # 直接断言会变成依赖运行环境的偶发失败。
+#
+# 注意只替换**窗口内部的** builder，全局 report 对象保持不变：
+# 它仍指向合成数据，后面第 7 节的稀疏判定要用它断言。
 mw._report_builder._tracker = FakeTracker()
 mw._report_builder._todo = FakeTodo()
 mw._report_builder._goal = FakeGoal()

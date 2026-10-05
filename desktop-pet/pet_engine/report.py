@@ -221,6 +221,18 @@ class LearningReport:
         """基于数据的客观观察（供界面与 Markdown 共用）。"""
         return self._suggestions(data)
 
+    @staticmethod
+    def is_sparse(data: dict) -> bool:
+        """数据是否过少（导出的报告会几乎是空的）。
+
+        判定标准不是"有没有数据"，而是"数据够不够撑起一份报告"：
+        只有一两天记录时报出的月度报告几乎全是 0，用户打开会以为文件坏了。
+        """
+        if not data.get("has_data"):
+            return True
+        days_with_data = sum(1 for v in (data.get("daily") or {}).values() if v > 0)
+        return days_with_data <= 1 and len(data.get("days", [])) > 1
+
     # ── AI 分析 ─────────────────────────────────────────────
     def build_ai_digest(self, data: dict) -> str:
         """把统计数据整理成给模型的摘要。
@@ -333,6 +345,16 @@ class LearningReport:
                 lines.append("")
                 lines.append(ai_text)
             return "\n".join(lines)
+
+        # 数据过少时先说明，避免拿到文件的人以为报告坏了
+        if self.is_sparse(d):
+            lines.append("> ⚠ 本区间记录到的学习数据很少，"
+                         "因此下面多处显示为 0。")
+            lines.append(">")
+            lines.append("> 这不是报告出错，而是 ToYu 在这段时间里"
+                         "没有被使用（或屏幕时间采集未开启）。")
+            lines.append("> 连续使用几天后，报告会明显更有参考价值。")
+            lines.append("")
 
         # ── 概览 ──
         lines.append("## 概览")

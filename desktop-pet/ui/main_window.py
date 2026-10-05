@@ -4491,6 +4491,25 @@ class MainWindow(QMainWindow):
         else:
             self._update_ai_btn_state()
 
+    def _open_report_folder(self):
+        """在文件资源管理器里打开报告导出目录。
+
+        导出到 %APPDATA%\\ToYu\\reports 这种深层隐藏目录，光靠一条
+        几秒就消失的提示，用户很难找到文件 —— 给一个直接打开的入口。
+        """
+        from pet_engine.report import REPORT_DIR
+        try:
+            os.makedirs(REPORT_DIR, exist_ok=True)
+        except OSError as exc:
+            self._toast("❌ 无法创建导出目录：%s" % exc)
+            return
+        try:
+            # 用 explorer 打开；不加 shell=True，避免路径里有空格时被截断
+            subprocess.Popen(["explorer", os.path.normpath(REPORT_DIR)])
+            self._toast("📁 已打开导出目录")
+        except Exception as exc:  # noqa: BLE001
+            self._toast("❌ 打开目录失败：%s" % str(exc)[:50])
+
     def _export_report(self, period: str = None):
         """导出报告文件并提示路径。"""
         builder = self._ensure_report()
@@ -4500,15 +4519,25 @@ class MainWindow(QMainWindow):
         period = period or getattr(self, "_report_period", "today")
         ai_text = getattr(self, "_report_ai_text", "")
         mode = getattr(self, "_report_mode", "basic")
+        # 数据太少时先提醒：导出的报告几乎全是 0，用户会以为文件坏了
+        sparse = False
+        try:
+            sparse = builder.is_sparse(builder.snapshot(period))
+        except Exception:  # noqa: BLE001
+            pass
         try:
             path = builder.export(period, fmt="md", ai_text=ai_text, mode=mode)
         except Exception as exc:  # noqa: BLE001
             self._toast("❌ 导出失败：%s" % str(exc)[:60])
             return
         kind = "AI 版" if (ai_text and mode == "ai") else "基础版"
-        self._toast("✅ 已导出（%s）：%s" % (kind, os.path.basename(path)))
+        if sparse:
+            self._toast("✅ 已导出（%s），但该区间数据很少，报告内容会比较简短：%s"
+                        % (kind, os.path.basename(path)), 4200)
+        else:
+            self._toast("✅ 已导出（%s）：%s" % (kind, os.path.basename(path)))
         try:
-            self._status.setText("报告已导出到 %s" % path)
+            self._status.setText("报告已导出到 %s（点「📁」可直接打开目录）" % path)
         except RuntimeError:
             pass
 
@@ -4604,6 +4633,15 @@ class MainWindow(QMainWindow):
         export_btn.setToolTip("导出为 Markdown 文件（可直接当周报用）")
         export_btn.clicked.connect(lambda: self._export_report())
         modes.addWidget(export_btn)
+
+        folder_btn = QPushButton("📁")
+        folder_btn.setObjectName("secondaryBtn")
+        folder_btn.setFixedHeight(26)
+        folder_btn.setFixedWidth(34)
+        folder_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        folder_btn.setToolTip("打开导出目录（导出的报告都在这里）")
+        folder_btn.clicked.connect(self._open_report_folder)
+        modes.addWidget(folder_btn)
         layout.addLayout(modes)
 
         scroll = QScrollArea()
