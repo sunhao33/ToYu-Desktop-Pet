@@ -24,6 +24,7 @@
       <a href="#features">功能</a>
       <a href="#preview">界面</a>
       <a href="#demo">在线体验</a>
+      <a href="#chat">试玩 AI</a>
       <a href="#download">下载</a>
     </nav>
     <button class="theme-btn" id="themeBtn" type="button" aria-label="切换深浅色">🌙 深色</button>
@@ -57,8 +58,15 @@
 
     <div class="hero-art">
       <div class="pet-stage">
-        <img src="assets/img/tv_pet.png" alt="ToYu 宠物" class="pet-sprite" id="heroPet">
+        <button class="pet-btn" id="petBtn" type="button"
+                aria-label="点一点宠物" title="点我试试">
+          <img src="assets/img/tv_pet.png" alt="ToYu 宠物" class="pet-sprite" id="heroPet">
+        </button>
         <div class="pet-shadow"></div>
+        <div class="pet-bubble" id="petBubble" role="status" aria-live="polite">
+          <span id="petBubbleText"></span>
+        </div>
+        <div class="pet-hint" id="petHint">👆 点我试试</div>
       </div>
       <div class="float-card fc-1">
         <span class="fc-ic">⏱</span>
@@ -246,11 +254,13 @@
     <div class="sec-head">
       <div class="pill">学习与工作</div>
       <h2>AI 之外，它也是认真的生产力工具</h2>
-      <p>这些功能完全不依赖大模型 —— 不配 API Key 也照常可用，数据全在本机。</p>
+      <p>这些功能完全不依赖大模型 —— 不配 API Key 也照常可用，数据全在本机。<br>
+         <b>👇 点任意一张卡片，看它实际跑出来的样子</b></p>
     </div>
 
-    <div class="cards">
-      <article class="card">
+    <div class="cards" id="featureCards">
+      <article class="card card-clickable" data-demo="report" tabindex="0" role="button"
+               aria-label="查看学习工作报告实例">
         <div class="card-ic">📈</div>
         <h3>学习/工作报告</h3>
         <p>按日/周/月汇总有效学习时长、应用分布、时段规律、完成任务数。
@@ -259,9 +269,11 @@
           <li>只读已有记录，不自己造数字</li>
           <li>一键导出 Markdown，方便贴进周报</li>
         </ul>
+        <span class="card-more">看实例 →</span>
       </article>
 
-      <article class="card">
+      <article class="card card-clickable" data-demo="flow" tabindex="0" role="button"
+               aria-label="查看心流模式实例">
         <div class="card-ic">🍅</div>
         <h3>心流模式</h3>
         <p>番茄轮次、休息提醒、今日专注时间轴一屏看完。
@@ -270,9 +282,11 @@
           <li>25 / 45 / 60 / 90 分钟预设</li>
           <li>暂停后继续不会重置进度</li>
         </ul>
+        <span class="card-more">看实例 →</span>
       </article>
 
-      <article class="card">
+      <article class="card card-clickable" data-demo="goal" tabindex="0" role="button"
+               aria-label="查看每日目标实例">
         <div class="card-ic">🎯</div>
         <h3>每日目标与进度环</h3>
         <p>设定每天要学多久，进度环实时反映达成情况，
@@ -281,9 +295,11 @@
           <li>目标可继承，不用每天重设</li>
           <li>达成时有明确反馈</li>
         </ul>
+        <span class="card-more">看实例 →</span>
       </article>
 
-      <article class="card">
+      <article class="card card-clickable" data-demo="screen" tabindex="0" role="button"
+               aria-label="查看屏幕时间统计实例">
         <div class="card-ic">🖥</div>
         <h3>屏幕时间统计</h3>
         <p>应用排行、时段分布、与昨日对比。
@@ -292,9 +308,11 @@
           <li>区分"在用电脑"与"在学习"</li>
           <li>可关闭标题记录保护隐私</li>
         </ul>
+        <span class="card-more">看实例 →</span>
       </article>
 
-      <article class="card">
+      <article class="card card-clickable" data-demo="bead" tabindex="0" role="button"
+               aria-label="查看拼豆编辑器实例">
         <div class="card-ic">🧩</div>
         <h3>像素创作与拼豆</h3>
         <p>内置拼豆编辑器：导入任意图片自动量化成有限色板，
@@ -303,9 +321,11 @@
           <li>自动抠图与颜色量化</li>
           <li>作品可直接导出分享</li>
         </ul>
+        <span class="card-more">看实例 →</span>
       </article>
 
-      <article class="card">
+      <article class="card card-clickable" data-demo="memory" tabindex="0" role="button"
+               aria-label="查看记忆与心情系统实例">
         <div class="card-ic">🏠</div>
         <h3>有性格的陪伴</h3>
         <p>好感度、心情、时间感知、天气感知。
@@ -315,10 +335,29 @@
           <li>7 种配件、5 种粒子特效</li>
           <li>像素小房子，可进出</li>
         </ul>
+        <span class="card-more">看实例 →</span>
       </article>
     </div>
   </div>
 </section>
+
+<!-- ── 实例弹窗 ─────────────────────────────────────────── -->
+<div class="modal" id="demoModal" role="dialog" aria-modal="true"
+     aria-labelledby="modalTitle" hidden>
+  <div class="modal-mask" data-close></div>
+  <div class="modal-box" role="document">
+    <button class="modal-close" type="button" data-close aria-label="关闭">✕</button>
+    <div class="modal-head">
+      <span class="modal-ic" id="modalIcon">📈</span>
+      <div>
+        <h3 id="modalTitle">标题</h3>
+        <p id="modalSub">副标题</p>
+      </div>
+    </div>
+    <div class="modal-body" id="modalBody"></div>
+    <div class="modal-foot" id="modalFoot"></div>
+  </div>
+</div>
 
 <!-- ── 界面预览 ─────────────────────────────────────────── -->
 <section class="section section-alt" id="preview">
@@ -434,6 +473,69 @@
   </div>
 </section>
 
+<!-- ── AI 对话试玩 ──────────────────────────────────────── -->
+<section class="section section-alt" id="chat">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="pill">🤖 试玩智能体</div>
+      <h2>跟它说句话试试</h2>
+      <p>下面是一个<b>离线演示</b>：回答来自预设脚本，用来展示它拿到工具结果后
+         会怎么组织语言。<b>真实的多步工具调用需要运行桌面版</b>（要你自己的 API Key）。</p>
+    </div>
+
+    <div class="chat-demo">
+      <div class="chat-window">
+        <div class="chat-titlebar">
+          <img src="assets/img/tv_pet.png" alt="">
+          <div>
+            <b>ToYu</b>
+            <small id="chatStatus">在线 · 本机运行</small>
+          </div>
+          <span class="chat-badge">演示模式</span>
+        </div>
+        <div class="chat-log" id="chatLog"></div>
+        <div class="chat-chips" id="chatChips">
+          <button class="chat-chip" data-say="我这周学了多久？" type="button">我这周学了多久？</button>
+          <button class="chat-chip" data-say="帮我安排下周复习计划" type="button">帮我安排下周复习计划</button>
+          <button class="chat-chip" data-say="我总在什么时候分心？" type="button">我总在什么时候分心？</button>
+          <button class="chat-chip" data-say="记住我每天晚上 8 点学习" type="button">记住我每天晚上 8 点学习</button>
+        </div>
+        <div class="chat-inputbar">
+          <input type="text" id="chatInput" placeholder="试着输入上面几句话，或自己打字…"
+                 aria-label="输入消息" autocomplete="off">
+          <button class="btn btn-primary btn-sm" id="chatSend" type="button">发送</button>
+        </div>
+      </div>
+
+      <div class="chat-side">
+        <div class="side-card">
+          <h4>💡 试着问这些</h4>
+          <ul>
+            <li>问学习情况 → 看它怎么读工具结果</li>
+            <li>让它安排计划 → 看多步执行的样子</li>
+            <li>说「记住…」 → 看记忆槽位怎么写入</li>
+          </ul>
+        </div>
+        <div class="side-card highlight">
+          <h4>⚠️ 这不是真的 AI</h4>
+          <p>网页版没有后端，<b>无法持有 API Key</b>（放前端会泄露）。
+             真实的多轮工具调用、长期记忆、上下文注入都要在桌面版里跑。</p>
+          <p class="side-note">这也正是为什么这个作品是桌面软件而不是网页应用 ——
+             你的数据不出本机，Key 也不经过第三方服务器。</p>
+        </div>
+        <div class="side-card">
+          <h4>🔍 演示脚本覆盖</h4>
+          <ul>
+            <li>工具结果 → 语言组织</li>
+            <li>多步执行的中间态</li>
+            <li>低置信记忆的追问</li>
+          </ul>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
 <!-- ── 下载 ─────────────────────────────────────────────── -->
 <section class="section section-alt" id="download">
   <div class="wrap">
@@ -507,5 +609,6 @@
 </footer>
 
 <script src="assets/js/site.js"></script>
+<script src="assets/js/interactive.js"></script>
 </body>
 </html>
