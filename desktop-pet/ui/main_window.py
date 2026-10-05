@@ -2720,6 +2720,16 @@ class MainWindow(QMainWindow):
         if timer is not None:
             timer._on_reset()
         self.hide_mini_timer()
+        # 提前停止也要记账：用户实际专注了的那段时间不该白做。
+        # （不足 1 分钟的会被 FocusLog 忽略，避免误点开始又立刻停也计入）
+        flow = getattr(self, "_flow_window", None)
+        if flow is not None:
+            record = getattr(flow, "_record_session", None)
+            if callable(record):
+                try:
+                    record()
+                except Exception as exc:  # noqa: BLE001
+                    print("[Flow] 提前停止记账失败: %s" % exc)
 
     # ── 悬浮计时小窗 ────────────────────────────────────────
     def show_mini_timer(self, title, mode, **actions):
@@ -2769,6 +2779,17 @@ class MainWindow(QMainWindow):
     def _on_timer_complete(self):
         """Handle timer completion with pet bubble notification."""
         self._status.setText("⏰ 倒计时结束!")
+        # 通知心流窗口：它负责番茄记账（专注段落盘 + 自动进入休息）
+        flow = getattr(self, "_flow_window", None)
+        if flow is not None:
+            handler = getattr(flow, "_on_focus_complete", None)
+            if callable(handler):
+                try:
+                    handler()
+                except RuntimeError:
+                    pass
+                except Exception as exc:  # noqa: BLE001
+                    print("[Flow] 番茄记账失败: %s" % exc)
         if self._pet:
             from pet_engine.pet_bubble import PomodoroNotificationBubble
             self._timer_notif = PomodoroNotificationBubble(

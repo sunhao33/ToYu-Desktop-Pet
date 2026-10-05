@@ -10,7 +10,7 @@
 
 import os
 import json
-from datetime import date
+from datetime import date, datetime
 
 from PyQt6.QtCore import Qt, QTimer
 from PyQt6.QtGui import QIcon, QPixmap
@@ -22,6 +22,8 @@ from PyQt6.QtWidgets import (
 FOCUS_PRESETS = (25, 45, 60, 90)
 SPRITE_BOX = 150
 TIMER_MIN_HEIGHT = 300
+# 专注结束后自动进入的休息时长
+BREAK_MINUTES = 5
 # 尺寸与主窗口保持一致（方案 A：由实测内容需求决定）
 MIN_SIZE = (980, 850)
 START_SIZE = (1120, 880)
@@ -136,6 +138,12 @@ class FlowWindow(QMainWindow):
         self._last_task = None
         self._plan_time_labels = {}
         self._timer_dirty = False
+        # 番茄轮次与专注段落记账
+        from pet_engine.focus_log import FocusLog
+        self._focus_log = FocusLog()
+        self._focus_started_at = None       # 当前这段专注/休息的开始时刻
+        self._focus_task = ""               # 这段专注对应的任务名
+        self._round_kind = "focus"          # 当前这一轮是 focus 还是 break
         self.setWindowTitle("心流模式 · ToYu")
         self.setWindowIcon(_app_icon())
         self.setMinimumSize(*MIN_SIZE)
@@ -456,11 +464,38 @@ class FlowWindow(QMainWindow):
         self._timer_holder.setMinimumHeight(TIMER_MIN_HEIGHT)
         layout.addWidget(self._timer_holder, 1)
 
+        # ── 番茄轮次 ──
+        # 一轮 = 一次专注 + 它的休息。轮次是天然的成就感来源，
+        # 也让"休息"有了归处（以前专注结束什么都不发生）。
+        rounds_row = QHBoxLayout()
+        rounds_row.setSpacing(8)
+        self._rounds_label = QLabel("第 1 轮")
+        self._rounds_label.setStyleSheet(
+            f"color: {self._c('accent')}; font-size: 11px; font-weight: bold;"
+            " background: transparent;")
+        rounds_row.addWidget(self._rounds_label)
+        self._rounds_dots = QLabel("")
+        self._rounds_dots.setStyleSheet(
+            f"color: {self._c('accent')}; font-size: 11px; background: transparent;")
+        self._rounds_dots.setToolTip("每个圆点代表完成的一轮专注")
+        rounds_row.addWidget(self._rounds_dots)
+        rounds_row.addStretch()
+        self._rounds_total = QLabel("今日 0 轮")
+        self._rounds_total.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 11px; background: transparent;")
+        rounds_row.addWidget(self._rounds_total)
+        layout.addLayout(rounds_row)
+
         self._state_label = QLabel("准备开始")
         self._state_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._state_label.setStyleSheet(
             f"color: {self._c('text2')}; font-size: 12px; background: transparent;")
         layout.addWidget(self._state_label)
+
+        # ── 今日专注时间轴 ──
+        from ui.widgets.focus_timeline import FocusTimeline
+        self._timeline = FocusTimeline(self._c)
+        layout.addWidget(self._timeline)
 
         # 心流模式自带的快捷按钮（计时器里的 9 个预设会被隐藏，避免两套并存）
         preset_row = QHBoxLayout()
@@ -473,9 +508,20 @@ class FlowWindow(QMainWindow):
             b.setToolTip("立即开始 %d 分钟专注" % minutes)
             b.clicked.connect(lambda checked=False, m=minutes: self.start_focus(m))
             preset_row.addWidget(b)
+
+        # 休息按钮：专注结束后会自动进休息，也可以手动提前休息
+        # （不用 ☕ 这类 emoji：在部分 Windows 上会渲染成空心方块/圆点）
+        self._break_btn = QPushButton("休息 %d 分钟" % BREAK_MINUTES)
+        self._break_btn.setObjectName("secondaryBtn")
+        self._break_btn.setFixedHeight(30)
+        self._break_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._break_btn.setToolTip("现在开始一段 %d 分钟休息" % BREAK_MINUTES)
+        self._break_btn.clicked.connect(lambda: self.start_break(BREAK_MINUTES))
+        preset_row.addWidget(self._break_btn)
         layout.addLayout(preset_row)
 
-        tip = QLabel("计时与 ToYu 共用同一份状态，来回切换不会中断")
+        tip = QLabel("计时与 ToYu 共用同一份状态，来回切换不会中断；"
+                     "专注结束后会自动进入休息")
         tip.setWordWrap(True)
         tip.setAlignment(Qt.AlignmentFlag.AlignCenter)
         tip.setStyleSheet(
@@ -615,12 +661,127 @@ class FlowWindow(QMainWindow):
 
     def start_focus(self, minutes):
         self._main.start_focus_session(minutes)
+        self._focus_started_at = datetime.now()
+        self._focus_task = getattr(self, "_active_task", "") or ""
+        self._round_kind = "focus"
         self._state_label.setText("专注中 · %d 分钟" % minutes)
+        self._state_label.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 12px; background: transparent;")
         self._maybe_show_mini(
             "专注倒计时", "countdown",
             pause=self._main.pause_focus_session,
             resume=self._main.resume_focus_session,
             stop=self._main.stop_focus_session)
+
+    # ── 番茄休息 ────────────────────────────────────────────
+    def start_break(self, minutes: int = BREAK_MINUTES):
+        """开始一段休息。专注结束后会自动调用，也可以手动提前休息。"""
+        timer = getattr(self._main, "_timer_widget", None)
+        if timer is None:
+            return
+        # 先把还没记账的专注段落盘（否则这段时间白专注了）
+        self._record_session()
+        try:
+            timer._set_preset(minutes)
+            timer._on_start()
+        except Exception:  # noqa: BLE001
+            try:
+                timer._on_start()
+            except Exception:  # noqa: BLE001
+                pass
+        self._focus_started_at = datetime.now()
+        self._focus_task = ""
+        self._round_kind = "break"
+        self._state_label.setText("休息中 · %d 分钟（离开屏幕活动一下）" % minutes)
+        self._state_label.setStyleSheet(
+            f"color: {self._c('success')}; font-size: 12px; font-weight: bold;"
+            " background: transparent;")
+        self._status.setText("休息中 · %d 分钟" % minutes)
+        self._maybe_show_mini(
+            "休息倒计时", "countdown",
+            pause=self._main.pause_focus_session,
+            resume=self._main.resume_focus_session,
+            stop=self._main.stop_focus_session)
+        self._refresh_rounds()
+
+    # ── 专注段记账 ──────────────────────────────────────────
+    def _record_session(self):
+        """把刚结束的一段专注/休息写进日志。
+
+        只有超过 1 分钟才算数（误点开始又立刻停的不该污染统计）。
+        """
+        started = getattr(self, "_focus_started_at", None)
+        if started is None:
+            return
+        self._focus_started_at = None
+        seconds = (datetime.now() - started).total_seconds()
+        kind = "break" if getattr(self, "_round_kind", "focus") == "break" else "focus"
+        record = self._focus_log.add(kind, seconds,
+                                     task=getattr(self, "_focus_task", ""),
+                                     started=started)
+        if not record:
+            return
+        if kind == "focus":
+            self._status.setText(
+                "已完成 1 段专注：%d 分钟%s"
+                % (record["minutes"],
+                   ("（" + record["task"] + "）") if record["task"] else ""))
+        self.refresh_timeline()
+        self._refresh_rounds()
+
+    def _on_focus_complete(self):
+        """倒计时自然结束的回调。
+
+        值得注意：这里**不处理计划项计时**（那是另一套机制），
+        也不在休息结束时自动开始下一轮 —— 自动开始专注会让人措手不及
+        （可能正好离开座位）。休息结束后只提示，由用户决定何时开始。
+        """
+        kind = getattr(self, "_round_kind", "focus")
+        self._record_session()
+        if kind == "break":
+            self._status.setText("休息结束 · 可以从上面选一个时长开始下一轮")
+            self._state_label.setText("休息结束 · 准备开始下一轮")
+            self._state_label.setStyleSheet(
+                f"color: {self._c('text2')}; font-size: 12px;"
+                " background: transparent;")
+            self._round_kind = "focus"
+            self._refresh_rounds()
+            pet = getattr(self._main, "_pet", None)
+            if pet is not None:
+                try:
+                    pet.trigger_celebrate(1.6)
+                except (RuntimeError, AttributeError):
+                    pass
+            return
+        # 专注结束 → 自动进休息
+        self._status.setText("专注结束 · 正在进入休息")
+        self.start_break(BREAK_MINUTES)
+
+    def _refresh_rounds(self):
+        """刷新轮次显示。"""
+        done = self._focus_log.rounds_today()
+        current = 1 if getattr(self, "_round_kind", "focus") == "focus" else 0
+        if done == 0 and current:
+            self._rounds_label.setText("第 1 轮")
+        elif current:
+            self._rounds_label.setText("第 %d 轮" % (done + 1))
+        else:
+            self._rounds_label.setText("休息中")
+        # 圆点：最多画 8 个，多了用 +N 表示
+        shown = min(done, 8)
+        dots = "●" * shown + ("＋%d" % (done - 8) if done > 8 else "")
+        self._rounds_dots.setText(dots)
+        self._rounds_total.setText("今日 %d 轮" % done)
+
+    def refresh_timeline(self):
+        """刷新今日专注时间轴。"""
+        timeline = getattr(self, "_timeline", None)
+        if timeline is None:
+            return
+        try:
+            timeline.set_records(self._focus_log.segments())
+        except Exception as exc:  # noqa: BLE001
+            print("[Flow] 时间轴刷新失败: %s" % exc)
 
     def pause_task_timer(self):
         """外部（悬浮小窗）要求暂停计划项计时。"""
@@ -716,9 +877,11 @@ class FlowWindow(QMainWindow):
     def _tick(self):
         timer = getattr(self._main, "_timer_widget", None)
         if timer is not None:
+            is_break = getattr(self, "_round_kind", "focus") == "break"
             if timer.get_is_running():
                 self._state_label.setText(
-                    "专注中 · 剩余 %s" % _fmt_duration(timer.get_remaining_seconds()))
+                    ("休息中 · 剩余 %s" if is_break else "专注中 · 剩余 %s")
+                    % _fmt_duration(timer.get_remaining_seconds()))
             elif timer.get_remaining_seconds() > 0:
                 self._state_label.setText(
                     "已暂停 · 剩余 %s" % _fmt_duration(timer.get_remaining_seconds()))
@@ -728,6 +891,11 @@ class FlowWindow(QMainWindow):
         self._stage.refresh()
         self._refresh_stats()
         self.refresh_goal()
+        # 时间轴只画过去与"现在"的位置，每秒重绘代价很低；
+        # 但没必要每秒都重画，2 秒一次足够看出当前时刻在走。
+        self._timeline_counter = (getattr(self, "_timeline_counter", 0) + 1) % 2
+        if self._timeline_counter == 0:
+            self.refresh_timeline()
 
     def _refresh_stats(self):
         tasks = self._today_history()
@@ -891,6 +1059,9 @@ class FlowWindow(QMainWindow):
         self._refresh_stats()
         # 目标环随每秒刷新，学完一段就能看到进度动
         self.refresh_goal()
+        # 轮次与时间轴在窗口打开时要先出一次（否则要等 2 秒才画）
+        self._refresh_rounds()
+        self.refresh_timeline()
 
     def _refresh_goal_lightweight(self):
         """_tick 里用的轻量刷新：只更新目标环，不重建计划栏。"""

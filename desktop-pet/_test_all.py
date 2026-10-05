@@ -49,6 +49,7 @@ TESTS = [
     ("AI 路径开销优化", "_test_ai_efficiency.py"),
     ("每日目标与进度环", "_test_daily_goal.py"),
     ("学习报告生成与导出", "_test_learning_report.py"),
+    ("番茄轮次与专注时间轴", "_test_pomodoro.py"),
 ]
 
 env = dict(os.environ)
