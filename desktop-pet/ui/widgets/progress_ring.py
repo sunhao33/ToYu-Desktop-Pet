@@ -40,6 +40,19 @@ class ProgressRing(QWidget):
         self._dim = False
 
     # ── 接口 ────────────────────────────────────────────────
+    def set_colors(self, accent=None, track=None, fg=None):
+        """只换配色、不动进度与文字。
+
+        用途：深色模式下环还没被 set_state 刷新过时，默认的浅色底槽
+        （#E8D5C0）会在暗底上变成一个刺眼的白项圈 —— 用它先铺上主题色。
+        """
+        if accent is not None:
+            self._accent = QColor(accent)
+        if track is not None:
+            self._track = QColor(track)
+        if fg is not None:
+            self._fg = QColor(fg)
+        self.update()
     def set_state(self, ratio: float, text: str = "", accent=None, track=None,
                   fg=None, font_size: int | None = None, dim: bool = False,
                   full_color=None):

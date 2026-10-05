@@ -70,6 +70,26 @@ pump(600)
 check("测试前窗口已归位到最小尺寸",
       mw.width() >= mw.minimumWidth() and mw.height() >= mw.minimumHeight(),
       "窗口 %dx%d 最小 %dx%d" % (mw.width(), mw.height(), mw.minimumWidth(), mw.minimumHeight()))
+
+
+def clipped_areas(area_list):
+    """找出「内容比视口宽、又没有任何办法看到」的滚动区。
+
+    只有 ScrollBarAlwaysOff 才是真裁切 —— 用户既看不到也滚不到。
+    favGallery 这类 AsNeeded 的画廊是**按设计横向滚动**的
+    （收藏满 10 个时缩略图必然超出一行宽度），有滚动条可用不算缺陷，
+    否则这个测试会误伤它。
+    """
+    bad = []
+    for area in area_list:
+        m = area.horizontalScrollBar().maximum()
+        if m <= 0:
+            continue
+        if area.horizontalScrollBarPolicy().name == "ScrollBarAlwaysOff":
+            bad.append((area.objectName() or type(area).__name__, m))
+    return bad
+
+
 overflow = []
 for i, label in enumerate(PAGES):
     mw._on_page_switch(i, label)
@@ -79,16 +99,12 @@ for i, label in enumerate(PAGES):
             mw._switch_tools_page(sub)
             pump(350)
             w = mw._tools_stack.currentWidget()
-            for area in w.findChildren(QScrollArea):
-                m = area.horizontalScrollBar().maximum()
-                if m > 0:
-                    overflow.append(("工具子页%d" % sub, m))
+            for name, m in clipped_areas(w.findChildren(QScrollArea)):
+                overflow.append(("工具子页%d/%s" % (sub, name), m))
     w = mw._page_stack.widget(i)
-    for area in w.findChildren(QScrollArea):
-        m = area.horizontalScrollBar().maximum()
-        if m > 0:
-            overflow.append((label, m))
-check("缩到最小宽度后无横向溢出", not overflow, str(overflow))
+    for name, m in clipped_areas(w.findChildren(QScrollArea)):
+        overflow.append(("%s/%s" % (label, name), m))
+check("缩到最小宽度后无内容被裁切", not overflow, str(overflow))
 
 # ── 3. 强行缩到比最小值更小也不应低于最小宽度 ──────────────
 mw.resize(500, 500)

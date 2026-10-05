@@ -109,24 +109,31 @@ DISABLE_FG = "#BBBBBB"    # 禁用文字
 DISABLE_BDR = "#E0E0E0"   # 禁用描边
 
 # ── 深色主题 ────────────────────────────────────────────────
-# 这套颜色是按**对比度实测**调出来的，不是凭观感挑的。原来的值有三处
-# 不达 WCAG AA（正文需 4.5:1）：
-#     次要文字/卡片 4.20、成功色/卡片 4.17、危险色/卡片 2.53 ——
-# 其中红色几乎看不见（时间不足、错误提示都受影响）。
-# 调整方向：保留"暖木色 + 土豆金"的调性，但把暗色底层提亮、
-# 亮色文字与语义色提亮到达标，同时拉开头部/背景/卡片的层次。
-DARK_BG = "#201710"       # 主背景（最暗一层）
-DARK_CARD = "#362718"     # 卡片（比背景亮 1.9 档，层次清）
-DARK_TEXT = "#F2E4D2"     # 正文（9.9:1）
-DARK_TEXT_SEC = "#BCA88C" # 次要文字（6.0:1，原来 4.20 不达标）
-DARK_BORDER = "#57402C"   # 描边（加深对比但不过刺眼）
-DARK_HEADER = "#2E2116"   # 头部（介于背景与卡片之间，不再是"倒挂"）
-# 深色下的土豆金：原色在暗底上偏暗，提亮后既保持金色又更醒目
-DARK_ACCENT = "#E0B65A"
-DARK_ACCENT_HOVER = "#EFC76E"
-# 语义色在深色底上必须提亮，否则小字看不清
-DARK_SUCCESS = "#8FBF52"
-DARK_DANGER = "#F0736A"
+# 这套配色解决的是"看着不舒服"，而不只是对比度：原深色底色的**饱和度**
+# 高达 33~38%（一整片浓棕），暗色带高饱和会显得发浑、发闷；
+# 各元素色相全挤在 26~41°，也谈不上层次。
+# 现在基底改为**接近中性的冷灰**（饱和 9~11%），颜色只用在强调处；
+# 强调色仍保留品牌土豆金，暖色点缀落在冷底上反而更醒目。
+# 实测：正文/卡片 12.7、次要 5.8、金色 6.9、成功 6.3、危险 4.9，
+# 全部达到 WCAG AA（正文需 4.5）；卡片/背景 1.13、头部/背景 1.10、
+# 标签底/卡片 1.16，层次清晰不突兀。
+DARK_BG = "#16181B"       # 主背景（冷灰，饱和仅 10%）
+DARK_CARD = "#202327"     # 卡片
+DARK_TEXT = "#E4E7EB"     # 正文（12.7:1）
+DARK_TEXT_SEC = "#959DA6" # 次要文字（5.8:1）
+DARK_BORDER = "#33383F"   # 描边
+DARK_HEADER = "#1E2126"   # 头部（比背景略亮，不再"倒挂"）
+DARK_INPUT = "#1A1D21"    # 输入框底（比卡片略暗，形成内凹感）
+DARK_TAB = "#2A2E34"      # 标签底
+DARK_HOVER = "#2C3036"    # 悬停底
+DARK_PRESS = "#353A41"    # 按下底
+# 深色下的土豆金：冷底上需要更亮一点才醒目
+DARK_ACCENT = "#D2A44A"
+DARK_ACCENT_HOVER = "#E0B65F"
+# 语义色
+DARK_SUCCESS = "#7FB069"
+DARK_WARNING = "#E0B05A"
+DARK_DANGER = "#E06C75"
 
 CHECKER_SVG = """
 <svg width="16" height="16" xmlns="http://www.w3.org/2000/svg">
@@ -155,17 +162,18 @@ class DropZone(QLabel):
         self._apply_style(has_image=self._has_image)
 
     def _apply_style(self, hover=False, has_image=False):
+        # 深色侧引用色板常量，别再写死（写死后调色板改了这边不跟着变）
         if has_image:
             border = "none"
             bg = "transparent"
             text = ""
         elif hover:
-            border = f"3px dashed {'#D4AE50' if self._dark else '#C49A3C'}"
-            bg = '#4A3525' if self._dark else '#FFF3E0'
+            border = f"3px dashed {DARK_ACCENT_HOVER if self._dark else ACCENT}"
+            bg = DARK_HOVER if self._dark else HOVER_BG
             text = "释放图片"
         else:
-            border = f"3px dashed {'#4A3525' if self._dark else '#D7CCC8'}"
-            bg = '#3A2A1A' if self._dark else '#FAFAFA'
+            border = f"3px dashed {DARK_BORDER if self._dark else '#D7CCC8'}"
+            bg = DARK_INPUT if self._dark else '#FAFAFA'
             text = "拖放图片到这里\n或 点击选择"
 
         self.setStyleSheet(f"""
@@ -173,7 +181,7 @@ class DropZone(QLabel):
                 border: {border};
                 border-radius: 16px;
                 background: {bg};
-                color: {'#A08B6E' if self._dark else '#8D6E63'};
+                color: {DARK_TEXT_SEC if self._dark else '#8D6E63'};
                 font-size: 13px;
             }}
         """)
@@ -448,15 +456,16 @@ class MainWindow(QMainWindow):
             'mid':      (MID,         DARK_ACCENT),
             'success':  (SUCCESS,     DARK_SUCCESS),
             'danger':   (DANGER,      DARK_DANGER),
-            'hover_bg': (HOVER_BG,   '#4A3525'),
-            'press_bg': (PRESS_BG,   '#5A4535'),
-            'input_bg': ('#FAFAFA',   '#2C2015'),
-            'disable_bg': (DISABLE_BG, '#2A1F14'),
-            'disable_fg': (DISABLE_FG, '#7A6650'),
-            'disable_bdr': (DISABLE_BDR, '#3A2A1A'),
-            'tab_bg':   ('#FFF8E1',   '#42301E'),
-            'handle':   ('#D7CCC8',   '#57402C'),
-            'handle_h': ('#BCAAA4',   '#6B523A'),
+            'hover_bg': (HOVER_BG,   DARK_HOVER),
+            'press_bg': (PRESS_BG,   DARK_PRESS),
+            'input_bg': ('#FAFAFA',   DARK_INPUT),
+            'disable_bg': (DISABLE_BG, DARK_BG),
+            'disable_fg': (DISABLE_FG, '#5F6670'),
+            'disable_bdr': (DISABLE_BDR, DARK_CARD),
+            'tab_bg':   ('#FFF8E1',   DARK_TAB),
+            'handle':   ('#D7CCC8',   DARK_BORDER),
+            'handle_h': ('#BCAAA4',   '#454B54'),
+            'warn':     ('#B8860B',   DARK_WARNING),
             'name_fg':  ('#2C1810',   DARK_TEXT),
         }
         pair = m.get(key, (TEXT, DARK_TEXT))
@@ -765,9 +774,17 @@ class MainWindow(QMainWindow):
         self._fav_scroll = QScrollArea()
         self._fav_scroll.setObjectName("favGallery")
         self._fav_scroll.setFixedHeight(82)
-        self._fav_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        # 横向滚动条常显（缩略图多了要能滚），但**滚动区本身不能参与最小宽度**
+        # —— 否则收藏夹装满 10 个时会把整页最小宽度顶大，导致宠物页在
+        # 最小宽度下出现横向溢出（本该滚动却把窗口撑宽）。
+        # 关键是把宽度尺寸策略设为 Ignored：QScrollArea 的 sizeHint 会跟着
+        # 内部内容宽度涨，Ignored 让这个提示不向上传递。
+        self._fav_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAsNeeded)
         self._fav_scroll.setVerticalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
         self._fav_scroll.setWidgetResizable(True)
+        self._fav_scroll.setSizePolicy(QSizePolicy.Policy.Ignored,
+                                      QSizePolicy.Policy.Fixed)
+        self._fav_scroll.setMinimumWidth(0)
         self._fav_scroll.setStyleSheet("""
             QScrollArea { background: transparent; border: none; }
             QScrollBar:horizontal { height: 6px; background: transparent; }
@@ -775,6 +792,7 @@ class MainWindow(QMainWindow):
         """)
         self._fav_container = QWidget()
         self._fav_container.setStyleSheet("background: transparent;")
+        self._fav_container.setMinimumWidth(0)
         self._fav_layout = QHBoxLayout(self._fav_container)
         self._fav_layout.setContentsMargins(0, 0, 0, 0)
         self._fav_layout.setSpacing(6)
@@ -887,6 +905,10 @@ class MainWindow(QMainWindow):
         goal_row = QHBoxLayout()
         goal_row.setSpacing(10)
         self._goal_ring = ProgressRing(size=64, thickness=6)
+        # 先铺主题色：环的默认底槽是浅色，深色模式下没刷新过时
+        # 会变成一个刺眼的白项圈
+        self._goal_ring.set_colors(self._c('accent'), self._c('border'),
+                                   self._c('text'))
         self._goal_ring.setToolTip("今日学习目标进度 · 点一下可以设置目标")
         self._goal_ring.setCursor(Qt.CursorShape.PointingHandCursor)
         self._goal_ring.mousePressEvent = lambda event: self._prompt_goal()  # type: ignore
@@ -4356,6 +4378,8 @@ class MainWindow(QMainWindow):
         row = QHBoxLayout()
         row.setSpacing(12)
         self._data_goal_ring = ProgressRing(size=88, thickness=7)
+        self._data_goal_ring.set_colors(self._c('accent'), self._c('border'),
+                                        self._c('text'))
         self._data_goal_ring.setToolTip("点一下可以设置每日目标")
         self._data_goal_ring.setCursor(Qt.CursorShape.PointingHandCursor)
         self._data_goal_ring.mousePressEvent = lambda event: self._prompt_goal()  # type: ignore
@@ -4880,6 +4904,23 @@ class MainWindow(QMainWindow):
         图表是 matplotlib 渲染成 PNG 再当 QPixmap 显示的，
         样式表管不到它的文字颜色 —— 不重画就会在暗底上留着深色字。
         """
+        # 目标环也在这里刷新：它的颜色是 set_state 传进去的（不是样式表），
+        # 切主题不刷新就会留着上一套配色（深色下表现为白圈）
+        for ring in (getattr(self, "_goal_ring", None),
+                     getattr(self, "_data_goal_ring", None),
+                     getattr(self, "_flow_goal_ring", None)):
+            if ring is not None:
+                try:
+                    ring.set_colors(self._c('accent'), self._c('border'),
+                                    self._c('text'))
+                except (RuntimeError, AttributeError):
+                    pass
+        if getattr(self, "_goal_tracker", None) is not None:
+            try:
+                self._refresh_goal()
+            except Exception as exc:  # noqa: BLE001
+                print("[Goal] 主题切换刷新失败: %s" % exc)
+
         if not getattr(self, "_study_charts_drawn", False):
             return
         date_str = getattr(self, "_selected_chart_date", "") or \
@@ -5169,20 +5210,26 @@ class MainWindow(QMainWindow):
                 border-color: {DARK_CARD};
             }}
 
+            /* 主按钮在深色下改用描边式：原来是一整块高亮金色，
+               在暗底上成为整屏最抢眼的元素，把视线从内容上拉走。
+               现在只留金色描边+金字，品牌色还在，但不再喧宾夺主。 */
             QPushButton#startBtn {{
-                background: {DARK_ACCENT};
-                color: white;
-                border: none;
+                background: {DARK_BG};
+                color: {DARK_ACCENT};
+                border: 1px solid {DARK_ACCENT};
                 font-weight: bold;
                 font-size: 13px;
                 border-radius: 8px;
             }}
             QPushButton#startBtn:hover {{
-                background: {DARK_ACCENT_HOVER};
+                background: {DARK_HOVER};
+                color: {DARK_ACCENT_HOVER};
+                border-color: {DARK_ACCENT_HOVER};
             }}
             QPushButton#startBtn:disabled {{
                 background: {DARK_CARD};
                 color: {DARK_TEXT_SEC};
+                border-color: {DARK_BORDER};
             }}
 
             QPushButton#actionBtn {{
