@@ -204,6 +204,34 @@ a { color: inherit; text-decoration: none; }
 .sec-head h2 { margin: 0 0 14px; font-size: 32px; letter-spacing: -.3px; }
 .sec-head p { margin: 0; color: var(--text-2); font-size: 15.5px; }
 
+/* ── 数据条 ───────────────────────────────────────────── */
+.stats-strip {
+  background: var(--card);
+  border-top: 1px solid var(--border);
+  border-bottom: 1px solid var(--border);
+}
+.stats-inner {
+  display: grid; grid-template-columns: repeat(5, 1fr);
+  gap: 18px; padding-top: 30px; padding-bottom: 30px;
+}
+.stat { text-align: center; }
+.stat b {
+  display: block; font-size: 34px; line-height: 1.15;
+  color: var(--accent); font-variant-numeric: tabular-nums;
+  letter-spacing: -.5px;
+}
+.stat span { display: block; margin-top: 5px; font-size: 12.5px; color: var(--text-2); }
+
+/* ── 滚动渐显 ─────────────────────────────────────────── */
+.reveal { opacity: 0; transform: translateY(22px); }
+.reveal.is-in {
+  opacity: 1; transform: none;
+  transition: opacity .6s ease, transform .6s cubic-bezier(.22,.61,.36,1);
+}
+@media (prefers-reduced-motion: reduce) {
+  .reveal { opacity: 1 !important; transform: none !important; }
+}
+
 /* ── 智能体演示 ───────────────────────────────────────── */
 .agent-demo {
   display: grid; grid-template-columns: 1.35fr .65fr; gap: 26px;

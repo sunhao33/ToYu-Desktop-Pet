@@ -7,6 +7,12 @@
 (function () {
   'use strict';
 
+  /* ── 工具 ───────────────────────────────────────────── */
+  function reduceMotion() {
+    return !!(window.matchMedia &&
+              window.matchMedia('(prefers-reduced-motion: reduce)').matches);
+  }
+
   /* ── 深色模式 ───────────────────────────────────────── */
   var root = document.documentElement;
   var themeBtn = document.getElementById('themeBtn');
@@ -250,9 +256,7 @@
 
   /* ── 首屏小卡片轻微视差 ─────────────────────────────── */
   var heroArt = document.querySelector('.hero-art');
-  var reduce = window.matchMedia &&
-               window.matchMedia('(prefers-reduced-motion: reduce)').matches;
-  if (heroArt && !reduce && window.matchMedia('(pointer: fine)').matches) {
+  if (heroArt && !reduceMotion() && window.matchMedia('(pointer: fine)').matches) {
     var cards = heroArt.querySelectorAll('.float-card');
     heroArt.addEventListener('mousemove', function (ev) {
       var box = heroArt.getBoundingClientRect();
@@ -266,6 +270,55 @@
     heroArt.addEventListener('mouseleave', function () {
       cards.forEach(function (c) { c.style.transform = ''; });
     });
+  }
+
+  /* ── 数字滚动 ───────────────────────────────────────── */
+  var statsInner = document.querySelector('.stats-inner');
+  if (statsInner && !reduceMotion()) {
+    var counted = false;
+    var io2 = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (!en.isIntersecting || counted) return;
+        counted = true;
+        statsInner.querySelectorAll('.stat b').forEach(function (el) {
+          var target = parseInt(el.getAttribute('data-count'), 10) || 0;
+          var suffix = el.getAttribute('data-suffix') || '';
+          var t0 = null;
+          function step(ts) {
+            if (!t0) t0 = ts;
+            var p = Math.min(1, (ts - t0) / 900);
+            // easeOutCubic
+            var v = Math.round(target * (1 - Math.pow(1 - p, 3)));
+            el.textContent = v + suffix;
+            if (p < 1) requestAnimationFrame(step);
+          }
+          requestAnimationFrame(step);
+        });
+        io2.disconnect();
+      });
+    }, { threshold: .4 });
+    io2.observe(statsInner);
+  }
+
+  /* ── 滚动渐显 ───────────────────────────────────────── */
+  var revealTargets = document.querySelectorAll(
+    '.sec-head, .card, .ai-card, .demo-card, .agent-chat, .side-card,' +
+    ' .vision-box, .dl-box, .shot-frame, .theme-compare, .tc-item, .faq, .notice');
+  if (revealTargets.length && !reduceMotion() && 'IntersectionObserver' in window) {
+    revealTargets.forEach(function (el, i) {
+      el.classList.add('reveal');
+      // 同组内错开一点，避免整屏一起弹
+      el.style.transitionDelay = (Math.min(i % 6, 5) * 55) + 'ms';
+    });
+    var io = new IntersectionObserver(function (entries) {
+      entries.forEach(function (en) {
+        if (en.isIntersecting) {
+          en.target.classList.add('is-in');
+          io.unobserve(en.target);
+        }
+      });
+    }, { threshold: .12, rootMargin: '0px 0px -40px 0px' });
+    revealTargets.forEach(function (el) { io.observe(el); });
   }
 
   /* ── 导航阴影：滚动后才出现 ─────────────────────────── */
