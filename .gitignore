@@ -1,46 +1,59 @@
-# Build / Packaging
+# ── 构建产物 / 打包 ────────────────────────────────────────
 desktop-pet/build/
 desktop-pet/build_*/
 desktop-pet/dist/
 desktop-pet/dist_*/
 desktop-pet/_staging/
 *.spec.bak
+
+# ── Python ────────────────────────────────────────────────
 __pycache__/
 *.pyc
 *.pyo
+*.pyd
+.pytest_cache/
+.mypy_cache/
 
-# Archives / Zips
+# ── 发布包（体积大，走 GitHub Releases，不进仓库）──────────
+ToYu_v*.zip
+YoTu*.zip
 *.zip
-archive/
+!docs/**/*.zip
 
-# IDE
-.idea/
-.vscode/
-*.iml
-
-# OS
-Thumbs.db
-.DS_Store
-
-# Sensitive / Runtime data
+# ── 运行时数据 / 密钥（绝不能提交）─────────────────────────
 ai_config.json
 ai_chat_history.json
 weather_cache.json
 calendar_events.json
+todos.json
+focus_log.json
+memories.json
+*.key
+.env
 
-# Temp / Media
+# ── 开发过程产物 ───────────────────────────────────────────
+archive/
 temp/
 media/
+*.bak
+*.log
 
-# Claude local config
+# ── IDE / 系统 ────────────────────────────────────────────
+.idea/
+.vscode/
+*.iml
+Thumbs.db
+.DS_Store
 .claude/
 
-# PDFs
-*.pdf
+# ── 网站：素材必须入库（文件夹级放行，忽略上面的 *.zip/*.png 通配）──
+!toyu-web/**
+!toyu-web/assets/**
+!toyu-web/assets/img/**
+!toyu-web/assets/css/**
+!toyu-web/assets/js/**
 
-# Backup files
-*.bak
-
-# Screenshots
-*.png
-*.jpg
+# ── 文档与设计稿 ──────────────────────────────────────────
+!docs/**
+!docs/**/*.pdf
+!docs/**/*.png
