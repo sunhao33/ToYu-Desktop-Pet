@@ -20,7 +20,7 @@ mw = MainWindow()
 mw.show()
 app.processEvents()
 
-ORDER = ["宠物", "功能", "工具", "AI"]
+ORDER = ["宠物", "宠物设置", "工具", "AI"]
 print("页数:", mw._page_stack.count())
 print("按钮:", list(mw._page_btns.keys()))
 

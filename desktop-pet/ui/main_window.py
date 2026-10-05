@@ -264,6 +264,10 @@ class MainWindow(QMainWindow):
         self._pulse_phase = 0.0
         self._pulse_timer = QTimer(self)
         self._pulse_timer.timeout.connect(self._pulse_status)
+        # 主页概览的兜底刷新：屏幕时长/待办会随时变，但不必 50ms 一次，
+        # 单独用低频定时器（30 秒）避免无谓的 QSettings 读取与重排。
+        self._overview_timer = QTimer(self)
+        self._overview_timer.timeout.connect(self._refresh_overview)
         self._app_data_dir = os.path.join(
             os.path.expanduser("~"), ".desktop_pet", "images"
         )
@@ -319,6 +323,61 @@ class MainWindow(QMainWindow):
         self._page_stack.currentChanged.connect(lambda _i: self._update_content_min_width())
         QTimer.singleShot(120, self._update_content_min_width)
         QTimer.singleShot(700, self._update_content_min_width)
+
+    # 标签顺序（与页面构建顺序解耦）。
+    # 用户要求：「功能」改名为「宠物设置」并排到 AI 后面 ——
+    # 现在顺序是 宠物 → AI → 工具 → 宠物设置。
+    _PAGE_ORDER = (("宠物", "🐾"), ("AI", "🤖"),
+                   ("工具", "🛠"), ("宠物设置", "⚙"))
+
+    def _build_page_tabs(self):
+        """所有页面注册完之后，按 _PAGE_ORDER 建标签按钮。
+
+        按钮回调绑定的是**页面控件在 stack 里的真实下标**，
+        所以标签顺序可以和构建顺序不一致 —— 不必为了排顺序去重排控件。
+        """
+        btn_style = f"""
+            QPushButton {{
+                background: transparent;
+                color: {self._c('text2')};
+                border: none;
+                border-bottom: 3px solid transparent;
+                font-size: 13px;
+                font-weight: bold;
+                padding: 4px 16px;
+                border-radius: 0;
+            }}
+            QPushButton:hover {{
+                color: {self._c('text')};
+                background: {self._c('hover_bg')};
+            }}
+            QPushButton:checked {{
+                color: {self._c('text')};
+                border-bottom: 3px solid {self._c('accent')};
+            }}
+        """
+        insert_at = max(0, self._tab_row.count() - 1)   # 插到末尾 stretch 之前
+        for label, icon in self._PAGE_ORDER:
+            page = self._page_ids.get(label)
+            if page is None:
+                continue
+            idx = self._page_stack.indexOf(page)
+            if idx < 0:
+                continue
+            btn = QPushButton(f"  {icon}  {label}  ")
+            btn.setCheckable(True)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setFixedHeight(36)
+            btn.setStyleSheet(btn_style)
+            btn.clicked.connect(
+                lambda checked, i=idx, lbl=label: self._on_page_switch(i, lbl))
+            self._tab_row.insertWidget(insert_at, btn)
+            insert_at += 1
+            self._page_btns[label] = btn
+
+        first = self._page_btns.get("宠物")
+        if first is not None:
+            first.setChecked(True)
 
     def _update_content_min_width(self):
         """用当前可见页面实测所需尺寸，必要时抬高窗口最小尺寸。
@@ -636,43 +695,19 @@ class MainWindow(QMainWindow):
         tab_row.setContentsMargins(24, 10, 24, 0)
         tab_row.setSpacing(0)
 
+        # 标签按钮不在这里建，等所有页面注册完再按 _PAGE_ORDER 统一建。
+        # 原因：QStackedWidget 的下标由「构建顺序」决定，而标签顺序是
+        # 另一回事（比如想让 AI 排在工具前面）。先建按钮再调整顺序会
+        # 留下错位的下标，所以按钮创建统一放到 _build_page_tabs()。
         self._page_btns = {}
+        self._page_ids = {}      # 页面名 -> QStackedWidget 下标用的控件
         self._page_stack = QStackedWidget()
         self._page_stack.setSizePolicy(QSizePolicy.Policy.Expanding, QSizePolicy.Policy.Expanding)
         self._page_stack.setStyleSheet("QStackedWidget { background: transparent; }")
 
-        btn_style = f"""
-            QPushButton {{
-                background: transparent;
-                color: {self._c('text2')};
-                border: none;
-                border-bottom: 3px solid transparent;
-                font-size: 13px;
-                font-weight: bold;
-                padding: 4px 16px;
-                border-radius: 0;
-            }}
-            QPushButton:hover {{
-                color: {self._c('text')};
-                background: {self._c('hover_bg')};
-            }}
-            QPushButton:checked {{
-                color: {self._c('text')};
-                border-bottom: 3px solid {self._c('accent')};
-            }}
-        """
-        for i, (label, icon) in enumerate([("宠物", "🐾"), ("功能", "⚙"), ("工具", "🛠"), ("AI", "🤖")]):
-            btn = QPushButton(f"  {icon}  {label}  ")
-            btn.setCheckable(True)
-            btn.setCursor(Qt.CursorShape.PointingHandCursor)
-            btn.setFixedHeight(36)
-            btn.setStyleSheet(btn_style)
-            btn.clicked.connect(lambda checked, idx=i, lbl=label: self._on_page_switch(idx, lbl))
-            tab_row.addWidget(btn)
-            self._page_btns[label] = btn
-
         tab_row.addStretch()
         root.addLayout(tab_row)
+        self._tab_row = tab_row        # 供 _build_page_tabs() 往里面插按钮
 
         pet_page = QScrollArea()
         pet_page.setWidgetResizable(True)
@@ -829,6 +864,9 @@ class MainWindow(QMainWindow):
         self._fav_layout.addWidget(self._fav_placeholder)
         pet_left.addWidget(self._fav_scroll)
 
+        # ── 快捷入口：主页就能跳到其他页面，不用去点标签 ──────
+        pet_left.addWidget(self._make_quick_nav_card())
+
         pet_layout.addLayout(pet_left)
         pet_layout.addSpacing(24)
 
@@ -840,6 +878,9 @@ class MainWindow(QMainWindow):
 
         pet_right = QVBoxLayout()
         pet_right.setSpacing(12)
+
+        # ── 今日概览（放在最上面：进主页第一眼看到今天的进度）──────
+        pet_right.addWidget(self._make_overview_card())
 
         ctrl_row = QHBoxLayout()
         ctrl_row.setSpacing(10)
@@ -1045,6 +1086,7 @@ class MainWindow(QMainWindow):
         pet_layout.addLayout(pet_right)
         pet_page.setWidget(pet_widget)
         self._page_stack.addWidget(pet_page)
+        self._page_ids["宠物"] = pet_page
 
         feat_page = QScrollArea()
         feat_page.setWidgetResizable(True)
@@ -1189,6 +1231,7 @@ class MainWindow(QMainWindow):
         feat_layout.addWidget(spacer, 2, 0, 1, 2)
         feat_page.setWidget(feat_widget)
         self._page_stack.addWidget(feat_page)
+        self._page_ids["宠物设置"] = feat_page
 
         tools_page = QWidget()
         tools_page.setStyleSheet("background: transparent;")
@@ -1407,6 +1450,7 @@ class MainWindow(QMainWindow):
         self._tools_tab_bar = tools_tab_bar
 
         self._page_stack.addWidget(self._wrap_in_scroll(tools_page))
+        self._page_ids["工具"] = self._page_stack.widget(self._page_stack.count() - 1)
 
         ai_page = QWidget()
         ai_page.setStyleSheet("background: transparent;")
@@ -1636,8 +1680,10 @@ class MainWindow(QMainWindow):
         # 包一层滚动区：AI 页内容（API 配置 + 性格 + 记忆 + 指标）高度
         # 会超过可视区，不包的话 Qt 会把卡片压扁、按钮被挤掉
         self._page_stack.addWidget(self._wrap_in_scroll(ai_page))
+        self._page_ids["AI"] = self._page_stack.widget(self._page_stack.count() - 1)
 
-        self._page_btns["宠物"].setChecked(True)
+        # 所有页面都注册完了，现在按 _PAGE_ORDER 建标签
+        self._build_page_tabs()
         self._page_stack.setCurrentIndex(0)
 
         root.addWidget(self._page_stack, 1)  # stretch=1 to fill available space
@@ -1682,6 +1728,258 @@ class MainWindow(QMainWindow):
         status_layout.addWidget(self._affection_label)
 
         root.addWidget(status_bar)
+
+    # ── 主页「今日概览」────────────────────────────────────────
+    # 设计口径：只读已有数据源（目标追踪器 / 屏幕统计 / 待办），
+    # 不新造数字，与数据面板口径一致；点格子可跳到对应页面看细节。
+    def _make_quick_nav_card(self):
+        """主页快捷入口：一键跳到常去的页面/子页。
+
+        用 _goto_page(标签名) 而不是下标 —— 标签顺序调整过
+        （宠物 → AI → 工具 → 宠物设置），写死下标迟早会错位。
+        """
+        card = self._make_card("⚡ 快捷入口")
+        grid = QGridLayout()
+        grid.setSpacing(6)
+        grid.setContentsMargins(0, 0, 0, 0)
+
+        entries = [
+            ("🤖", "问 AI", lambda: self._goto_page("AI"), "和桌宠对话、让它办事"),
+            ("📊", "数据面板", lambda: self._goto_page("工具", tools_sub=2),
+             "学习报告 / 图表 / 日历"),
+            ("📋", "效率工具", lambda: self._goto_page("工具", tools_sub=0),
+             "待办事项 / 倒计时器"),
+            ("🖥", "桌面工具", lambda: self._goto_page("工具", tools_sub=1),
+             "剪贴板历史 / 护眼提醒"),
+            ("⚙", "宠物设置", lambda: self._goto_page("宠物设置"),
+             "行为 / 番茄钟 / 图片处理"),
+            ("🧩", "拼豆编辑器", self._on_open_bead_editor,
+             "画一只属于你的宠物"),
+        ]
+        for i, (icon, text, cb, tip) in enumerate(entries):
+            btn = QPushButton(f"{icon}  {text}")
+            btn.setObjectName("actionBtn")
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setToolTip(tip)
+            btn.clicked.connect(cb)
+            grid.addWidget(btn, i // 2, i % 2)
+
+        card.layout().addLayout(grid)
+        return card
+
+    def _make_overview_card(self):
+        card = self._make_card("📊 今日概览")
+
+        grid = QGridLayout()
+        grid.setSpacing(8)
+        grid.setContentsMargins(0, 0, 0, 0)
+
+        self._ov_values = {}
+        self._ov_subs = {}
+        self._ov_cells = {}
+        specs = [
+            ("study", "📚", "今日学习", 0, 0),
+            ("goal", "🎯", "目标进度", 0, 1),
+            ("screen", "🖥", "屏幕使用", 1, 0),
+            ("todo", "📝", "待办", 1, 1),
+        ]
+        for key, icon, title, r, c in specs:
+            cell = QFrame()
+            cell.setObjectName("ovCell")
+            cell.setStyleSheet(f"""
+                QFrame#ovCell {{
+                    background: {self._c('input_bg')};
+                    border: 1px solid {self._c('border')};
+                    border-radius: 8px;
+                }}
+                QFrame#ovCell:hover {{ border-color: {self._c('accent')}; }}
+            """)
+            cl = QVBoxLayout(cell)
+            cl.setContentsMargins(11, 9, 11, 9)
+            cl.setSpacing(2)
+
+            head = QLabel(f"{icon} {title}")
+            head.setStyleSheet(
+                f"color: {self._c('text2')}; font-size: 11px;"
+                " background: transparent; border: none;")
+            cl.addWidget(head)
+
+            val = QLabel("—")
+            val.setStyleSheet(
+                f"color: {self._c('accent')}; font-size: 19px; font-weight: bold;"
+                " background: transparent; border: none;")
+            cl.addWidget(val)
+
+            sub = QLabel("")
+            sub.setWordWrap(True)
+            sub.setStyleSheet(
+                f"color: {self._c('text2')}; font-size: 10.5px;"
+                " background: transparent; border: none;")
+            cl.addWidget(sub)
+
+            self._ov_values[key] = val
+            self._ov_subs[key] = sub
+            self._ov_cells[key] = cell
+            # 格子可点：跳到能看到细节的地方
+            cell.setCursor(Qt.CursorShape.PointingHandCursor)
+            cell.setToolTip("点一下跳到对应页面")
+            cell.mousePressEvent = (
+                lambda ev, k=key: self._on_overview_cell(k))  # type: ignore
+            grid.addWidget(cell, r, c)
+
+        card.layout().addLayout(grid)
+
+        # 快捷动作：不切页面就能开始专注 / 记一笔待办
+        act_row = QHBoxLayout()
+        act_row.setSpacing(6)
+        self._ov_focus_btn = QPushButton("▶ 开始专注")
+        self._ov_focus_btn.setObjectName("actionBtn")
+        self._ov_focus_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._ov_focus_btn.clicked.connect(self._on_overview_focus)
+        act_row.addWidget(self._ov_focus_btn)
+
+        self._ov_todo_btn = QPushButton("＋ 记待办")
+        self._ov_todo_btn.setObjectName("actionBtn")
+        self._ov_todo_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._ov_todo_btn.clicked.connect(self._on_overview_add_todo)
+        act_row.addWidget(self._ov_todo_btn)
+
+        self._ov_report_btn = QPushButton("📈 看报告")
+        self._ov_report_btn.setObjectName("actionBtn")
+        self._ov_report_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._ov_report_btn.clicked.connect(
+            lambda: self._goto_page("工具", tools_sub=2))
+        act_row.addWidget(self._ov_report_btn)
+        act_row.addStretch()
+        card.layout().addLayout(act_row)
+
+        hint = QLabel("数据取自本机记录 · 点格子可跳到对应页面")
+        hint.setStyleSheet(f"color: {self._c('text2')}; font-size: 10.5px;")
+        card.layout().addWidget(hint)
+
+        return card
+
+    def _goto_page(self, label, tools_sub=None):
+        """按标签名切页 —— 标签顺序变了也不会错（不依赖下标）。"""
+        btn = self._page_btns.get(label)
+        if btn is None:
+            return
+        btn.click()
+        if tools_sub is not None and label == "工具":
+            QTimer.singleShot(60, lambda: self._switch_tools_page(tools_sub))
+
+    def _on_overview_focus(self):
+        """主页直接开始专注：进数据面板并启动倒计时器。"""
+        timer = getattr(self, "_timer_widget", None)
+        if timer is None:
+            return
+        self._goto_page("工具", tools_sub=2)
+        QTimer.singleShot(140, self._start_timer_from_overview)
+
+    def _start_timer_from_overview(self):
+        timer = getattr(self, "_timer_widget", None)
+        if timer is None:
+            return
+        try:
+            if timer.get_is_running():
+                self._toast("专注已经在进行中啦")
+                return
+            timer._set_preset(25)
+            timer._on_start()
+        except Exception as exc:      # noqa: BLE001
+            print("[Overview] 启动专注失败: %s" % exc)
+
+    def _on_overview_add_todo(self):
+        """主页直接记一笔待办：跳到待办并聚焦输入框。"""
+        todo = getattr(self, "_todo_widget", None)
+        if todo is None:
+            return
+        self._goto_page("工具", tools_sub=2)
+        QTimer.singleShot(140, lambda: (
+            todo._input.setFocus() if hasattr(todo, "_input") else None))
+
+    def _on_overview_cell(self, key):
+        """点概览格子 → 跳到能看到细节的地方。"""
+        if key in ("study", "todo"):
+            self._goto_page("工具", tools_sub=2)
+        elif key == "screen":
+            self._on_toggle_screen_tracker()
+        elif key == "goal":
+            self._prompt_goal()
+
+    def _refresh_overview(self):
+        """刷新主页概览。数据源与数据面板/报告完全一致，不另算一套。"""
+        if not getattr(self, "_ov_values", None):
+            return
+
+        # ── 学习时长 + 目标进度 ──────────────────────────
+        info = None
+        try:
+            tracker = self._ensure_goal_tracker()
+            info = tracker.progress() if tracker is not None else None
+        except Exception as exc:      # noqa: BLE001
+            print("[Overview] 读目标失败: %s" % exc)
+
+        if info:
+            mins = int(info.get("study_minutes", 0) or 0)
+            self._ov_values["study"].setText("%d 分" % mins)
+            if mins >= 60:
+                self._ov_subs["study"].setText("约 %.1f 小时" % (mins / 60.0))
+            elif mins > 0:
+                self._ov_subs["study"].setText("继续保持")
+            else:
+                self._ov_subs["study"].setText("今天还没开始")
+
+            if info.get("has_goal"):
+                ratio = float(info.get("ratio", 0) or 0)
+                self._ov_values["goal"].setText("%d%%" % round(ratio * 100))
+                if ratio >= 1:
+                    self._ov_subs["goal"].setText("已达成 🎉")
+                else:
+                    left = max(0, int(info.get("goal_minutes", 0) or 0) - mins)
+                    self._ov_subs["goal"].setText("还差 %d 分" % left)
+            else:
+                self._ov_values["goal"].setText("未设")
+                self._ov_subs["goal"].setText("点一下设置目标")
+        else:
+            self._ov_values["study"].setText("—")
+            self._ov_values["goal"].setText("—")
+            self._ov_subs["goal"].setText("点一下设置目标")
+
+        # ── 屏幕使用 ────────────────────────────────────
+        today = None
+        try:
+            # 屏幕追踪器在 __init__ 里就建好了（L296），这里直接取
+            tracker2 = getattr(self, "_screen_tracker", None)
+            today = tracker2.get_today_data() if tracker2 is not None else None
+        except Exception as exc:      # noqa: BLE001
+            print("[Overview] 读屏幕时间失败: %s" % exc)
+
+        if today:
+            total = sum(s for _a, s in today)
+            self._ov_values["screen"].setText(self._fmt_dur(total))
+            top = max(today, key=lambda x: x[1])
+            self._ov_subs["screen"].setText(
+                "主要：%s" % top[0].replace(".exe", "")[:12])
+        else:
+            self._ov_values["screen"].setText("未开启")
+            self._ov_subs["screen"].setText("点一下开启统计")
+
+        # ── 待办 ────────────────────────────────────────
+        todo = getattr(self, "_todo_widget", None)
+        if todo is not None:
+            try:
+                pending = sum(1 for t in todo.todos if not t.done)
+                done = sum(1 for t in todo.todos if t.done)
+                self._ov_values["todo"].setText("%d 项" % pending)
+                if pending == 0 and done > 0:
+                    self._ov_subs["todo"].setText("全部完成 🎉")
+                elif pending == 0:
+                    self._ov_subs["todo"].setText("点「＋ 记待办」添加")
+                else:
+                    self._ov_subs["todo"].setText("已完成 %d 项" % done)
+            except Exception as exc:  # noqa: BLE001
+                print("[Overview] 读待办失败: %s" % exc)
 
     def _make_card(self, title):
         card = QFrame()
@@ -2593,6 +2891,9 @@ class MainWindow(QMainWindow):
             self._pet_status.setText("● 运行中")
             self._pulse_phase = 0.0
             self._pulse_timer.start(50)
+            # 主页概览：启动时先刷一次，之后每 30 秒兜底刷新
+            self._refresh_overview()
+            self._overview_timer.start(30_000)
 
             favs = self.settings.favorites
             if not any(f["path"] == processed_path for f in favs):
@@ -4308,6 +4609,8 @@ class MainWindow(QMainWindow):
                 ring.set_state(ratio, ring_text, accent, track, fg,
                                font_size=15, dim=dim, full_color=full)
         self._refresh_goal_history()
+        # 主页「今日概览」读的就是这套数据，顺手一起刷（不再单独算一遍）
+        self._refresh_overview()
 
         label = getattr(self, "_goal_label", None)
         if label is not None:

@@ -43,7 +43,7 @@ pump(400)
 
 # ── 1. 遍历四个主页 ─────────────────────────────────────────
 page_errors = []
-for label in ("宠物", "功能", "工具", "AI"):
+for label in ("宠物", "宠物设置", "工具", "AI"):
     try:
         mw._page_btns[label].click()
         pump(300)
@@ -129,7 +129,7 @@ try:
     for _ in range(3):
         mw._toggle_dark_mode()
         pump(150)
-    for label in ("宠物", "功能", "工具", "AI"):
+    for label in ("宠物", "宠物设置", "工具", "AI"):
         mw._page_btns[label].click()
         pump(120)
     check("深色/浅色来回切换 3 次无异常", True)
@@ -138,7 +138,7 @@ except Exception as exc:  # noqa: BLE001
 
 # 深色模式下页面不能不透明（回归：标签切换动画问题）
 bad_opacity = []
-for label in ("宠物", "功能", "工具", "AI"):
+for label in ("宠物", "宠物设置", "工具", "AI"):
     mw._page_btns[label].click()
     pump(350)
     w = mw._page_stack.currentWidget()

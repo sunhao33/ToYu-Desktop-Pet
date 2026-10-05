@@ -7,7 +7,7 @@ app = QApplication(sys.argv)
 w = MainWindow()
 
 # Check features page (page 1)
-w._page_btns['功能'].click()
+w._page_btns['宠物设置'].click()
 page1 = w._page_stack.widget(1)
 cards1 = page1.findChildren(QFrame)
 print("=== Features Page ===")

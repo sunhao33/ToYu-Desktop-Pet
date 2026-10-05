@@ -44,7 +44,7 @@ def pump(ms=200):
         time.sleep(0.01)
 
 
-PAGES = ("宠物", "功能", "工具", "AI")
+PAGES = ("宠物", "宠物设置", "工具", "AI")
 
 mw = MainWindow()
 mw.show()

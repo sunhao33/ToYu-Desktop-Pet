@@ -30,8 +30,11 @@ mw = MainWindow()
 mw.show()
 app.processEvents()
 
-ORDER = ["宠物", "功能", "工具", "AI"]
-expect_index = {label: i for i, label in enumerate(ORDER)}
+ORDER = ["宠物", "AI", "工具", "宠物设置"]
+# 期望下标必须从 _page_ids 取真实映射，不能假设「按钮顺序 == 页面下标」——
+# 标签顺序已经和页面构建顺序解耦了（AI 排在工具前面，但它是最后构建的）。
+expect_index = {label: mw._page_stack.indexOf(mw._page_ids[label])
+                for label in ORDER}
 
 # 页面顺序必须与按钮顺序一致，否则点击会切到别的页
 check("页数 = 按钮数", mw._page_stack.count() == len(ORDER),

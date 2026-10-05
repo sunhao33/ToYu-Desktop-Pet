@@ -16,7 +16,7 @@ w.grab().save('tab1_pet.png')
 print('Tab 1 saved')
 
 # Tab 2: Features
-w._page_btns['功能'].click()
+w._page_btns['宠物设置'].click()
 app.processEvents()
 time.sleep(0.5)
 w.grab().save('tab2_features.png')
