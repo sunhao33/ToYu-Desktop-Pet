@@ -12,14 +12,11 @@
 from __future__ import annotations
 
 import threading
-import time
 from dataclasses import dataclass, field
-from typing import Any, Callable
-
+from typing import Callable
 from PyQt6.QtCore import QObject, QTimer
 
 from pet_engine.agent.protocol import ToolResult, ToolSpec
-
 
 @dataclass
 class ToolRequest:
@@ -31,13 +28,11 @@ class ToolRequest:
     spec: ToolSpec | None = None
     arg_error: str = ""
 
-
 @dataclass
 class _Pending:
     request: ToolRequest
     done: threading.Event = field(default_factory=threading.Event)
     result: ToolResult | None = None
-
 
 class ToolRuntime(QObject):
     """工具运行时。

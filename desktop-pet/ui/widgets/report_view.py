@@ -461,55 +461,6 @@ class ReportView(QWidget):
         box = self._section("观察与建议")
         for tip in tips:
             box.addWidget(self._bullet(tip))
-
-    def _add_ai_loading(self):
-        box = self._section("🤖 AI 深度分析")
-        label = QLabel("正在分析，请稍候…")
-        label.setStyleSheet(
-            "color: %s; font-size: 11px; background: transparent;"
-            % self._c("accent"))
-        box.addWidget(label)
-
-    def _add_ai(self, text: str):
-        box = self._section("🤖 AI 深度分析")
-        # AI 返回的是 Markdown，这里做轻量渲染：二级标题加粗、列表留符号
-        for raw in text.splitlines():
-            line = raw.rstrip()
-            if not line.strip():
-                continue
-            stripped = line.strip()
-            if stripped.startswith("###") or stripped.startswith("##"):
-                title = stripped.lstrip("#").strip()
-                lab = QLabel(title)
-                lab.setWordWrap(True)
-                lab.setStyleSheet(
-                    "color: %s; font-size: 11px; font-weight: bold;"
-                    " background: transparent;" % self._c("accent"))
-                box.addWidget(lab)
-            elif stripped.startswith(("- ", "* ")):
-                box.addWidget(self._bullet(stripped[2:].strip()))
-            elif stripped.startswith("**") and stripped.endswith("**"):
-                lab = QLabel(stripped.strip("*"))
-                lab.setWordWrap(True)
-                lab.setStyleSheet(
-                    "color: %s; font-size: 11px; font-weight: bold;"
-                    " background: transparent;" % self._c("text"))
-                box.addWidget(lab)
-            else:
-                lab = QLabel(stripped)
-                lab.setWordWrap(True)
-                lab.setStyleSheet(
-                    "color: %s; font-size: 11px; background: transparent;"
-                    % self._c("text"))
-                box.addWidget(lab)
-
-        note = QLabel("以上分析由 AI 基于本报告的统计数据生成，仅供参考。")
-        note.setWordWrap(True)
-        note.setStyleSheet(
-            "color: %s; font-size: 10px; background: transparent;"
-            % self._c("text2"))
-        box.addWidget(note)
-
     def _add_empty(self, d: dict):
         box = self._section("暂无数据")
         box.addWidget(self._muted("%s还没有足够的学习记录。" % d.get("period_label", "")))

@@ -3,6 +3,7 @@
 import os
 import time
 import math
+import random
 import ctypes
 from ctypes import wintypes
 from datetime import datetime
@@ -338,10 +339,19 @@ class PetWindow(QMainWindow):
             return
         food._is_consumed = True
         food.consume()
-        self.affection.add(itype='feed')
+        # 用真实加分显示：affection.add() 返回本次实际加的点数
+        # （基础 3 点，触发软上限时只有 1 点）
+        gain = self.affection.add(itype='feed')
         self._update_affection_tooltip()
-        ft = FloatingText()
-        ft.show_near(self)
+        # 存成成员：无父顶层窗口只被局部变量引用时，函数返回即被回收，
+        # 动画一帧都播不出来（"+N ♥"永远看不到）
+        if getattr(self, "_floating_text", None) is not None:
+            try:
+                self._floating_text.close()
+            except RuntimeError:
+                pass
+        self._floating_text = FloatingText(gain=gain, parent=self)
+        self._floating_text.show_near(self)
         center = self.geometry().center()
         self._effects.add_hearts(center.x(), center.y() - 30, count=6)
         message = self.companion.on_interaction("feed")
@@ -466,7 +476,10 @@ class PetWindow(QMainWindow):
         if self._house and self._house._pet_inside:
             return
         # Don't go home if being dragged
-        if self._is_dragging:
+        # 注意用 state_machine.is_dragged：PetWindow 没有 _is_dragging 属性，
+        # 写错会抛 AttributeError，而定时器槽里的未捕获异常会让 PyQt6
+        # 直接终止进程（不是"回家失败"，是整个程序崩掉）。
+        if self.state_machine.is_dragged:
             return
         self._show_companion_bubble("我先回去休息啦~")
         QTimer.singleShot(2000, self._do_auto_home)
@@ -932,11 +945,19 @@ class PetWindow(QMainWindow):
         self.affection.add(itype='pomodoro')
         self._update_affection_tooltip()
         message = self.companion.on_pomodoro_end()
+        # 存成成员：这个通知是无父顶层窗口，只被局部变量引用时
+        # 函数返回即被回收 —— 用户根本看不到"时间到"的卡片
+        if getattr(self, "_pomodoro_notification", None) is not None:
+            try:
+                self._pomodoro_notification.close()
+            except RuntimeError:
+                pass
         notification = PomodoroNotificationBubble(
             self,
             title="⏰ 时间到！",
             subtitle=message
         )
+        self._pomodoro_notification = notification
         notification.show_near(self)
         self.state_machine.on_mouse_click()
         self._show_companion_bubble(message)
@@ -1045,7 +1066,6 @@ class PetWindow(QMainWindow):
             final_effect: optional callable to run after bubble
             sparkle_threshold: if set, trigger sparkle burst when affection >= threshold
         """
-        import random
         hour = time.localtime().tm_hour
         lv = self.affection.level
 
@@ -1124,7 +1144,6 @@ class PetWindow(QMainWindow):
 
     def _try_random_accessory(self):
         """Try to equip a random accessory. Returns description or None."""
-        import random
         if not hasattr(self, '_accessory_layer') or not self._accessory_layer:
             return None
         try:
@@ -1179,7 +1198,11 @@ class PetWindow(QMainWindow):
 
             if now - self._last_companion_message_time > random.randint(180, 360):
                 message = self.companion.get_mood_message()
-                if self.state_machine._state in (PetState.IDLE, PetState.SITTING):
+                # 注意是 current_state，不是 _state：
+                # PetStateMachine 没有 _state 属性，写错会抛 AttributeError，
+                # 而这里整段被 except 包着，异常会被静默吞掉 ——
+                # 表现为"心情消息与悬停提示一直不生效"且没有任何错误痕迹。
+                if self.state_machine.current_state in (PetState.IDLE, PetState.SITTING):
                     if not self._bubble or not self._bubble.isVisible():
                         self._show_companion_bubble(message)
                         self._last_companion_message_time = now
@@ -1321,7 +1344,10 @@ class PetWindow(QMainWindow):
         transform = QTransform()
         transform.translate(center_x + anim.offset_x, center_y + anim.offset_y)
         transform.rotate(anim.rotation)
-        transform.scale(anim.scale_x * self._scale, anim.scale_y * self._scale)
+        # 这里只能乘 anim 的动画缩放：_scale 已经体现在目标矩形的 sw/sh 上，
+        # 两处都乘会让尺寸按平方增长（scale=2 时画出 4 倍大），
+        # 精灵被窗口裁掉，落脚线也与物理计算不一致。
+        transform.scale(anim.scale_x, anim.scale_y)
         transform.translate(-sw / 2, -sh / 2)
 
         if self._time_awareness_enabled and self._current_time_period == TimePeriod.NIGHT:

@@ -8,7 +8,7 @@ import os
 import json
 import time
 import threading
-from datetime import datetime
+from datetime import datetime, timedelta
 from collections import defaultdict
 
 try:
@@ -294,23 +294,51 @@ class ScreenTimeTracker:
         return self._is_fullscreen()
 
     def _flush_current(self):
-        """把当前会话写进缓冲。"""
+        """把当前会话写进缓冲。
+
+        跨零点必须**按午夜切开**分别入桶：原来整段记到 flush 时刻所属的
+        那一天，于是 23:00 一直用到 00:30 的会话会把 90 分钟全算进新的一天
+        （昨天少算、今天多算，「今日学习目标」凭空提前达成），
+        而且同一条记录的总时长算今天、时段却落在 23 点，自相矛盾。
+        focus_log.py 用的是「按开始日归属」，这里也按同一约定切分。
+        """
         if not self._current_app or self._current_start <= 0:
             return
-        elapsed = time.time() - self._current_start
-        if elapsed > 0:
-            today = datetime.now().strftime("%Y-%m-%d")
-            started = datetime.fromtimestamp(self._current_start)
-            title = sanitize_title(self._current_title) if self._record_titles else ""
-            entry = {
-                "app": self._current_app,
-                "title": title,
-                "start": started.strftime("%Y-%m-%d %H:%M:%S"),
-                "secs": round(elapsed, 1),
-            }
-            with self._lock:
-                self._buffer[today][self._current_app] += elapsed
-                self._session_buffer[today].append(entry)
+        started = datetime.fromtimestamp(self._current_start)
+        now = datetime.now()
+        title = sanitize_title(self._current_title) if self._record_titles else ""
+
+        # 切成若干 (日期, 起始时刻, 秒数) 段
+        pieces = []
+        if started.date() == now.date():
+            pieces.append((started, max(0.0, (now - started).total_seconds())))
+        else:
+            # 跨天：从开始时刻到次日 00:00，再从 00:00 到当前时刻
+            midnight = datetime.combine(started.date() + timedelta(days=1),
+                                       datetime.min.time())
+            pieces.append((started, max(0.0, (midnight - started).total_seconds())))
+            cursor = midnight
+            guard = 0
+            while cursor.date() < now.date() and guard < 400:
+                nxt = datetime.combine(cursor.date() + timedelta(days=1),
+                                       datetime.min.time())
+                pieces.append((cursor, 86400.0))
+                cursor = nxt
+                guard += 1
+            pieces.append((cursor, max(0.0, (now - cursor).total_seconds())))
+
+        with self._lock:
+            for begin, secs in pieces:
+                if secs <= 0:
+                    continue
+                day = begin.strftime("%Y-%m-%d")
+                self._buffer[day][self._current_app] += secs
+                self._session_buffer[day].append({
+                    "app": self._current_app,
+                    "title": title,
+                    "start": begin.strftime("%Y-%m-%d %H:%M:%S"),
+                    "secs": round(secs, 1),
+                })
         self._current_start = time.time()
 
     def _run(self):
@@ -427,9 +455,16 @@ class ScreenTimeTracker:
         """按小时分布的使用秒数（长度 24 的浮点列表）。
 
         以会话开始时刻所在小时归集；跨小时的长会话按比例摊到各小时。
+
+        **跳过 inferred 记录**：老版本升级时迁移出来的会话只有总时长、
+        没有真实起点（写成 00:00:00 并打了 inferred 标记）。当成真实起点
+        会把整天的时长全塞进 0 点，报告于是得出"最专注时段 00:00，
+        注意别熬夜"这种假结论 —— 宁可不出时段结论，也不要编一个。
         """
         buckets = [0.0] * 24
         for sess in self.get_sessions(date_str):
+            if sess.get("inferred"):
+                continue
             try:
                 started = datetime.strptime(sess["start"], "%Y-%m-%d %H:%M:%S")
             except (KeyError, ValueError):

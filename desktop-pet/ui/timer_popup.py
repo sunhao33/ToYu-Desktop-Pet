@@ -36,12 +36,16 @@ class TodoTimerPopup(QWidget):
             Qt.WindowType.FramelessWindowHint
         )
 
-        self.setStyleSheet("""
-                background: #FFF8F0;
-                border: 1px solid #E8D5C0;
-                border-radius: 12px;
-            }
-        """)
+        # 选择器不能省：以声明开头的样式表 Qt 会整段丢弃
+        # （控制台报 Could not parse stylesheet），窗口又是
+        # WA_TranslucentBackground 无边框 —— 结果背景完全不显示，
+        # 只剩一堆浮在桌面上的控件。
+        self.setStyleSheet(
+            "QWidget#bg {"
+            " background: #FFF8F0;"
+            " border: 1px solid #E8D5C0;"
+            " border-radius: 12px;"
+            " }")
 
         root = QWidget(self)
         root.setObjectName("bg")

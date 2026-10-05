@@ -1,7 +1,6 @@
 """Image import dialog with background removal preview."""
 
 import os
-import tempfile
 from PyQt6.QtWidgets import (
     QDialog, QVBoxLayout, QHBoxLayout, QPushButton,
     QLabel, QSlider, QFileDialog, QCheckBox, QGroupBox,

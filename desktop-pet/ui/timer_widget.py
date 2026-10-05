@@ -32,6 +32,7 @@ class TimerWidget(QWidget):
     def __init__(self, parent=None):
         super().__init__(parent)
         self._is_running = False
+        self._paused = False          # 区分"暂停"与"结束"：继续时不重算时长
         self._remaining_seconds = 0
         self._total_seconds = 0
         self._timer = QTimer(self)
@@ -300,39 +301,58 @@ class TimerWidget(QWidget):
         self._update_display(minutes * 60)
     
     def _on_start(self):
-        """Start the timer."""
+        """开始计时，或从暂停处继续。
+
+        这两种语义必须区分开：`_on_start` 同时也被"继续"按钮调用。
+        原先它无条件用输入框重算 total，于是**暂停后继续 = 从整段时长重跑**
+        （跑了 10 分钟、暂停、继续 → 显示跳回 25:00），
+        `get_elapsed_seconds()` 也随之归零，专注时长少记。
+        """
         if self._is_running:
             return
-        
-        hours = self._hour_spin.value()
-        minutes = self._min_spin.value()
-        seconds = self._sec_spin.value()
-        total = hours * 3600 + minutes * 60 + seconds
-        
-        if total <= 0:
-            QMessageBox.information(self, "提示", "请设置时间")
-            return
-        
-        self._total_seconds = total
-        self._remaining_seconds = total
+
+        # 暂停状态下继续：沿用已算好的总时长与剩余秒数，不重算
+        resuming = self._paused and self._remaining_seconds > 0
+        if resuming:
+            total = self._total_seconds
+        else:
+            hours = self._hour_spin.value()
+            minutes = self._min_spin.value()
+            seconds = self._sec_spin.value()
+            total = hours * 3600 + minutes * 60 + seconds
+
+            if total <= 0:
+                QMessageBox.information(self, "提示", "请设置时间")
+                return
+
+            self._total_seconds = total
+            self._remaining_seconds = total
+            # 新开一段才复位进度条（否则接着上次的满格跑，像"一开始就完成"）
+            if hasattr(self, "_progress_fill") and hasattr(self, "_progress_bar"):
+                self._progress_fill.setFixedWidth(0)
+
+        self._paused = False
         self._is_running = True
-        
+
         self._start_btn.setEnabled(False)
         self._pause_btn.setEnabled(True)
         self._status_label.setText("倒计时中...")
-        
+
+        self._update_display(self._remaining_seconds)
         self._timer.start(1000)  # Update every second
         # 通知外部（主窗口据此弹出悬浮计时小窗）
         self.started.emit()
-    
+
     def _on_pause(self):
         """Pause the timer."""
         if not self._is_running:
             return
-        
+
         self._timer.stop()
         self._is_running = False
-        
+        # 记下"是暂停"而不是"结束"，_on_start 据此走继续分支
+        self._paused = self._remaining_seconds > 0
+
         self._start_btn.setEnabled(True)
         self._pause_btn.setEnabled(False)
         self._status_label.setText("已暂停")
@@ -341,6 +361,7 @@ class TimerWidget(QWidget):
         """Reset the timer."""
         self._timer.stop()
         self._is_running = False
+        self._paused = False
         self._remaining_seconds = 0
         self._total_seconds = 0
         

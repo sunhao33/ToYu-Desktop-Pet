@@ -21,8 +21,7 @@ from __future__ import annotations
 import os
 from datetime import date, datetime, timedelta
 
-from pet_engine.goal import is_study_app, study_seconds_from_sessions
-
+from pet_engine.goal import is_study_app
 REPORT_DIR = os.path.join(os.environ.get("APPDATA", os.path.expanduser("~")),
                           "ToYu", "reports")
 
@@ -44,7 +43,6 @@ MODE_LABEL = {MODE_BASIC: "基础版", MODE_AI: "AI 版"}
 
 # 小于这个时长（分钟）就当作"没学"，避免几秒的误点开被当成有效数据
 MIN_MEANINGFUL_MINUTES = 1
-
 
 # AI 分析师的人设与约束。
 # 关键约束的目的：
@@ -73,17 +71,14 @@ AI_ANALYST_PROMPT = """你是一位务实的学习效率分析师。用户会给
    不要为了凑内容硬编分析。
 5. 全文控制在 400 字以内，不要重复罗列我已经给你的数字。"""
 
-
 def _fmt_minutes(minutes) -> str:
     minutes = int(minutes)
     if minutes >= 60:
         return "%d 小时 %d 分" % (minutes // 60, minutes % 60)
     return "%d 分钟" % minutes
 
-
 def _fmt_seconds(seconds) -> str:
     return _fmt_minutes(int(seconds) // 60)
-
 
 def _bar(minutes, max_minutes, width=12) -> str:
     """用方块画一个简易条形（纯文本也能看出对比）。"""
@@ -91,7 +86,6 @@ def _bar(minutes, max_minutes, width=12) -> str:
         return ""
     filled = int(round(minutes / max_minutes * width))
     return "█" * max(0, min(width, filled))
-
 
 class LearningReport:
     """生成学习/工作报告。"""

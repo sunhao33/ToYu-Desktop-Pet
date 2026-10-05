@@ -11,8 +11,6 @@
   * 圆角 + 无边框 + 置顶 + 可拖动，位置记在设置里。
 """
 
-import math
-
 from PyQt6.QtCore import Qt, QTimer, QPointF, QRectF
 from PyQt6.QtGui import QColor, QPainter, QPen, QFont
 from PyQt6.QtWidgets import (
@@ -26,11 +24,9 @@ HEIGHT = 150
 CORNER = 18
 RING = 74
 
-
 def _clock(seconds):
     seconds = int(max(0, seconds))
     return "%02d:%02d:%02d" % (seconds // 3600, (seconds % 3600) // 60, seconds % 60)
-
 
 def _compact(seconds):
     """剩余时间不足 1 小时时用 mm:ss，更醒目。"""
@@ -38,7 +34,6 @@ def _compact(seconds):
     if seconds >= 3600:
         return _clock(seconds)
     return "%02d:%02d" % (seconds // 60, seconds % 60)
-
 
 class MiniTimerWindow(QWidget):
     """圆角矩形悬浮计时窗。"""
@@ -237,18 +232,23 @@ class MiniTimerWindow(QWidget):
         ratio = 1.0 - (remaining / total)
         urgent = 0 < remaining <= 10
         accent, track, fg = self._ring_colors()
-        self._ring.set_state(ratio, _compact(remaining), accent, track, fg,
-                             full_color="#E05A4F" if urgent else None)
+        # 紧急提示要走 accent 而不是 full_color：ProgressRing 只在
+        # ratio >= 1 时才用 full_color，而倒计时最后 10 秒 ratio 必然 < 1，
+        # 传 full_color 等于永远不生效（"最后 10 秒变红"从未出现）。
+        self._ring.set_state(ratio, _compact(remaining),
+                             "#E05A4F" if urgent else accent, track, fg)
 
         if remaining <= 0 and not running:
             self._state_label.setText("专注完成")
             self._detail_label.setText("休息一下吧")
             self._pause_btn.setText("⏸ 暂停")
             self._mode = "idle"
+            # 结束后不再是"暂停"状态，否则点按钮会发出无效的继续
+            self._paused = False
         elif running:
             self._state_label.setText("专注中")
-            self._detail_label.setText("剩余 %s / 共 %d 分钟"
-                                       % (_compact(remaining), total // 60))
+            self._detail_label.setText("剩余 %s / 共 %s"
+                                       % (_compact(remaining), _compact(total)))
             self._pause_btn.setText("⏸ 暂停")
             self._paused = False
         else:
@@ -282,14 +282,19 @@ class MiniTimerWindow(QWidget):
 
     # ── 按钮 ────────────────────────────────────────────────
     def _on_pause_toggle(self):
+        """按当前真实状态分发暂停/继续。
+
+        这里**不要**自己翻转 _paused：_paused 由 _tick_countdown /
+        _tick_countup 按计时器的真实状态回填（每秒跑一次）。
+        两处都写就会出现"按钮写着暂停、点下去却发继续"，
+        或被 _tick 立刻刷回原值造成"点了没反应"。
+        """
         if self._paused:
             if self._resume_cb is not None:
                 self._resume_cb()
-            self._paused = False
         else:
             if self._pause_cb is not None:
                 self._pause_cb()
-            self._paused = True
         self._tick()
 
     def _on_back(self):

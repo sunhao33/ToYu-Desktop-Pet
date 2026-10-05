@@ -5,7 +5,7 @@ from PyQt6.QtCore import (
     QPropertyAnimation, QAbstractAnimation, QEasingCurve, QParallelAnimationGroup,
     QPointF, QRectF, QEvent
 )
-from PyQt6.QtGui import QColor, QFont, QPainter, QPainterPath, QPen, QBrush, QLinearGradient
+from PyQt6.QtGui import QColor, QPainter, QPainterPath, QPen, QBrush, QLinearGradient
 from PyQt6.QtWidgets import (
     QFrame, QVBoxLayout, QHBoxLayout, QPushButton, QLabel,
     QGraphicsOpacityEffect, QApplication,

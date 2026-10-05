@@ -245,6 +245,15 @@ class MainWindow(QMainWindow):
         self._flow_active = False
         self._flow_window = None          # 心流模式是一个独立的顶层窗口
         self._mini_timer = None           # 悬浮计时小窗
+        # 懒加载组件显式置空：它们原来只在宠物**启动成功**后才被创建，
+        # 而 AI 页的按钮（如「全部忘掉」）从程序一打开就能点 ——
+        # 属性不存在时会抛 AttributeError 冲出 Qt 槽（可能终止进程），
+        # 或被 except 吞成"点了没反应"。这里先建好名字，各处置空判断才成立。
+        self._memory_store = None
+        self._memory_extractor = None
+        self._goal_tracker = None
+        self._report_builder = None
+        self._report_ai_signal = None
 
         self._init_ui()
         self._init_tray()
@@ -1422,9 +1431,13 @@ class MainWindow(QMainWindow):
         self._ai_personality_combo = QComboBox()
         for name, desc in PERSONALITIES.items():
             self._ai_personality_combo.addItem(f"{name} — {desc[:15]}...", name)
-        current_idx = list(PERSONALITIES.keys()).index(self._ai_config.personality)
-        if current_idx >= 0:
-            self._ai_personality_combo.setCurrentIndex(current_idx)
+        # index() 找不到时会抛 ValueError（不会返回 -1），而 personality
+        # 来自可手工编辑的 ai_config.json —— 值不在内置列表里就会让整个
+        # 主窗口构造失败、程序起不来。这里先判存在再取下标。
+        _names = list(PERSONALITIES.keys())
+        _cur = self._ai_config.personality
+        self._ai_personality_combo.setCurrentIndex(
+            _names.index(_cur) if _cur in _names else 0)
         self._ai_personality_combo.setStyleSheet(
             f"QComboBox {{ color: {self._c('text')}; background: {self._c('input_bg')}; border: 1px solid {self._c('border')}; border-radius: 6px; padding: 6px 10px; font-size: 12px; }}"
             f"QComboBox QAbstractItemView {{ color: {self._c('text')}; background: {self._c('input_bg')}; border: 1px solid {self._c('border')}; selection-background-color: {self._c('accent')}; selection-color: white; }}"
@@ -3739,9 +3752,12 @@ class MainWindow(QMainWindow):
 
             self._pet.setWindowOpacity(dialog.get_opacity())
 
-            if self.settings.house_enabled and not self._house_window:
+            # 属性名是 self._house（不是 _house_window）：
+            # 写错会让开关恒为"未启用"，于是取消勾选时小屋关不掉、
+            # 每次确定都把现有小屋关掉重建一遍。
+            if self.settings.house_enabled and not self._house:
                 self._spawn_house()
-            elif not self.settings.house_enabled and self._house_window:
+            elif not self.settings.house_enabled and self._house:
                 self._close_house()
 
             if hasattr(self._pet, '_pomodoro_timer'):

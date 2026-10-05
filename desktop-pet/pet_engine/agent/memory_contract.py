@@ -13,7 +13,7 @@
 from __future__ import annotations
 
 import re
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from pet_engine.agent.slots import (
@@ -58,7 +58,6 @@ MAX_VALUE_LEN = 300
 # 事实类槽位的默认有效期（天）；preference 不过期
 FACT_TTL_DAYS = 30
 GOAL_TTL_DAYS = 90
-
 
 @dataclass
 class MemoryRecord:
@@ -139,10 +138,8 @@ class MemoryRecord:
             value = "、".join(str(v) for v in value)
         return "%s = %s" % (self.slot_id, value)
 
-
 def has_explicit_signal(text: str) -> bool:
     return bool(EXPLICIT_SIGNAL_RE.search(text or ""))
-
 
 def reestimate_confidence(model_confidence: float, evidence: str,
                           source_text: str = "") -> float:
@@ -167,7 +164,6 @@ def reestimate_confidence(model_confidence: float, evidence: str,
         return round(max(base, WEAK_FLOOR), 3)
     return round(min(base, 0.60), 3)
 
-
 def _ttl_for(kind: str) -> str:
     """按 kind 决定过期时间；preference 不过期。"""
     now = datetime.now()
@@ -176,7 +172,6 @@ def _ttl_for(kind: str) -> str:
     if kind == KIND_GOAL:
         return (now + timedelta(days=GOAL_TTL_DAYS)).isoformat(timespec="seconds")
     return ""
-
 
 def validate_value(slot_id: str, value, value_type: str) -> tuple[object, str]:
     """按槽位定义校验并归一化取值。返回 (归一化值, 错误)。"""
@@ -217,10 +212,8 @@ def validate_value(slot_id: str, value, value_type: str) -> tuple[object, str]:
 
     return value, ""
 
-
 # 允许模型返回的字段（多一个都拒绝，避免它夹带私货）
 ALLOWED_FIELDS = {"slot_id", "value", "evidence", "confidence"}
-
 
 def parse_memory(raw: dict, source_text: str = "", session_id: str = "",
                  memory_id: str = "") -> tuple[MemoryRecord | None, str]:
@@ -281,7 +274,6 @@ def parse_memory(raw: dict, source_text: str = "", session_id: str = "",
         expires_at=_ttl_for(kind),
     )
     return record, ""
-
 
 def parse_memory_list(items, source_text: str = "", session_id: str = "",
                       max_items: int = 5) -> tuple[list[MemoryRecord], list[str]]:

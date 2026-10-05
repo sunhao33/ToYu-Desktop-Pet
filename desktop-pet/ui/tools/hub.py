@@ -4,7 +4,6 @@ Pure Python logic (no Qt) so it can be tested headlessly. UI lives in
 ui/tools/desktop_tools_page.py and the background driver in DesktopToolsHub.
 """
 
-import json
 import os
 import time
 from datetime import datetime
@@ -12,14 +11,12 @@ from datetime import datetime
 MAX_HISTORY = 100
 REJECT_MARKER = "[图片]"
 
-
 def get_data_dir():
     """Writable app data directory. Never the PyInstaller _MEIPASS temp dir."""
     base = os.environ.get("APPDATA") or os.path.expanduser("~")
     path = os.path.join(base, "ToYu")
     os.makedirs(path, exist_ok=True)
     return path
-
 
 class ClipboardHistory:
     """Clipboard history with persistence.
@@ -94,7 +91,6 @@ class ClipboardHistory:
 
     def _save(self):
         self.settings.clipboard_history = self._history
-
 
 class EyeCareReminder:
     """Reminds you to look away from the screen after a work interval.
@@ -174,7 +170,6 @@ class EyeCareReminder:
 
     def _save_deadline(self):
         self.settings.eye_care_deadline = self._deadline
-
 
 class DesktopToolsHub:
     """Owns the desktop-tool background loops and hands state to the UI.

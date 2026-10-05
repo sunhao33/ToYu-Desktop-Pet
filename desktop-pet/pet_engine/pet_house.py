@@ -4,7 +4,7 @@ import sys
 from PyQt6.QtCore import (
     Qt, QPoint, QRect, QTimer, QPropertyAnimation, QEasingCurve
 )
-from PyQt6.QtGui import QPixmap, QPainter, QMouseEvent, QTransform, QCursor, QColor
+from PyQt6.QtGui import QPixmap, QPainter, QMouseEvent, QTransform, QColor
 from PyQt6.QtWidgets import QMainWindow, QApplication
 
 from image_processor.processor import get_house_path, get_knock_path

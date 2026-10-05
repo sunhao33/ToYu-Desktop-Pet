@@ -13,8 +13,7 @@
 from __future__ import annotations
 
 import os
-from datetime import date, datetime
-
+from datetime import date
 # 整块预算（字符数近似 token：中文约 1 字 1 token，英文约 4 字符 1 token，
 # 这里按保守估计取 1.2 字符 ≈ 1 token）
 TOKEN_BUDGET = 400
@@ -34,12 +33,10 @@ LABELS = {name: label for name, label, _prio in BLOCKS}
 
 HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".desktop_pet", "task_history.json")
 
-
 def _fmt_minutes(seconds: int) -> str:
     if seconds >= 3600:
         return "%d 小时 %d 分" % (seconds // 3600, (seconds % 3600) // 60)
     return "%d 分钟" % (seconds // 60)
-
 
 class DesktopContextBuilder:
     """从主窗口收集"桌面状态"，拼成一段可注入的文本。"""

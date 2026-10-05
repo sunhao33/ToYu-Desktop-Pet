@@ -7,8 +7,6 @@
 
 from __future__ import annotations
 
-from typing import Any
-
 from pet_engine.agent.protocol import ToolSpec
 
 # 参数 schema 里复用的片段。
@@ -20,7 +18,6 @@ _TODO_TEXT = {
     "minLength": 1,
     "maxLength": 200,
 }
-
 
 class ToolRegistry:
     """工具注册表：注册、查询、生成 schema、分派执行。"""
@@ -47,7 +44,6 @@ class ToolRegistry:
 
     def __len__(self) -> int:
         return len(self._tools)
-
 
 def build_default_registry(main_window) -> ToolRegistry:
     """构建首批 6 个工具。

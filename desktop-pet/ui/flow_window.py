@@ -13,7 +13,7 @@ import json
 from datetime import date, datetime
 
 from PyQt6.QtCore import Qt, QTimer
-from PyQt6.QtGui import QIcon, QPixmap
+from PyQt6.QtGui import QIcon
 from PyQt6.QtWidgets import (
     QMainWindow, QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushButton,
     QFrame, QStackedWidget, QScrollArea, QCheckBox, QLineEdit
@@ -36,7 +36,6 @@ HISTORY_FILE = os.path.join(os.path.expanduser("~"), ".desktop_pet", "task_histo
 FLOW_TIMER_FILE = os.path.join(
     os.path.expanduser("~"), "AppData", "Roaming", "ToYu", "flow_timers.json")
 
-
 def load_flow_timers():
     """读取 {日期: {任务文本: 累计秒数}}。"""
     try:
@@ -49,7 +48,6 @@ def load_flow_timers():
         pass
     return {}
 
-
 def save_flow_timers(data):
     try:
         os.makedirs(os.path.dirname(FLOW_TIMER_FILE), exist_ok=True)
@@ -59,7 +57,6 @@ def save_flow_timers(data):
         os.replace(tmp, FLOW_TIMER_FILE)
     except Exception:
         pass
-
 
 def app_icon():
     """程序图标：优先用 128px 版本，回退到 ico。
@@ -75,10 +72,8 @@ def app_icon():
                 return icon
     return QIcon()
 
-
 # 兼容旧调用名
 _app_icon = app_icon
-
 
 def _fmt_duration(seconds):
     seconds = int(max(0, seconds))
@@ -88,12 +83,10 @@ def _fmt_duration(seconds):
         return "%d 分钟" % (seconds // 60)
     return "%d 秒" % seconds
 
-
 def _fmt_clock(seconds):
     """计划项用时：紧凑的 时:分:秒 形式。"""
     seconds = int(max(0, seconds))
     return "%02d:%02d:%02d" % (seconds // 3600, (seconds % 3600) // 60, seconds % 60)
-
 
 class _PetStage(QLabel):
     """宠物可视化：直接从 PetWindow 取当前精灵图，跟随宠物状态实时更新。"""
@@ -124,7 +117,6 @@ class _PetStage(QLabel):
             self.setText("")
         except RuntimeError:
             pass
-
 
 class FlowWindow(QMainWindow):
     """心流模式独立窗口。"""

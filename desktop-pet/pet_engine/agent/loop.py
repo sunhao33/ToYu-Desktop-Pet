@@ -49,7 +49,6 @@ AGENT_SYSTEM_PROMPT = """你可以调用工具真正帮用户做事，而不只�
 可用工具：
 {tools}"""
 
-
 class AgentLoop:
     """一次用户输入 → 可能多轮工具调用 → 最终回答。"""
 

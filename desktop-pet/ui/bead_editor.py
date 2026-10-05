@@ -13,7 +13,6 @@ from PyQt6.QtWidgets import (
     QLabel, QFileDialog, QMessageBox, QScrollArea, QFrame,
     QComboBox, QColorDialog, QButtonGroup, QToolTip
 )
-from PIL import Image
 from resources.generate_toyu import render_pixel_art
 
 class Tool(Enum):

@@ -3,7 +3,6 @@ import os
 import ctypes
 import time
 import traceback
-from PyQt6.QtCore import QTimer
 from PyQt6.QtWidgets import QApplication
 from PyQt6.QtGui import QIcon
 
@@ -11,14 +10,12 @@ LOG_DIR = os.path.join(os.environ.get("APPDATA") or os.path.expanduser("~"), "To
 LOG_PATH = os.path.join(LOG_DIR, "errors.log")
 MAX_LOG_BYTES = 512 * 1024
 
-
 def _log_path():
     try:
         os.makedirs(LOG_DIR, exist_ok=True)
     except OSError:
         return None
     return LOG_PATH
-
 
 def _write_error(lines):
     path = _log_path()
@@ -31,7 +28,6 @@ def _write_error(lines):
             fh.write(lines)
     except OSError:
         pass
-
 
 def _install_crash_guard():
     """PyQt6 aborts the whole process when a slot raises, and a windowed exe has no
@@ -57,7 +53,6 @@ def _install_crash_guard():
     sys.excepthook = _hook
     return _hook
 
-
 def _resource_path(relative_path):
     """Get absolute path to resource, works for dev and PyInstaller bundle."""
     if getattr(sys, 'frozen', False):
@@ -65,7 +60,6 @@ def _resource_path(relative_path):
     else:
         base = os.path.dirname(os.path.abspath(__file__))
     return os.path.join(base, relative_path)
-
 
 def main():
     ctypes.windll.shell32.SetCurrentProcessExplicitAppUserModelID("ToYu.DesktopPet")
@@ -84,7 +78,6 @@ def main():
     window.show()
 
     sys.exit(app.exec())
-
 
 if __name__ == "__main__":
     main()

@@ -5,7 +5,7 @@ from PyQt6.QtCore import (
     Qt, QTimer, QPropertyAnimation, QPoint, QEasingCurve, pyqtSignal
 
 )
-from PyQt6.QtGui import QFont, QMouseEvent, QCursor
+from PyQt6.QtGui import QFont, QMouseEvent
 from PyQt6.QtWidgets import QFrame, QLabel, QVBoxLayout, QGraphicsOpacityEffect
 
 FOOD_EMOJIS = ["🍙", "🍪", "🍰"]
@@ -107,10 +107,16 @@ class FoodItemWindow(QFrame):
         self.setGeometry(new_x + (48 - new_w) // 2, new_y + (48 - new_h) // 2, new_w, new_h)
 
 class FloatingText(QFrame):
-    """+15 heart text that drifts up and fades out."""
+    """喂食反馈：飘起并淡出的 "+N ♥"。
 
-    def __init__(self):
-        super().__init__()
+    gain 由调用方传入真实加分 —— 以前这里硬编码 "+15 ♥"，
+    而实际喂食只加 3 点（触发软上限时只有 1 点），显示与真实值不符。
+    """
+
+    def __init__(self, gain: int = 3, parent=None):
+        super().__init__(parent)
+        # 有父对象才不会被 GC 回收（无父顶层窗口若只被局部变量引用，
+        # 函数返回后 C++ 对象就销毁了，动画根本播不出来）
         flags = (
             Qt.WindowType.FramelessWindowHint
             | Qt.WindowType.WindowStaysOnTopHint
@@ -121,7 +127,7 @@ class FloatingText(QFrame):
         self.setAttribute(Qt.WidgetAttribute.WA_ShowWithoutActivating)
         self.setFixedSize(100, 36)
 
-        label = QLabel("+15 ♥")
+        label = QLabel("+%d ♥" % max(1, int(gain)))
         label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         font = QFont()
         font.setPointSize(14)

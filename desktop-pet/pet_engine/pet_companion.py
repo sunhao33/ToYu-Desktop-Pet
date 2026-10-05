@@ -223,10 +223,16 @@ class CompanionSystem:
         ],
     }
 
+    # 一次休息最多维持多久（秒）。超过就自动回到 IDLE，
+    # 避免"忘记调 on_break_end"导致心情永久锁在 PLAYFUL。
+    # 配合心流模式默认 5 分钟休息，取 6 分钟容一点。
+    BREAK_MAX_SECONDS = 360
+
     def __init__(self, settings):
         self.settings = settings
         self._mood = PetMood.HAPPY
         self._work_state = WorkState.IDLE
+        self._break_start_time = 0.0
         self._last_interaction = time.time()
         self._last_mood_change = time.time()
         self._last_message_time = 0
@@ -254,6 +260,16 @@ class CompanionSystem:
         hour = datetime.now().hour
 
         new_mood = self._mood
+
+        # 休息按时长自行结束。
+        # 原来只有 on_break_end() 能把状态改回 IDLE，而它全项目无人调用 ——
+        # 于是开过一次番茄钟后 _work_state 永远停在 BREAK，下面的分支
+        # 把心情永久锁成 PLAYFUL（好感度、空闲、孤独全都不再生效）。
+        # 改成按时间自动结束，不依赖外部记得调用。
+        if (self._work_state == WorkState.BREAK
+                and self._break_start_time > 0
+                and now - self._break_start_time >= self.BREAK_MAX_SECONDS):
+            self.on_break_end()
 
         if 0 <= hour < 6:
             new_mood = PetMood.SLEEPY
@@ -306,6 +322,7 @@ class CompanionSystem:
     def on_pomodoro_end(self):
         """Called when pomodoro timer ends."""
         self._work_state = WorkState.BREAK
+        self._break_start_time = time.time()
         self._consecutive_work_minutes = 0
 
         reactions = self.EVENT_REACTIONS["pomodoro_end"]
@@ -338,6 +355,7 @@ class CompanionSystem:
     def on_break_end(self):
         """Called when break time is over."""
         self._work_state = WorkState.IDLE
+        self._break_start_time = 0.0
         return "休息好了，继续加油！"
 
     def on_drag_start(self):

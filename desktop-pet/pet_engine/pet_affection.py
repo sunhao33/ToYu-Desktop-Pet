@@ -8,7 +8,6 @@ Design philosophy:
 
 import json
 import os
-import random
 import time
 
 LEVEL_EMOJIS = [

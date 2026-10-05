@@ -422,25 +422,77 @@ class TodoWidget(QWidget):
         return self._load_history()
 
     def _load_todos(self):
+        """读取待办。
+
+        两条纪律（原来都没有，导致一次可恢复的读失败升级成永久丢数据）：
+          1. **逐条构造**而不是 `TodoItem(**item)`：只要有一条记录带未知字段
+             或类型不对，整批都会构造失败 —— 而原来的 except 会把 todos
+             清空，随后任何一次保存都把这个空列表写回文件。
+          2. 解析失败时**先备份再放弃**，不要静默清空。
+        """
+        self.todos = []
+        if not os.path.exists(self.data_file):
+            return
         try:
-            if os.path.exists(self.data_file):
-                with open(self.data_file, 'r', encoding='utf-8') as f:
-                    data = json.load(f)
-                    self.todos = [TodoItem(**item) for item in data]
-        except Exception:
-            self.todos = []
+            with open(self.data_file, "r", encoding="utf-8") as f:
+                data = json.load(f)
+        except (OSError, ValueError) as exc:
+            print("[Todo] 读取失败（保留原文件）: %s" % exc)
+            self._backup_broken_file()
+            return
+        if not isinstance(data, list):
+            print("[Todo] 文件根不是列表，忽略")
+            return
+
+        dropped = 0
+        for item in data:
+            if not isinstance(item, dict):
+                dropped += 1
+                continue
+            text = str(item.get("text", "") or "").strip()
+            if not text:
+                dropped += 1
+                continue
+            try:
+                self.todos.append(TodoItem(
+                    text=text,
+                    done=bool(item.get("done", False)),
+                    created_at=str(item.get("created_at", "") or ""),
+                    priority=str(item.get("priority", "normal") or "normal"),
+                ))
+            except (TypeError, ValueError):
+                dropped += 1
+        if dropped:
+            print("[Todo] 跳过 %d 条无法解析的记录" % dropped)
+
+    def _backup_broken_file(self):
+        """把损坏的文件改名留档，避免后续保存把它覆盖掉。"""
+        try:
+            backup = self.data_file + ".broken"
+            os.replace(self.data_file, backup)
+            print("[Todo] 已备份损坏文件到 %s" % backup)
+        except OSError as exc:
+            print("[Todo] 备份失败: %s" % exc)
 
     def _save_todos(self):
+        """原子写入：先写临时文件再替换。
+
+        直接覆写目标文件时，写到一半崩溃/断电会留下截断的 JSON，
+        下次读取即视为损坏 —— 待办全部消失。
+        """
         try:
             os.makedirs(os.path.dirname(self.data_file), exist_ok=True)
             data = [
-                {"text": t.text, "done": t.done, "created_at": t.created_at, "priority": t.priority}
+                {"text": t.text, "done": t.done,
+                 "created_at": t.created_at, "priority": t.priority}
                 for t in self.todos
             ]
-            with open(self.data_file, 'w', encoding='utf-8') as f:
+            tmp = self.data_file + ".tmp"
+            with open(tmp, "w", encoding="utf-8") as f:
                 json.dump(data, f, ensure_ascii=False, indent=2)
-        except Exception:
-            pass
+            os.replace(tmp, self.data_file)
+        except OSError as exc:
+            print("[Todo] 保存失败: %s" % exc)
 
     def get_incomplete_count(self):
         return sum(1 for t in self.todos if not t.done)

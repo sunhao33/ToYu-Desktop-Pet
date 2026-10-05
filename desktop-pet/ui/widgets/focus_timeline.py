@@ -19,6 +19,7 @@ from PyQt6.QtWidgets import QSizePolicy, QWidget
 from pet_engine.focus_log import KIND_BREAK, KIND_FOCUS
 
 TRACK_HEIGHT = 30
+TRACK_Y = 4             # 进度条上边距（绘制与命中测试共用，别写两遍）
 LABEL_HEIGHT = 14
 MAX_BAR = 17            # 色块最大高度
 MIN_BAR_PX = 3.0        # 色块最小可见宽度
@@ -27,7 +28,6 @@ MIN_BAR_PX = 3.0        # 色块最小可见宽度
 FOCUS_COLOR = "#C49A3C"
 FOCUS_COLOR_LONG = "#8C6A1F"    # 长时段用更深的金棕色，体现"越长越深"
 BREAK_COLOR = "#7FB069"
-
 
 class FocusTimeline(QWidget):
     """24 小时专注时间轴。"""
@@ -56,8 +56,8 @@ class FocusTimeline(QWidget):
         painter = QPainter(self)
         painter.setRenderHint(QPainter.RenderHint.Antialiasing)
 
-        width = self.width()
-        track_y = 4
+        width = max(1, self.width())
+        track_y = TRACK_Y
         track = QRectF(0, track_y, width, TRACK_HEIGHT)
 
         # 底槽
@@ -128,9 +128,23 @@ class FocusTimeline(QWidget):
         painter.end()
 
     # ── 悬停提示 ────────────────────────────────────────────
+    def leaveEvent(self, event):
+        """鼠标移出时清掉提示。
+
+        不清的话上一次的"09:30-10:15 写竞赛设计文档"会一直挂在
+        鼠标旁边，直到再次进入控件并命中别的段。
+        """
+        self.setToolTip("")
+        super().leaveEvent(event)
+
     def mouseMoveEvent(self, event):
         """悬停到某个色块上时显示明细。"""
         pos = event.position()
+        # 只有落在进度条那一带才算命中：底部的刻度文字区不该弹明细
+        if not (TRACK_Y <= pos.y() <= TRACK_Y + TRACK_HEIGHT):
+            if self.toolTip():
+                self.setToolTip("")
+            return
         width = max(1, self.width())
         minute = pos.x() / width * 1440.0
         hit = None
@@ -140,17 +154,17 @@ class FocusTimeline(QWidget):
                 hit = rec
                 break
         if hit is None:
-            kinds = ("专注", "休息")
             total = sum(int(r.get("minutes", 0)) for r in self._records)
-            if self._records:
-                self.setToolTip("今日共 %d 段、合计 %d 分钟（颜色越深＝单段越长）"
-                                % (len(self._records), total))
-            else:
-                self.setToolTip("今天还没有专注记录，点上面的分钟数开始")
-            return
-        label = "休息" if hit.get("kind") == KIND_BREAK else "专注"
-        task = hit.get("task") or ""
-        self.setToolTip("%s-%s  %s %d 分钟%s"
-                        % (hit.get("start", ""), hit.get("end", ""), label,
-                           int(hit.get("minutes", 0)),
-                           ("　" + task) if task else ""))
+            text = ("今日共 %d 段、合计 %d 分钟（颜色越深＝单段越长）"
+                    % (len(self._records), total)) if self._records else \
+                   "今天还没有专注记录，点上面的分钟数开始"
+        else:
+            label = "休息" if hit.get("kind") == KIND_BREAK else "专注"
+            task = hit.get("task") or ""
+            text = "%s-%s  %s %d 分钟%s" % (
+                hit.get("start", ""), hit.get("end", ""), label,
+                int(hit.get("minutes", 0)), ("　" + task) if task else "")
+        # 文本没变就不要重设：setToolTip 每次都会触发一次
+        # ToolTipChange 并让 Qt 重排提示窗口，鼠标滑动时每像素一次太浪费
+        if text != self.toolTip():
+            self.setToolTip(text)
