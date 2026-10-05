@@ -413,7 +413,7 @@ def build_default_registry(main_window) -> ToolRegistry:
         returns="动作是否已触发",
     ))
 
-    # ── 学习报告 ────────────────────────────────────────────
+    # ── 学习/工作报告 ───────────────────────────────────────
     def export_learning_report(period: str = "today",
                                save_file: bool = False) -> str:
         if main_window is None:
@@ -446,8 +446,8 @@ def build_default_registry(main_window) -> ToolRegistry:
 
     reg.register(ToolSpec(
         name="export_learning_report",
-        description="生成学习报告（今日/本周/本月）并可选导出文件。"
-                    "用户说「帮我出一份学习报告」「这周学得怎么样」时用。",
+        description="生成学习/工作报告（今日/本周/本月）并可选导出文件。"
+                    "用户说「帮我出一份报告」「这周学得怎么样」时用。",
         parameters={
             "type": "object",
             "properties": {

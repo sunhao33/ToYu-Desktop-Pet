@@ -6,7 +6,20 @@ import subprocess
 import re
 import threading
 from datetime import datetime
-from PyQt6.QtCore import Qt, QSize, QTimer
+from PyQt6.QtCore import Qt, QSize, QTimer, QObject, pyqtSignal
+
+
+class ReportAISignal(QObject):
+    """跨线程回调用的信号载体。
+
+    为什么需要它：AI 分析跑在工作线程里，算完必须回主线程更新界面
+    （Qt 控件只能在主线程碰）。**不能用 QTimer.singleShot 从子线程
+    回主线程** —— 它会把回调投递给「调用它的那个线程」的事件循环，
+    而工作线程没有事件循环，回调永远不会执行，界面就卡在"分析中"。
+    信号由 Qt 负责排队到接收者所在线程，是正确做法。
+    """
+
+    done = pyqtSignal(str, dict)
 from PyQt6.QtGui import (
     QPixmap, QImage, QDragEnterEvent, QDropEvent,
     QPainter, QColor, QBrush, QFont, QIcon, QAction
@@ -1296,7 +1309,7 @@ class MainWindow(QMainWindow):
         self._calendar.date_selected.connect(self._on_calendar_date_selected)
         right_card_layout.addWidget(self._calendar)
 
-        # 数据面板右栏：上面放学习报告，下面放日历
+        # 数据面板右栏：上面放学习/工作报告，下面放日历
         right_col = QWidget()
         right_col.setStyleSheet("background: transparent;")
         right_col_layout = QVBoxLayout(right_col)
@@ -2269,7 +2282,7 @@ class MainWindow(QMainWindow):
         elif idx == 2:
             # 进数据面板就把学习统计的图先画出来，不用再点日历才有图
             self._ensure_study_charts()
-            # 学习报告与目标环也一起刷新（数据可能已经变了）
+            # 学习/工作报告与目标环也一起刷新（数据可能已经变了）
             self._refresh_report_preview()
             self._refresh_goal()
             self._update_content_min_width()
@@ -4303,7 +4316,7 @@ class MainWindow(QMainWindow):
         label.setText("近 7 天：%s  达成 %d/7 天"
                       % (" ".join(marks), ok_days))
 
-    # ── 学习报告 ────────────────────────────────────────────
+    # ── 学习/工作报告 ───────────────────────────────────────
     def _ensure_report(self):
         if getattr(self, "_report_builder", None) is not None:
             return self._report_builder
@@ -4327,20 +4340,144 @@ class MainWindow(QMainWindow):
             return
         period = period or getattr(self, "_report_period", "today")
         self._report_period = period
+        ai_text = getattr(self, "_report_ai_text", "")
+        mode = getattr(self, "_report_mode", "basic")
+        # 切换周期后 AI 分析就失效了（数据区间变了），必须重新生成
+        if mode == "ai" and not ai_text:
+            mode = "basic"
         try:
-            text = builder.render_markdown(period)
+            text = builder.render_markdown(period, ai_text=ai_text, mode=mode)
         except Exception as exc:  # noqa: BLE001
             label.setText("报告生成失败：%s" % exc)
             return
-        # 预览只显示前若干行，完整内容导出后查看
+        # 预览只显示前若干行（AI 版内容较长，给 100 行；超出提示导出）
         lines = text.splitlines()
-        preview = "\n".join(lines[:28])
-        if len(lines) > 28:
+        preview = "\n".join(lines[:100])
+        if len(lines) > 100:
             preview += "\n…（完整报告请点「导出」）"
         label.setText(preview)
         # 同步按钮选中态
         for key, btn in getattr(self, "_report_btns", {}).items():
             btn.setChecked(key == period)
+        self._update_ai_btn_state()
+
+    def _on_report_period(self, period: str):
+        """切换统计区间。区间变了，之前的 AI 分析就不再对应，清掉。"""
+        self._report_ai_text = ""
+        self._refresh_report_preview(period)
+
+    def _set_report_mode(self, mode: str):
+        """切换基础版 / AI 版。"""
+        self._report_mode = mode
+        for key, btn in getattr(self, "_report_mode_btns", {}).items():
+            btn.setChecked(key == mode)
+        if mode == "ai" and not getattr(self, "_report_ai_text", ""):
+            # 切到 AI 版但还没生成过 → 提示并尝试生成
+            if not self._ai_key_ready():
+                self._toast("AI 版需要先在「AI 页」配置 API Key")
+                self._report_mode = "basic"
+                self._report_mode_btns["basic"].setChecked(True)
+                self._report_mode_btns["ai"].setChecked(False)
+            else:
+                self._generate_ai_report()
+        self._refresh_report_preview()
+        self._update_ai_btn_state()
+
+    def _ai_key_ready(self) -> bool:
+        """是否已配置可用的 API Key。"""
+        config = getattr(getattr(self, "_pet", None), "_ai_config", None)
+        return bool(config is not None and getattr(config, "api_key", ""))
+
+    def _update_ai_btn_state(self):
+        """AI 分析按钮的可用性与文案。"""
+        btn = getattr(self, "_report_ai_btn", None)
+        if btn is None:
+            return
+        if getattr(self, "_report_ai_busy", False):
+            btn.setEnabled(False)
+            btn.setText("分析中…")
+            return
+        btn.setEnabled(True)
+        btn.setText("✨ 重新分析" if getattr(self, "_report_ai_text", "")
+                    else "✨ AI 分析")
+
+    def _report_ai_transport(self):
+        """给报告 AI 分析用的模型调用。
+
+        单独抽一层是为了可注入（测试时替换成假的，不发真实请求）。
+        默认复用「AI 页」配置的 API。
+        """
+        injected = getattr(self, "_report_transport_override", None)
+        if injected is not None:
+            return injected
+        return self._memory_transport
+
+    def _report_signal(self):
+        """取跨线程回调信号（懒创建并连到主线程槽）。"""
+        sig = getattr(self, "_report_ai_signal", None)
+        if sig is None:
+            sig = ReportAISignal()
+            sig.done.connect(self._on_ai_report_done)
+            self._report_ai_signal = sig
+        return sig
+
+    def _generate_ai_report(self):
+        """在后台线程里生成 AI 分析（不能在主线程调用模型，会卡界面）。"""
+        if getattr(self, "_report_ai_busy", False):
+            return
+        builder = self._ensure_report()
+        if builder is None:
+            return
+        if not self._ai_key_ready():
+            self._toast("AI 版需要先在「AI 页」配置 API Key")
+            return
+
+        period = getattr(self, "_report_period", "today")
+        transport = self._report_ai_transport()
+        signal = self._report_signal()
+        self._report_ai_busy = True
+        self._update_ai_btn_state()
+        try:
+            self._report_preview.setText(
+                "🤖 正在让 AI 分析数据，请稍候…\n\n"
+                "（用的是「AI 页」里配置的模型，约需几秒到十几秒）")
+        except RuntimeError:
+            pass
+
+        def worker():
+            try:
+                result = builder.analyze_with_ai(period, transport=transport)
+            except Exception as exc:  # noqa: BLE001
+                result = {"ok": False, "text": "",
+                          "error": "分析线程异常：%s" % str(exc)[:100]}
+            # 用信号回主线程（子线程不能碰 Qt 控件）
+            try:
+                signal.done.emit(period, result)
+            except RuntimeError:
+                pass
+
+        threading.Thread(target=worker, daemon=True).start()
+
+    def _on_ai_report_done(self, period: str, result: dict):
+        """AI 分析返回后的界面更新。"""
+        self._report_ai_busy = False
+        if not result.get("ok"):
+            self._report_ai_text = ""
+            self._report_mode = "basic"
+            for key, btn in getattr(self, "_report_mode_btns", {}).items():
+                btn.setChecked(key == "basic")
+            self._toast("❌ %s" % result.get("error", "AI 分析失败"))
+        else:
+            self._report_ai_text = result["text"]
+            self._report_mode = "ai"
+            for key, btn in getattr(self, "_report_mode_btns", {}).items():
+                btn.setChecked(key == "ai")
+            self._toast("✅ AI 分析完成")
+        # 期间用户可能切了区间，切过就不覆盖当前预览
+        if getattr(self, "_report_period", "today") == period:
+            self._refresh_report_preview(period)
+        else:
+            self._update_ai_btn_state()
 
     def _export_report(self, period: str = None):
         """导出报告文件并提示路径。"""
@@ -4349,23 +4486,33 @@ class MainWindow(QMainWindow):
             self._toast("❌ 报告模块不可用")
             return
         period = period or getattr(self, "_report_period", "today")
+        ai_text = getattr(self, "_report_ai_text", "")
+        mode = getattr(self, "_report_mode", "basic")
         try:
-            path = builder.export(period, fmt="md")
+            path = builder.export(period, fmt="md", ai_text=ai_text, mode=mode)
         except Exception as exc:  # noqa: BLE001
             self._toast("❌ 导出失败：%s" % str(exc)[:60])
             return
-        self._toast("✅ 已导出：%s" % os.path.basename(path))
+        kind = "AI 版" if (ai_text and mode == "ai") else "基础版"
+        self._toast("✅ 已导出（%s）：%s" % (kind, os.path.basename(path)))
         try:
             self._status.setText("报告已导出到 %s" % path)
         except RuntimeError:
             pass
 
     def _build_report_card(self):
-        """数据面板里的学习报告卡片。"""
-        card = self._make_card("📄 学习报告")
+        """数据面板里的学习/工作报告卡片。"""
+        # 版本状态在这里初始化，供 _refresh_report_preview / 导出读取
+        self._report_mode = "basic"     # basic | ai
+        self._report_ai_text = ""       # AI 分析正文（空表示还没生成）
+        self._report_ai_busy = False
+        self._report_period = "today"
+
+        card = self._make_card("📄 学习/工作报告")
         layout = card.layout()
         layout.setSpacing(8)
 
+        # ── 第一行：统计区间 ──
         tabs = QHBoxLayout()
         tabs.setSpacing(6)
         self._report_btns = {}
@@ -4380,10 +4527,45 @@ class MainWindow(QMainWindow):
                 f" color: {self._c('text')}; }}"
                 f"QPushButton:checked {{ background: {self._c('accent')};"
                 " color: white; }")
-            btn.clicked.connect(lambda checked=False, k=key: self._refresh_report_preview(k))
+            btn.clicked.connect(lambda checked=False, k=key: self._on_report_period(k))
             tabs.addWidget(btn)
             self._report_btns[key] = btn
         tabs.addStretch()
+        layout.addLayout(tabs)
+
+        # ── 第二行：版本切换（基础版 / AI 版）+ 导出 ──
+        modes = QHBoxLayout()
+        modes.setSpacing(6)
+        self._report_mode_btns = {}
+        for key, text, tip in (
+                ("basic", "基础版", "纯本地统计，不联网、不需要 API Key"),
+                ("ai", "AI 版", "在基础统计之上，由大模型深度分析（需要 API Key）")):
+            btn = QPushButton(text)
+            btn.setCheckable(True)
+            btn.setFixedHeight(26)
+            btn.setCursor(Qt.CursorShape.PointingHandCursor)
+            btn.setToolTip(tip)
+            btn.setStyleSheet(
+                f"QPushButton {{ background: {self._c('tab_bg')}; border: 1px solid"
+                f" {self._c('border')}; border-radius: 6px; font-size: 11px;"
+                f" padding: 0 12px; color: {self._c('text')}; }}"
+                f"QPushButton:checked {{ background: {self._c('accent')};"
+                " color: white; border-color: transparent; }")
+            btn.clicked.connect(lambda checked=False, k=key: self._set_report_mode(k))
+            modes.addWidget(btn)
+            self._report_mode_btns[key] = btn
+        self._report_mode_btns["basic"].setChecked(True)
+        modes.addStretch()
+
+        self._report_ai_btn = QPushButton("✨ AI 分析")
+        self._report_ai_btn.setFixedHeight(26)
+        self._report_ai_btn.setCursor(Qt.CursorShape.PointingHandCursor)
+        self._report_ai_btn.setStyleSheet(
+            f"QPushButton {{ background: {self._c('accent')}; color: white;"
+            " border: none; border-radius: 6px; font-size: 11px; padding: 0 12px; }"
+            "QPushButton:disabled { background: #C9BCA8; }")
+        self._report_ai_btn.clicked.connect(self._generate_ai_report)
+        modes.addWidget(self._report_ai_btn)
 
         export_btn = QPushButton("导出")
         export_btn.setObjectName("secondaryBtn")
@@ -4391,8 +4573,8 @@ class MainWindow(QMainWindow):
         export_btn.setCursor(Qt.CursorShape.PointingHandCursor)
         export_btn.setToolTip("导出为 Markdown 文件（可直接当周报用）")
         export_btn.clicked.connect(lambda: self._export_report())
-        tabs.addWidget(export_btn)
-        layout.addLayout(tabs)
+        modes.addWidget(export_btn)
+        layout.addLayout(modes)
 
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
@@ -4420,8 +4602,8 @@ class MainWindow(QMainWindow):
         scroll.setWidget(inner)
         layout.addWidget(scroll, 1)
 
-        hint = QLabel("报告完全基于本机记录生成，不联网、不上传。"
-                      "导出的 Markdown 可直接当学习周报使用。")
+        hint = QLabel("基础版完全基于本机记录生成，不联网、不上传。"
+                      "AI 版会把**统计数据**（不含聊天记录与文件内容）发给你配置的模型做分析。")
         hint.setWordWrap(True)
         hint.setStyleSheet(
             f"color: {self._c('text2')}; font-size: 10px; background: transparent;")

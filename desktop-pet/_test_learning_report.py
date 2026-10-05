@@ -25,7 +25,8 @@ app = QApplication(sys.argv)
 app.setQuitOnLastWindowClosed(False)
 
 from pet_engine.report import (  # noqa: E402
-    PERIOD_MONTH, PERIOD_TODAY, PERIOD_WEEK, LearningReport,
+    MODE_AI, MODE_BASIC, PERIOD_MONTH, PERIOD_TODAY, PERIOD_WEEK,
+    LearningReport,
 )
 
 results = []
@@ -145,7 +146,7 @@ check("无 tracker 时不崩", LearningReport().collect(PERIOD_TODAY)["has_data"
 # 2. 渲染
 # ══════════════════════════════════════════════════════════
 md = report.render_markdown(PERIOD_TODAY)
-check("报告有标题", md.startswith("# 学习报告"), md[:30])
+check("报告有标题", md.startswith("# 学习/工作报告"), md[:30])
 check("报告含概览", "## 概览" in md)
 check("报告含应用分布", "## 学习时间都用在哪" in md)
 check("报告含时段分布", "## 时段分布" in md)
@@ -163,7 +164,7 @@ check("本周报告含条形示意", "█" in md7)
 
 empty_md = empty.render_markdown(PERIOD_TODAY)
 check("空数据报告给说明而不是空表格",
-      "还没有学习记录" in empty_md and "| 指标 |" not in empty_md,
+      "还没有足够的学习记录" in empty_md and "| 指标 |" not in empty_md,
       empty_md[:60])
 check("空数据报告仍含引导", "专注" in empty_md)
 
@@ -178,7 +179,133 @@ check("可限制紧凑文本长度",
       len(report.render_text(PERIOD_WEEK, max_chars=30)) <= 30)
 
 # ══════════════════════════════════════════════════════════
-# 3. 导出
+# 3. 时段分布的条形图单位（曾经的 bug：秒当分钟用 → 条形图一律顶满）
+# ══════════════════════════════════════════════════════════
+md_today = report.render_markdown(PERIOD_TODAY)
+seg = md_today[md_today.find("## 时段分布"):md_today.find("## 完成了什么")]
+# 10 点最长为 60 分钟，应拿到满格 20 格；09 点 30 分钟应为 10 格
+bar_10 = [ln for ln in seg.splitlines() if ln.startswith("10:00")]
+bar_09 = [ln for ln in seg.splitlines() if ln.startswith("09:00")]
+check("时段条形图有 10 点数据", bool(bar_10), seg[:80])
+if bar_10 and bar_09:
+    full = bar_10[0].count("█")
+    half = bar_09[0].count("█")
+    check("最长时段满格（20 格）", full == 20, "%d 格" % full)
+    check("半小时段约一半格数", 8 <= half <= 12, "%d 格" % half)
+    check("条形长度与时长成比例（不是一律顶满）", half < full,
+          "10点 %d 格 vs 09点 %d 格" % (full, half))
+    check("时长单位显示为分钟/小时", "分钟" in bar_09[0] or "小时" in bar_09[0],
+          bar_09[0])
+else:
+    check("时段条形图有 09 点数据", False, seg[:80])
+
+# 曾经的错误表现：时长为 0 分钟却满格
+check("不存在「0 分钟却满格」的条目",
+      not any("█" in ln and " 0 分钟" in ln for ln in seg.splitlines()),
+      "发现 0 分钟但有条形图的条目")
+
+# ══════════════════════════════════════════════════════════
+# 4. 数据不足的判定（避免空表格报告）
+# ══════════════════════════════════════════════════════════
+class TinyTracker:
+    """只有几秒钟的记录 —— 不该被当成有效数据。"""
+
+    def get_sessions(self, date_str=None):
+        return [{"app": "Code.exe", "title": "a.py", "secs": 5.0}]
+
+    def get_hourly_data(self, date_str=None):
+        data = [0.0] * 24
+        data[10] = 5.0
+        return data
+
+    def get_focus_stats(self, date_str=None):
+        return {"sessions": 1, "meaningful": 0, "longest_secs": 5.0,
+                "total_secs": 5.0}
+
+
+tiny = LearningReport(tracker=TinyTracker(), todo_widget=None)
+check("只有几秒记录时判为数据不足",
+      tiny.collect(PERIOD_TODAY)["has_data"] is False,
+      "%s" % tiny.collect(PERIOD_TODAY)["total_screen_seconds"])
+check("数据不足时报告给引导而非空表格",
+      "还没有足够的学习记录" in tiny.render_markdown(PERIOD_TODAY))
+
+# ══════════════════════════════════════════════════════════
+# 5. AI 版：摘要、分析、错误处理
+# ══════════════════════════════════════════════════════════
+digest = report.build_ai_digest(report.collect(PERIOD_TODAY))
+check("AI 摘要含有效学习时长", "有效学习总时长" in digest)
+check("AI 摘要含应用分布", "主要用在" in digest)
+check("AI 摘要含任务清单", "完成的任务" in digest)
+check("AI 摘要含目标信息", "每日目标" in digest)
+check("AI 摘要长度受控（避免超上下文）", len(digest) < 1500,
+      "%d 字符" % len(digest))
+
+# 成功路径
+captured = {}
+
+
+def fake_transport(messages):
+    captured["messages"] = messages
+    return "### 整体状态\n学习节奏稳定。\n\n### 下一步建议\n1. 把难点放上午。"
+
+res = report.analyze_with_ai(PERIOD_TODAY, transport=fake_transport)
+check("AI 分析成功", res["ok"] is True, res.get("error", ""))
+check("AI 分析返回正文", "整体状态" in res["text"], res["text"][:40])
+check("请求里带了系统提示词",
+      captured["messages"][0]["role"] == "system", str(captured.get("messages"))[:60])
+check("请求里带了数据摘要",
+      "有效学习总时长" in captured["messages"][1]["content"],
+      captured["messages"][1]["content"][:60])
+check("系统提示词要求不得引入新数字",
+      "不要自己推算" in captured["messages"][0]["content"])
+check("系统提示词要求不许说空话",
+      "空话" in captured["messages"][0]["content"])
+
+# 未注入 transport
+res = report.analyze_with_ai(PERIOD_TODAY, transport=None)
+check("未配置 transport 时明确报错", res["ok"] is False and "API Key" in res["error"],
+      res["error"])
+
+# 模型抛异常
+def boom(messages):
+    raise RuntimeError("网络超时")
+
+
+res = report.analyze_with_ai(PERIOD_TODAY, transport=boom)
+check("模型异常不崩且给出原因",
+      res["ok"] is False and "网络超时" in res["error"], res["error"])
+
+# 模型返回空
+res = report.analyze_with_ai(PERIOD_TODAY, transport=lambda m: "   ")
+check("模型返回空内容时报错", res["ok"] is False, res["error"])
+
+# 数据不足时不调模型
+calls = {"n": 0}
+
+
+def counting(messages):
+    calls["n"] += 1
+    return "x"
+
+
+res = tiny.analyze_with_ai(PERIOD_TODAY, transport=counting)
+check("数据不足时不调用模型", calls["n"] == 0 and res["ok"] is False, res["error"])
+
+# AI 版渲染
+sample_ai = "### 分析\n内容。"
+md_ai = report.render_markdown(PERIOD_TODAY, ai_text=sample_ai, mode=MODE_AI)
+check("AI 版标题标明版本", "版本：AI 版" in md_ai, md_ai[:120])
+check("AI 版含 AI 段落", "## 🤖 AI 深度分析" in md_ai)
+check("AI 版含免责说明", "由 AI 基于本报告" in md_ai)
+md_basic = report.render_markdown(PERIOD_TODAY, mode=MODE_BASIC)
+check("基础版不含 AI 段落", "🤖 AI 深度分析" not in md_basic)
+check("基础版标明版本", "版本：基础版" in md_basic)
+check("报告标题已改为学习/工作报告",
+      md_basic.startswith("# 学习/工作报告"), md_basic[:30])
+
+# ══════════════════════════════════════════════════════════
+# 6. 导出
 # ══════════════════════════════════════════════════════════
 tmp = tempfile.mkdtemp(prefix="toyu_report_test_")
 p1 = report.export(PERIOD_TODAY, directory=tmp)
@@ -187,7 +314,9 @@ check("导出是 md 后缀", p1.endswith(".md"), p1)
 check("导出内容非空", os.path.getsize(p1) > 100, "%d 字节" % os.path.getsize(p1))
 with open(p1, encoding="utf-8") as fh:
     content = fh.read()
-check("导出内容与渲染一致", content.startswith("# 学习报告"))
+check("导出内容与渲染一致", content.startswith("# 学习/工作报告"))
+check("文件名用新命名", "学习工作报告" in os.path.basename(p1),
+      os.path.basename(p1))
 
 p2 = report.export(PERIOD_TODAY, directory=tmp)
 check("同名不覆盖（自动加序号）", p1 != p2 and os.path.exists(p1)
@@ -198,6 +327,21 @@ p3 = report.export(PERIOD_WEEK, directory=tmp)
 check("不同周期导出到不同文件", p3 != p1 and "本周" in os.path.basename(p3),
       os.path.basename(p3))
 
+# AI 版导出：文件名标出 AI 版，内容含分析
+p_ai = report.export(PERIOD_TODAY, directory=tmp,
+                     ai_text="### 整体状态\n测试分析。", mode=MODE_AI)
+check("AI 版文件名标出 _AI版", "_AI版" in os.path.basename(p_ai),
+      os.path.basename(p_ai))
+with open(p_ai, encoding="utf-8") as fh:
+    ai_content = fh.read()
+check("AI 版文件含分析正文", "测试分析" in ai_content)
+check("AI 版文件标明版本", "版本：AI 版" in ai_content)
+
+# 基础版与 AI 版互不覆盖
+p_basic = report.export(PERIOD_TODAY, directory=tmp, mode=MODE_BASIC)
+check("基础版与 AI 版是不同文件", p_basic != p_ai,
+      "%s / %s" % (os.path.basename(p_basic), os.path.basename(p_ai)))
+
 ptxt = report.export(PERIOD_TODAY, fmt="txt", directory=tmp)
 check("可导出纯文本", ptxt.endswith(".txt"), os.path.basename(ptxt))
 check("没有残留临时文件", not os.path.exists(p1 + ".tmp"))
@@ -206,7 +350,7 @@ check("没有残留临时文件", not os.path.exists(p1 + ".tmp"))
 p_empty = empty.export(PERIOD_TODAY, directory=tmp)
 check("空数据也能导出", os.path.exists(p_empty))
 with open(p_empty, encoding="utf-8") as fh:
-    check("空数据导出含说明", "还没有学习记录" in fh.read())
+    check("空数据导出含说明", "还没有" in fh.read())
 
 # ══════════════════════════════════════════════════════════
 # 4. 界面与 AI 工具
@@ -224,14 +368,31 @@ check("报告预览控件存在", getattr(mw, "_report_preview", None) is not No
 check("周期按钮齐全",
       set(getattr(mw, "_report_btns", {})) == {"today", "week", "month"},
       str(list(getattr(mw, "_report_btns", {}))))
+check("版本按钮齐全（基础版/AI 版）",
+      set(getattr(mw, "_report_mode_btns", {})) == {"basic", "ai"},
+      str(list(getattr(mw, "_report_mode_btns", {}))))
+check("默认是基础版", mw._report_mode == MODE_BASIC, mw._report_mode)
+check("有 AI 分析按钮", getattr(mw, "_report_ai_btn", None) is not None)
+check("AI 按钮初始文案", "AI 分析" in mw._report_ai_btn.text(),
+      mw._report_ai_btn.text())
 
 mw._refresh_report_preview("week")
 pump(300)
 check("预览有内容", len(mw._report_preview.text()) > 30,
       mw._report_preview.text()[:40])
+# 预览上限现在是 100 行；塞一段超长 AI 分析来验证"超出提示导出"
+_long_ai = "\n".join("### 第 %d 段分析" % i for i in range(130))
+mw._report_ai_text = _long_ai
+mw._report_mode = "ai"
+mw._refresh_report_preview("week")
+pump(300)
 check("预览过长时提示导出",
-      "完整报告请点" in mw._report_preview.text()
-      or len(mw._report_preview.text().splitlines()) <= 29)
+      "完整报告请点「导出」" in mw._report_preview.text(),
+      "%d 行" % len(mw._report_preview.text().splitlines()))
+mw._report_ai_text = ""
+mw._report_mode = "basic"
+mw._refresh_report_preview("week")
+pump(200)
 check("切换周期后按钮选中", mw._report_btns["week"].isChecked())
 
 mw._refresh_report_preview(PERIOD_MONTH)
@@ -239,6 +400,92 @@ pump(250)
 check("切到本月后选中态跟着变",
       mw._report_btns["month"].isChecked()
       and not mw._report_btns["week"].isChecked())
+
+# ── AI 版界面链路（注入假 transport，不发真实请求）──
+mw._pet._ai_config.api_key = "sk-test-only-for-key-check"
+check("配置 key 后判定为就绪", mw._ai_key_ready() is True)
+
+ai_calls = {"n": 0}
+
+
+def fake_ai(messages):
+    ai_calls["n"] += 1
+    return "### 整体状态\n测试分析内容。\n\n### 下一步建议\n1. 建议一。"
+
+
+def toast_text():
+    label = getattr(mw, "_toast_label", None)
+    return label.text() if label is not None else ""
+
+
+mw._report_transport_override = fake_ai
+# 用「本周」而不是「今日」：今日可能还没开始记录，会走"数据不足"分支。
+# 本周包含历史数据，能走到真正调用模型那一步。
+mw._report_period = PERIOD_WEEK
+mw._generate_ai_report()
+deadline = time.time() + 15
+while mw._report_ai_busy and time.time() < deadline:
+    pump(150)
+pump(300)
+check("AI 分析被调用一次", ai_calls["n"] == 1, "%d 次" % ai_calls["n"])
+check("AI 文本已保存", bool(mw._report_ai_text), repr(mw._report_ai_text[:30]))
+check("分析后切到 AI 版", mw._report_mode == MODE_AI, mw._report_mode)
+check("AI 版按钮选中", mw._report_mode_btns["ai"].isChecked())
+check("AI 完成后按钮变为重新分析", "重新分析" in mw._report_ai_btn.text(),
+      mw._report_ai_btn.text())
+check("AI 完成后不停留在忙碌态", mw._report_ai_busy is False)
+check("预览含 AI 段落", "🤖 AI 深度分析" in mw._report_preview.text(),
+      mw._report_preview.text()[-80:])
+check("完成时弹出可见提示", "AI 分析完成" in toast_text(), toast_text()[:50])
+
+# 切换区间应清掉旧分析（数据区间变了，分析不再对应）
+mw._on_report_period(PERIOD_MONTH)
+pump(200)
+check("切换区间后清掉 AI 分析", mw._report_ai_text == "",
+      repr(mw._report_ai_text[:30]))
+
+# 数据不足时应明确拒绝（而不是调用模型后瞎编）
+no_data_calls = {"n": 0}
+
+
+def counting_ai(messages):
+    no_data_calls["n"] += 1
+    return "x"
+
+
+mw._report_transport_override = counting_ai
+mw._report_period = PERIOD_TODAY
+mw._generate_ai_report()
+deadline = time.time() + 12
+while mw._report_ai_busy and time.time() < deadline:
+    pump(150)
+pump(300)
+if no_data_calls["n"] == 0:
+    check("今日数据不足时不调用模型", True, "今日无记录，正确拒绝")
+    check("数据不足时给出明确提示", "没有足够" in toast_text(),
+          toast_text()[:60])
+else:
+    check("今日有数据时正常分析", mw._report_ai_text != "", "有数据，走了成功路径")
+
+# AI 分析失败时回到基础版并提示
+def failing_ai(messages):
+    raise RuntimeError("模拟模型不可用")
+
+
+mw._report_transport_override = failing_ai
+mw._report_period = PERIOD_WEEK
+mw._report_ai_text = ""
+mw._report_mode = MODE_AI
+mw._generate_ai_report()
+deadline = time.time() + 12
+while mw._report_ai_busy and time.time() < deadline:
+    pump(150)
+pump(300)
+check("AI 失败后回到基础版", mw._report_mode == MODE_BASIC, mw._report_mode)
+check("AI 失败后清空分析文本", mw._report_ai_text == "")
+check("AI 失败后按钮恢复可用", mw._report_ai_btn.isEnabled())
+check("AI 失败给出可见提示", "模拟模型不可用" in toast_text(),
+      toast_text()[:70])
 
 # 导出并检查状态栏
 import pet_engine.report as report_mod  # noqa: E402

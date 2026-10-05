@@ -1,8 +1,16 @@
-"""学习报告 —— 把已有的记录组装成一份可读、可导出的报告。
+"""学习/工作报告 —— 把已有的记录组装成一份可读、可导出的报告。
+
+两个版本：
+  * **基础版**：纯本地统计，不联网、不需要 API Key。报告里的数字全部
+    来自本机记录，任何人都能立刻看到。
+  * **AI 版**：在基础版之上，把结构化摘要交给大模型做深度分析，
+    产出针对个人的观察、问题诊断与可执行建议。
 
 设计原则：
   * **只读已有接口，不自己重算**：所有数字都取自 ScreenTimeTracker 与
     待办历史，避免"报告说 3 小时、面板说 2 小时"这种自相矛盾。
+  * **AI 只做分析，不产生数字**：交模型的是算好的摘要，模型不得引入
+    新数字——否则 AI 会编，报告就不可信了。
   * **多出口**：界面预览 + 导出文件 + 供 AI 调用的文本，共用同一套渲染。
   * **空数据不输出空表格**：没有记录时给一句明确的说明，而不是一堆 0。
   * **导出不覆盖**：同名文件自动加序号。
@@ -28,6 +36,43 @@ PERIOD_LABEL = {
     PERIOD_MONTH: "本月",
 }
 
+# 报告版本
+MODE_BASIC = "basic"     # 基础版：纯本地统计
+MODE_AI = "ai"           # AI 版：附带大模型深度分析
+
+MODE_LABEL = {MODE_BASIC: "基础版", MODE_AI: "AI 版"}
+
+# 小于这个时长（分钟）就当作"没学"，避免几秒的误点开被当成有效数据
+MIN_MEANINGFUL_MINUTES = 1
+
+
+# AI 分析师的人设与约束。
+# 关键约束的目的：
+#   * 不许引入新数字 —— 模型很容易顺着数据"推算"出看似合理但错误的数字，
+#     一旦报告里的数字不可信，整份报告就没价值了
+#   * 不许说教和空话 —— "要保持专注"这类建议对用户零帮助
+#   * 必须允许说"数据不足" —— 免得为了凑内容硬编
+AI_ANALYST_PROMPT = """你是一位务实的学习效率分析师。用户会给你一份学习统计数据，
+请基于这些数据写一段深度分析。
+
+要求：
+1. **只能使用给出的数字**，绝对不要自己推算、估算或引入任何新数字。
+   如果你想说某个比例，而数据里没有，就不要说。
+2. 用 Markdown 二级小标题组织内容，围绕这四块分析：
+   - **整体状态**：这段时间的学习节奏怎么样（结合总量、每日分布、零学习天数）
+   - **时间利用**：屏幕时间与有效学习的比例说明了什么；最专注的时段是否
+     被合理利用；有没有明显的分心迹象
+   - **值得注意的信号**：从数据里挑出 1~3 个真正值得留意的点
+     （例如某天异常、应用构成偏科、连续专注能力、目标达成情况）
+   - **下一步建议**：给 2~3 条具体、可立刻执行的建议。
+     要具体到"做什么、什么时候做"，不要写"要保持专注""要提高效率"
+     这种放到谁身上都成立的空话。
+3. 语气客观直接，像一个了解情况的教练，不要奉承也不要训斥。
+4. 如果数据太少（例如只有十几分钟或只有一两天），就直接说明
+   "数据还太少，暂时看不出稳定规律"，然后只给一条最基础的起步建议。
+   不要为了凑内容硬编分析。
+5. 全文控制在 400 字以内，不要重复罗列我已经给你的数字。"""
+
 
 def _fmt_minutes(minutes) -> str:
     minutes = int(minutes)
@@ -49,7 +94,7 @@ def _bar(minutes, max_minutes, width=12) -> str:
 
 
 class LearningReport:
-    """生成学习报告。"""
+    """生成学习/工作报告。"""
 
     def __init__(self, main_window=None, tracker=None, todo_widget=None,
                  goal_tracker=None, memory_store=None):
@@ -158,26 +203,122 @@ class LearningReport:
             except Exception:  # noqa: BLE001
                 data["goal"] = None
 
-        data["has_data"] = bool(data["total_screen_seconds"]
-                                or data["tasks"])
+        data["has_data"] = bool(
+            int(data["total_study_seconds"] // 60) >= MIN_MEANINGFUL_MINUTES
+            or data["tasks"])
         return data
 
+    # ── AI 分析 ─────────────────────────────────────────────
+    def build_ai_digest(self, data: dict) -> str:
+        """把统计数据整理成给模型的摘要。
+
+        刻意只给**已经算好的数字**，并要求模型不得引入新数字 ——
+        否则模型会自行推算或编造，报告就不可信了。
+        """
+        parts = ["统计区间：%s ~ %s（共 %d 天）"
+                 % (data["days"][0], data["days"][-1], len(data["days"]))]
+        parts.append("有效学习总时长：%s" % _fmt_seconds(data["total_study_seconds"]))
+        parts.append("屏幕总时长：%s" % _fmt_seconds(data["total_screen_seconds"]))
+        if data["total_screen_seconds"] > 0:
+            parts.append("学习占屏幕比例：%.0f%%"
+                         % (data["total_study_seconds"]
+                            / data["total_screen_seconds"] * 100))
+        parts.append("完成任务数：%d" % len(data["tasks"]))
+
+        focus = data["focus"] or {}
+        if focus.get("sessions"):
+            parts.append("记录段数：%d（其中单次≥5 分钟的 %d 段）"
+                         % (focus.get("sessions", 0), focus.get("meaningful", 0)))
+        if focus.get("longest_secs"):
+            parts.append("最长连续专注：%s" % _fmt_seconds(focus["longest_secs"]))
+
+        if len(data["days"]) > 1:
+            per_day = ["%s %s" % (day, _fmt_seconds(secs))
+                       for day, secs in sorted(data["daily"].items())]
+            parts.append("每日分布：" + "；".join(per_day))
+            vals = [v for v in data["daily"].values()]
+            parts.append("零学习天数：%d" % sum(1 for v in vals if v <= 0))
+
+        if data["apps"]:
+            top = sorted(data["apps"].items(), key=lambda kv: -kv[1])[:6]
+            parts.append("主要用在：" + "、".join(
+                "%s %s" % (a, _fmt_seconds(s)) for a, s in top))
+
+        if data["best_hour"] is not None:
+            parts.append("最专注时段：%02d:00-%02d:00"
+                         % (data["best_hour"], data["best_hour"] + 1))
+            hourly = [(h, round(s / 60)) for h, s in enumerate(data["hourly"])
+                      if s >= 60]
+            if hourly:
+                parts.append("各时段分钟数：" + "、".join(
+                    "%02d 点 %d 分" % (h, m) for h, m in hourly))
+
+        if data["tasks"]:
+            names = [t["text"] for t in data["tasks"][:10]]
+            parts.append("完成的任务：" + "、".join(names))
+
+        goal = data["goal"]
+        if goal and goal.get("has_goal"):
+            parts.append("每日目标 %d 分钟，今日完成 %d%%"
+                         % (goal["goal_minutes"], round(goal.get("ratio", 0) * 100)))
+        else:
+            parts.append("用户还没有设置每日目标")
+        return "\n".join(parts)
+
+    def analyze_with_ai(self, period: str = PERIOD_TODAY,
+                        transport=None, timeout: int = 45) -> dict:
+        """生成 AI 深度分析。
+
+        transport: callable(messages) -> str，由界面注入（复用用户配置的 API）。
+        返回 {"ok": bool, "text": str, "error": str}
+        """
+        if transport is None:
+            return {"ok": False, "text": "", "error": "未配置 API Key，无法生成 AI 分析"}
+
+        data = self.collect(period)
+        if not data["has_data"]:
+            return {"ok": False, "text": "",
+                    "error": "%s还没有足够的学习记录，先生成一些数据再用 AI 分析"
+                             % data["period_label"]}
+
+        digest = self.build_ai_digest(data)
+        messages = [
+            {"role": "system", "content": AI_ANALYST_PROMPT},
+            {"role": "user", "content": "以下是我的学习数据，请分析：\n\n" + digest},
+        ]
+        try:
+            text = transport(messages)
+        except Exception as exc:  # noqa: BLE001
+            return {"ok": False, "text": "",
+                    "error": "调用模型失败：%s" % str(exc)[:120]}
+        text = (text or "").strip()
+        if not text:
+            return {"ok": False, "text": "", "error": "模型返回了空内容"}
+        return {"ok": True, "text": text, "error": ""}
+
     # ── 渲染：Markdown ──────────────────────────────────────
-    def render_markdown(self, period: str = PERIOD_TODAY) -> str:
+    def render_markdown(self, period: str = PERIOD_TODAY,
+                        ai_text: str = "", mode: str = MODE_BASIC) -> str:
         d = self.collect(period)
-        lines = ["# 学习报告 · %s" % d["period_label"]]
+        lines = ["# 学习/工作报告 · %s" % d["period_label"]]
         if d["period"] != PERIOD_TODAY:
             lines.append("")
             lines.append("统计区间：%s ~ %s" % (d["days"][0], d["days"][-1]))
         lines.append("")
         lines.append("生成时间：%s" % d["generated_at"])
+        lines.append("版本：%s" % MODE_LABEL.get(mode, "基础版"))
         lines.append("")
 
         if not d["has_data"]:
-            lines.append("> 这段时间还没有学习记录。")
+            lines.append("> 这段时间还没有足够的学习记录。")
             lines.append(">")
             lines.append("> 开始用 ToYu 专注学习后，这里会自动出现统计：")
             lines.append("> 有效学习时长、应用分布、时段分析、完成任务清单。")
+            if ai_text:
+                lines.append("")
+                lines.append("## 🤖 AI 深度分析")
+                lines.append("")
+                lines.append(ai_text)
             return "\n".join(lines)
 
         # ── 概览 ──
@@ -239,16 +380,19 @@ class LearningReport:
             lines.append("最专注的时段：**%02d:00 - %02d:00**"
                          % (d["best_hour"], d["best_hour"] + 1))
             lines.append("")
-            peak = max(d["hourly"]) if d["hourly"] else 0
+            # hourly 是秒；_bar 收的是分钟。这里必须先换算，
+            # 否则比例会被放大 60 倍，条形图一律顶满而时长显示 0 分钟。
+            hourly_minutes = [s / 60.0 for s in d["hourly"]]
+            peak = max(hourly_minutes) if hourly_minutes else 0
             if peak > 0:
                 lines.append("```")
                 for hour in range(24):
-                    secs = d["hourly"][hour]
-                    if secs <= 0:
+                    mins = hourly_minutes[hour]
+                    if mins < 0.5:
                         continue
                     lines.append("%02d:00 %s %s"
-                                 % (hour, _bar(secs / 60, peak / 60, 20),
-                                    _fmt_seconds(secs)))
+                                 % (hour, _bar(mins, peak, 20),
+                                    _fmt_minutes(round(mins))))
                 lines.append("```")
                 lines.append("")
 
@@ -269,10 +413,22 @@ class LearningReport:
         # ── 建议 ──
         tips = self._suggestions(d)
         if tips:
-            lines.append("## 观察与建议")
+            lines.append("## 观察与建议（基于数据）")
             lines.append("")
             for tip in tips:
                 lines.append("- %s" % tip)
+            lines.append("")
+
+        # ── AI 深度分析（AI 版才追加）──
+        if ai_text:
+            lines.append("## 🤖 AI 深度分析")
+            lines.append("")
+            lines.append(ai_text.strip())
+            lines.append("")
+            lines.append("---")
+            lines.append("")
+            lines.append("*以上分析由 AI 基于本报告的统计数据生成，"
+                         "仅供参考；统计数字均由本机记录计算得出。*")
             lines.append("")
 
         return "\n".join(lines)
@@ -341,18 +497,26 @@ class LearningReport:
 
     # ── 导出 ────────────────────────────────────────────────
     def export(self, period: str = PERIOD_TODAY, fmt: str = "md",
-               directory: str | None = None) -> str:
+               directory: str | None = None, ai_text: str = "",
+               mode: str = MODE_BASIC) -> str:
         """导出报告文件，返回文件路径。
 
         同名文件自动加序号，不覆盖已有文件。
+        AI 版会在文件名里标出 _AI版，避免和基础版混淆。
         """
-        content = (self.render_markdown(period) if fmt == "md"
-                   else self.render_text(period, max_chars=100000))
+        if fmt == "md":
+            content = self.render_markdown(period, ai_text=ai_text, mode=mode)
+        else:
+            content = self.render_text(period, max_chars=100000)
+            if ai_text:
+                content += "\n\n=== AI 深度分析 ===\n" + ai_text.strip()
         out_dir = directory or REPORT_DIR
         os.makedirs(out_dir, exist_ok=True)
 
         stamp = datetime.now().strftime("%Y-%m-%d")
-        base = "学习报告_%s_%s" % (PERIOD_LABEL.get(period, "今日"), stamp)
+        suffix = "_AI版" if (ai_text and mode == MODE_AI) else ""
+        base = "学习工作报告_%s_%s%s" % (
+            PERIOD_LABEL.get(period, "今日"), stamp, suffix)
         ext = ".md" if fmt == "md" else ".txt"
         path = os.path.join(out_dir, base + ext)
         seq = 2
