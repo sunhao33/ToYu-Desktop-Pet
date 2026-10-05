@@ -3,8 +3,9 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ToYu 桌面土豆宠物 · 会陪你学习工作的桌面智能体</title>
-<meta name="description" content="ToYu 是一只住在你桌面上的像素土豆宠物。它记录你的专注时间、生成学习工作报告、帮你管理日程待办，还能通过大模型帮你安排计划。">
+<title>ToYu 桌面智能体 · 会自己办事的桌面 AI 伙伴</title>
+<meta name="description" content="ToYu 是一只住在桌面上的像素宠物，内核是一套完整的智能体运行时：能调用本机工具、最多自主执行 5 轮、记住你的长期习惯。说一句「帮我安排下周复习计划」，它真的会去查记录、写待办、设目标。">
+<meta name="keywords" content="桌面宠物,AI 智能体,桌面智能体,学习报告,专注计时,待办管理,大模型应用">
 <link rel="icon" href="assets/img/toyu_128.png">
 <link rel="stylesheet" href="assets/css/style.css">
 </head>
@@ -19,6 +20,7 @@
       <span class="brand-sub">桌面土豆宠物</span>
     </a>
     <nav class="nav-links">
+      <a href="#agent">AI 能力</a>
       <a href="#features">功能</a>
       <a href="#preview">界面</a>
       <a href="#demo">在线体验</a>
@@ -32,23 +34,24 @@
 <section class="hero" id="top">
   <div class="wrap hero-inner">
     <div class="hero-text">
-      <div class="pill">🏆 2026 华北五省及港澳台大学生计算机应用大赛 · 天津赛区</div>
-      <h1>一只住在桌面上的<br><em>土豆宠物</em>，<br>陪你把学习坚持下去</h1>
+      <div class="pill">🏆 2026 华北五省及港澳台大学生计算机应用大赛 · 天津赛区 · 赛道一</div>
+      <h1>你的桌面<br>多了一个<em>能办事的 AI</em></h1>
       <p class="lead">
-        ToYu 不是又一个番茄钟。它把你的专注时间、屏幕使用、待办完成情况
-        真正记下来，自动生成学习/工作报告；它也是桌面智能体 ——
-        能替你安排日程、拆解任务、记住你的长期习惯。
+        ToYu 是一只住在桌面上的像素宠物 —— 但外壳之下是一套完整的
+        <b>智能体运行时</b>：它能调用本机工具、最多自主执行 5 轮、
+        记住你的长期习惯。你说一句"帮我安排下周的复习计划"，
+        它真的会去查你的学习记录、写进待办、设好目标。
       </p>
       <div class="cta-row">
-        <a class="btn btn-primary" href="#download">
-          <span>⬇</span> 免费下载（Windows）
+        <a class="btn btn-primary" href="#agent">
+          <span>🤖</span> 看它怎么自己办事
         </a>
-        <a class="btn btn-ghost" href="#demo">先在线体验 →</a>
+        <a class="btn btn-ghost" href="#download">下载体验 →</a>
       </div>
       <ul class="hero-facts">
-        <li><b>27 项</b>自动化回归测试</li>
-        <li><b>100%</b>本机运行，数据不出电脑</li>
-        <li><b>免安装</b>绿色版，解压即用</li>
+        <li><b>5 轮</b>自主多步执行</li>
+        <li><b>12 个</b>可调用本机工具</li>
+        <li><b>20 个</b>受控记忆槽位</li>
       </ul>
     </div>
 
@@ -73,13 +76,165 @@
   </div>
 </section>
 
-<!-- ── 功能 ─────────────────────────────────────────────── -->
-<section class="section" id="features">
+<!-- ── 智能体核心 ───────────────────────────────────────── -->
+<section class="section" id="agent">
   <div class="wrap">
     <div class="sec-head">
-      <div class="pill">核心功能</div>
-      <h2>它真的在记录，不只是卖萌</h2>
-      <p>每一条数据都来自本机真实记录，不联网也能用；接入大模型后才解锁对话与智能规划。</p>
+      <div class="pill">🤖 桌面智能体</div>
+      <h2>它不是只会聊天</h2>
+      <p>普通 AI 助手给你一段建议，然后你自己去执行。ToYu 直接<b>动手做</b> ——
+         调用本机工具、观察结果、再决定下一步，最多自主跑 5 轮。</p>
+    </div>
+
+    <!-- 多步执行演示 -->
+    <div class="agent-demo">
+      <div class="agent-chat">
+        <div class="msg msg-user">
+          <div class="bubble">帮我看看这周学习情况，然后安排下周的复习计划</div>
+        </div>
+
+        <div class="msg msg-ai">
+          <div class="bubble">
+            我先查一下你这周的学习记录。
+            <span class="tool-tag">🔧 get_study_report</span>
+          </div>
+        </div>
+        <div class="tool-result">→ 本周有效学习 8.5 小时，集中在编辑器与浏览器；周三、周五几乎空白</div>
+
+        <div class="msg msg-ai">
+          <div class="bubble">
+            发现两个空白日。我再看看你的待办里有没有欠账。
+            <span class="tool-tag">🔧 list_todos</span>
+          </div>
+        </div>
+        <div class="tool-result">→ 3 项未完成：「复习机器学习第 3 章」「写竞赛设计文档」「整理实验数据」</div>
+
+        <div class="msg msg-ai">
+          <div class="bubble">
+            明白了。我把复习计划拆成 4 项写进待办，并给周三、周五各设 1 小时目标。
+            <span class="tool-tag">🔧 add_todo</span>
+            <span class="tool-tag">🔧 set_daily_goal</span>
+          </div>
+        </div>
+        <div class="tool-result">→ 已添加 4 项待办（高优先级 2 项）· 目标已设为 60 分钟</div>
+
+        <div class="msg msg-ai">
+          <div class="bubble final">
+            安排好了！这周的空档主要出在周中，我把最难的两项放在了周三和周五上午。
+            <small>共 3 轮工具调用 · 全程留痕可追溯</small>
+          </div>
+        </div>
+      </div>
+
+      <div class="agent-side">
+        <div class="side-card">
+          <h4>🔁 多步执行循环</h4>
+          <p>每轮：模型决策 → 调用工具 → 观察真实结果 → 再决策。
+             不是一次性生成，而是像人一样边做边看。</p>
+        </div>
+        <div class="side-card">
+          <h4>🛑 三条刹车</h4>
+          <ul>
+            <li>最多 <b>5 轮</b>，防止无限循环</li>
+            <li>单个工具 <b>20 秒</b>超时</li>
+            <li>整轮 <b>90 秒</b>总超时</li>
+            <li>连续失败 <b>2 次</b>即停</li>
+          </ul>
+        </div>
+        <div class="side-card">
+          <h4>🔒 参数强校验</h4>
+          <p>工具参数走 JSON Schema：类型、长度、取值范围都查。
+             不合法就把原因回灌给模型，让它自己改 —— 而不是执行坏参数。</p>
+        </div>
+      </div>
+    </div>
+
+    <!-- 四项核心能力 -->
+    <div class="ai-grid">
+      <article class="ai-card">
+        <div class="ai-ic">🧠</div>
+        <h3>长期记忆</h3>
+        <p class="ai-sub">20 个受控槽位 · 不信模型自报的置信度</p>
+        <p>模型说"我很确定"没用。ToYu 从<b>证据文本</b>重新估算置信度：
+           看到「我叫…」「记住…」这类显性信号才给 0.90 以上；
+           含糊表述压到 0.60 以下并主动向你确认。</p>
+        <div class="ai-fact">不引入向量库 —— 2-gram + 时间衰减即可解释、零依赖、可预测</div>
+      </article>
+
+      <article class="ai-card">
+        <div class="ai-ic">📋</div>
+        <h3>上下文注入</h3>
+        <p class="ai-sub">6 个优先级块 · token 预算内自动裁剪</p>
+        <p>它"知道"你此刻的桌面状态：待办、学习情况、日程、宠物状态、
+           当前应用、剪贴板。按优先级排序，超预算就从最低优先级开始丢。</p>
+        <div class="ai-fact">窗口标题与剪贴板做提示注入防护，不当作指令执行</div>
+      </article>
+
+      <article class="ai-card">
+        <div class="ai-ic">🧵</div>
+        <h3>线程安全执行</h3>
+        <p class="ai-sub">子线程跑循环 · 主线程碰 Qt</p>
+        <p>Agent 主循环在子线程，需要操作界面的工具排队回主线程执行。
+           如果主循环自己占着主线程，一调工具就死锁。</p>
+        <div class="ai-fact">实测：跨线程信号投递安全，QTimer.singleShot 会静默失效</div>
+      </article>
+
+      <article class="ai-card">
+        <div class="ai-ic">🪜</div>
+        <h3>三级降级</h3>
+        <p class="ai-sub">任何一层坏了都不影响主流程</p>
+        <p>记忆、上下文、报告分析各自独立降级。
+           模型连不上、Key 失效、返回格式乱 —— 桌宠照常计时、照常记录，
+           只是 AI 那部分暂时不可用。</p>
+        <div class="ai-fact">报告里的数字只从已有接口读，禁止模型自己造数</div>
+      </article>
+    </div>
+
+    <!-- AI 识图 -->
+    <div class="vision-box">
+      <div class="vision-text">
+        <div class="pill">规划中 · 识图排期</div>
+        <h3>📷 拍张课程表，它替你排进日历</h3>
+        <p>发一张日程/课程表截图，ToYu 识别其中的时间与事项，
+           <b>自动提取线上会议号</b>（腾讯会议 / Zoom / 飞书等），
+           写入日历并设置提醒，再问你要不要加进待办。</p>
+        <ul class="vision-list">
+          <li>识别时间 → 结构化日程条目</li>
+          <li>提取会议链接与会议号 → 存进对应日程</li>
+          <li>提前提醒 → 到点前弹通知</li>
+          <li>一键转入待办 → 带优先级</li>
+        </ul>
+      </div>
+      <div class="vision-art">
+        <div class="mock-shot">
+          <div class="mock-line"></div>
+          <div class="mock-line short"></div>
+          <div class="mock-hl">15:00　组会（腾讯会议 123-456-789）</div>
+          <div class="mock-line short"></div>
+          <div class="mock-line"></div>
+        </div>
+        <div class="vision-arrow">➜</div>
+        <div class="mock-cal">
+          <b>10月8日</b>
+          <div class="cal-item">
+            <span class="cal-time">15:00</span>
+            <span class="cal-title">组会</span>
+            <span class="cal-link">🔗 会议号已提取</span>
+          </div>
+          <div class="cal-remind">⏰ 提前 15 分钟提醒</div>
+        </div>
+      </div>
+    </div>
+  </div>
+</section>
+
+<!-- ── 功能 ─────────────────────────────────────────────── -->
+<section class="section section-alt" id="features">
+  <div class="wrap">
+    <div class="sec-head">
+      <div class="pill">学习与工作</div>
+      <h2>AI 之外，它也是认真的生产力工具</h2>
+      <p>这些功能完全不依赖大模型 —— 不配 API Key 也照常可用，数据全在本机。</p>
     </div>
 
     <div class="cards">
@@ -117,24 +272,13 @@
       </article>
 
       <article class="card">
-        <div class="card-ic">🤖</div>
-        <h3>桌面智能体</h3>
-        <p>接入大模型后可对话、可调用工具：查桌面状态、加待办、
-           设目标、生成报告，最多 5 轮自主执行并留下执行轨迹。</p>
+        <div class="card-ic">🖥</div>
+        <h3>屏幕时间统计</h3>
+        <p>应用排行、时段分布、与昨日对比。
+           跨零点会正确切分，不会把昨天的时间算进今天。</p>
         <ul class="card-list">
-          <li>工具调用与对话都在本机完成</li>
-          <li>只在你配置密钥后启用</li>
-        </ul>
-      </article>
-
-      <article class="card">
-        <div class="card-ic">🧠</div>
-        <h3>长期记忆</h3>
-        <p>20 个受控记忆槽位记住你的偏好与目标。模型自报的置信度不可信 ——
-           ToYu 从证据文本重新估算，低置信条目会主动询问确认。</p>
-        <ul class="card-list">
-          <li>每条记忆都能查看与删除</li>
-          <li>三级降级：出问题不影响主流程</li>
+          <li>区分"在用电脑"与"在学习"</li>
+          <li>可关闭标题记录保护隐私</li>
         </ul>
       </article>
 
@@ -146,6 +290,18 @@
         <ul class="card-list">
           <li>自动抠图与颜色量化</li>
           <li>作品可直接导出分享</li>
+        </ul>
+      </article>
+
+      <article class="card">
+        <div class="card-ic">🏠</div>
+        <h3>有性格的陪伴</h3>
+        <p>好感度、心情、时间感知、天气感知。
+           深夜它会变暗变慢，下雨会自己撑伞 —— 这些不是装饰，
+           而是让它长期待在你桌面上不烦人的关键。</p>
+        <ul class="card-list">
+          <li>7 种配件、5 种粒子特效</li>
+          <li>像素小房子，可进出</li>
         </ul>
       </article>
     </div>
