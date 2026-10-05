@@ -364,7 +364,8 @@ mw._on_start_pet()
 pump(800)
 
 check("报告构建器可创建", mw._ensure_report() is not None)
-check("报告预览控件存在", getattr(mw, "_report_preview", None) is not None)
+check("报告卡片视图存在", getattr(mw, "_report_view", None) is not None)
+check("AI 分析面板存在", getattr(mw, "_report_ai_panel", None) is not None)
 check("周期按钮齐全",
       set(getattr(mw, "_report_btns", {})) == {"today", "week", "month"},
       str(list(getattr(mw, "_report_btns", {}))))
@@ -378,22 +379,73 @@ check("AI 按钮初始文案", "AI 分析" in mw._report_ai_btn.text(),
 
 mw._refresh_report_preview("week")
 pump(300)
-check("预览有内容", len(mw._report_preview.text()) > 30,
-      mw._report_preview.text()[:40])
-# 预览上限现在是 100 行；塞一段超长 AI 分析来验证"超出提示导出"
-_long_ai = "\n".join("### 第 %d 段分析" % i for i in range(130))
-mw._report_ai_text = _long_ai
-mw._report_mode = "ai"
+
+
+def view_text(view):
+    """把卡片视图里的所有 QLabel 文本收集起来（用于断言内容是否渲染）。"""
+    from PyQt6.QtWidgets import QLabel
+    return "\n".join(lab.text() for lab in view.findChildren(QLabel))
+
+
+# 注入确定性数据再断言渲染结果。
+# 原因：时段分布只统计"当天"（多天叠加会失真），而测试运行时 ToYu
+# 通常没在采集屏幕时间，当天 hourly 为空 —— 那一段就（正确地）不渲染。
+# 直接断言会变成依赖运行环境的偶发失败。
+mw._report_builder._tracker = FakeTracker()
+mw._report_builder._todo = FakeTodo()
+mw._report_builder._goal = FakeGoal()
+
+mw._refresh_report_preview("week")
+pump(400)
+text_week = view_text(mw._report_view)
+check("卡片视图渲染出概览标题", "概览" in text_week, text_week[:60])
+check("卡片视图渲染出每日时长", "每日学习时长" in text_week)
+check("卡片视图渲染出应用分布", "时间都用在哪" in text_week)
+check("卡片视图渲染出时段分布", "时段分布" in text_week,
+      "缺少该段落，实际：%s" % text_week[:110].replace("\n", " / "))
+check("卡片视图渲染出最专注时段", "最专注" in text_week)
+check("卡片视图渲染出完成任务", "完成了什么" in text_week)
+check("卡片视图渲染出观察建议", "观察与建议" in text_week)
+check("卡片视图不再显示 Markdown 源码",
+      "| 指标 | 数值 |" not in text_week and "|---|" not in text_week,
+      [ln for ln in text_week.splitlines() if "|" in ln][:2])
+check("卡片视图用方块字渲染条形（不再是 █ 字符）",
+      "█" not in text_week)
+check("卡片视图显示有效学习", "有效学习" in text_week)
+check("卡片视图显示时长数值", "小时" in text_week or "分钟" in text_week)
+check("卡片视图显示完成任务明细",
+      "写报告模块" in text_week or "复习第三章" in text_week,
+      text_week[-150:].replace("\n", " / "))
+check("切换周期后按钮选中", mw._report_btns["week"].isChecked())
+
+# 基础版必须隐藏 AI 面板
+mw._report_ai_text = ""
+mw._report_mode = MODE_BASIC
 mw._refresh_report_preview("week")
 pump(300)
-check("预览过长时提示导出",
-      "完整报告请点「导出」" in mw._report_preview.text(),
-      "%d 行" % len(mw._report_preview.text().splitlines()))
+# 用 isHidden() 判断自身状态：isVisible() 还会看祖先链，
+# 而测试时"数据面板"这一层没被切到前台，会让 isVisible() 恒为 False。
+check("基础版隐藏 AI 面板", mw._report_ai_panel.isHidden())
+
+# AI 分析完成后，AI 面板应显示在卡片顶部（不埋在滚动区里）
+mw._report_ai_text = "### 整体状态\n这是测试分析正文。"
+mw._report_mode = "ai"
+mw._refresh_report_preview("week")
+pump(400)
+ai_panel_text = view_text(mw._report_ai_panel)
+check("AI 分析显示在独立面板", not mw._report_ai_panel.isHidden(), "面板自身仍处于隐藏")
+check("AI 面板含标题", "AI 深度分析" in ai_panel_text, ai_panel_text[:50])
+check("AI 面板含正文", "这是测试分析正文" in ai_panel_text, ai_panel_text[:80])
+check("AI 面板含免责说明", "仅供参考" in ai_panel_text)
+check("AI 面板有高度上限（不挤掉其他卡片）",
+      mw._report_ai_panel.maximumHeight() <= 300,
+      "上限 %d px" % mw._report_ai_panel.maximumHeight())
+
 mw._report_ai_text = ""
 mw._report_mode = "basic"
 mw._refresh_report_preview("week")
 pump(200)
-check("切换周期后按钮选中", mw._report_btns["week"].isChecked())
+check("回到基础版后隐藏 AI 面板", mw._report_ai_panel.isHidden())
 
 mw._refresh_report_preview(PERIOD_MONTH)
 pump(250)
@@ -434,8 +486,10 @@ check("AI 版按钮选中", mw._report_mode_btns["ai"].isChecked())
 check("AI 完成后按钮变为重新分析", "重新分析" in mw._report_ai_btn.text(),
       mw._report_ai_btn.text())
 check("AI 完成后不停留在忙碌态", mw._report_ai_busy is False)
-check("预览含 AI 段落", "🤖 AI 深度分析" in mw._report_preview.text(),
-      mw._report_preview.text()[-80:])
+check("AI 完成后面板显示分析",
+      not mw._report_ai_panel.isHidden()
+      and "测试分析内容" in view_text(mw._report_ai_panel),
+      view_text(mw._report_ai_panel)[:60])
 check("完成时弹出可见提示", "AI 分析完成" in toast_text(), toast_text()[:50])
 
 # 切换区间应清掉旧分析（数据区间变了，分析不再对应）

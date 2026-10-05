@@ -208,6 +208,19 @@ class LearningReport:
             or data["tasks"])
         return data
 
+    # ── 给界面用的结构化入口 ────────────────────────────────
+    def snapshot(self, period: str = PERIOD_TODAY) -> dict:
+        """取一份渲染用的数据快照。
+
+        界面按**数据**渲染成卡片，而不是去解析 Markdown 字符串 ——
+        后者既脆弱又不好控制样式。Markdown 只用于导出。
+        """
+        return self.collect(period)
+
+    def suggestions(self, data: dict) -> list:
+        """基于数据的客观观察（供界面与 Markdown 共用）。"""
+        return self._suggestions(data)
+
     # ── AI 分析 ─────────────────────────────────────────────
     def build_ai_digest(self, data: dict) -> str:
         """把统计数据整理成给模型的摘要。

@@ -39,6 +39,7 @@ from pet_engine.pet_state_machine import InteractionMode
 from pet_engine.pet_house import HouseWindow
 from pet_engine.pet_ai import AICompanion
 from ui.widgets.progress_ring import ProgressRing
+from ui.widgets.report_view import AIPanel, ReportView
 from ui.settings_manager import SettingsManager
 from ui.tray_icon import TrayIcon
 from ui.screen_time_tracker import ScreenTimeTracker
@@ -1309,14 +1310,19 @@ class MainWindow(QMainWindow):
         self._calendar.date_selected.connect(self._on_calendar_date_selected)
         right_card_layout.addWidget(self._calendar)
 
-        # 数据面板右栏：上面放学习/工作报告，下面放日历
+        # 数据面板右栏：上面放学习/工作报告，下面放日历。
+        # 分配 46:29 的高度份额，并让日历**可收缩**（它有 340px 的固定倾向，
+        # 不让步就会把报告挤到内容重叠）。日历实际需要的最小高度约 250px。
+        right_card.setSizePolicy(QSizePolicy.Policy.Preferred,
+                                 QSizePolicy.Policy.Ignored)
+        right_card.setMinimumHeight(250)
         right_col = QWidget()
         right_col.setStyleSheet("background: transparent;")
         right_col_layout = QVBoxLayout(right_col)
         right_col_layout.setContentsMargins(0, 0, 0, 0)
         right_col_layout.setSpacing(12)
-        right_col_layout.addWidget(self._build_report_card(), 1)
-        right_col_layout.addWidget(right_card, 1)
+        right_col_layout.addWidget(self._build_report_card(), 46)
+        right_col_layout.addWidget(right_card, 29)
 
         tools_p2_layout.addWidget(right_col, 1)  # right half = 1/2
 
@@ -4333,10 +4339,10 @@ class MainWindow(QMainWindow):
         return self._report_builder
 
     def _refresh_report_preview(self, period: str = None):
-        """刷新报告预览。"""
-        label = getattr(self, "_report_preview", None)
+        """刷新报告视图（卡片式渲染）。"""
+        view = getattr(self, "_report_view", None)
         builder = self._ensure_report()
-        if label is None or builder is None:
+        if view is None or builder is None:
             return
         period = period or getattr(self, "_report_period", "today")
         self._report_period = period
@@ -4346,16 +4352,20 @@ class MainWindow(QMainWindow):
         if mode == "ai" and not ai_text:
             mode = "basic"
         try:
-            text = builder.render_markdown(period, ai_text=ai_text, mode=mode)
+            data = builder.snapshot(period)
+            tips = builder.suggestions(data)
         except Exception as exc:  # noqa: BLE001
-            label.setText("报告生成失败：%s" % exc)
+            print("[Report] 生成失败: %s" % exc)
             return
-        # 预览只显示前若干行（AI 版内容较长，给 100 行；超出提示导出）
-        lines = text.splitlines()
-        preview = "\n".join(lines[:100])
-        if len(lines) > 100:
-            preview += "\n…（完整报告请点「导出」）"
-        label.setText(preview)
+        try:
+            view.show_report(
+                data,
+                suggestions=tips,
+                ai_text=ai_text if mode == "ai" else "",
+                ai_busy=bool(getattr(self, "_report_ai_busy", False)),
+                ai_error=getattr(self, "_report_ai_error", ""))
+        except Exception as exc:  # noqa: BLE001
+            print("[Report] 渲染失败: %s" % exc)
         # 同步按钮选中态
         for key, btn in getattr(self, "_report_btns", {}).items():
             btn.setChecked(key == period)
@@ -4364,6 +4374,7 @@ class MainWindow(QMainWindow):
     def _on_report_period(self, period: str):
         """切换统计区间。区间变了，之前的 AI 分析就不再对应，清掉。"""
         self._report_ai_text = ""
+        self._report_ai_error = ""
         self._refresh_report_preview(period)
 
     def _set_report_mode(self, mode: str):
@@ -4437,10 +4448,9 @@ class MainWindow(QMainWindow):
         signal = self._report_signal()
         self._report_ai_busy = True
         self._update_ai_btn_state()
+        # 视图里显示"分析中"占位（不用整段文字顶替报告内容）
         try:
-            self._report_preview.setText(
-                "🤖 正在让 AI 分析数据，请稍候…\n\n"
-                "（用的是「AI 页」里配置的模型，约需几秒到十几秒）")
+            self._refresh_report_preview(period)
         except RuntimeError:
             pass
 
@@ -4463,12 +4473,14 @@ class MainWindow(QMainWindow):
         self._report_ai_busy = False
         if not result.get("ok"):
             self._report_ai_text = ""
+            self._report_ai_error = result.get("error", "AI 分析失败")
             self._report_mode = "basic"
             for key, btn in getattr(self, "_report_mode_btns", {}).items():
                 btn.setChecked(key == "basic")
-            self._toast("❌ %s" % result.get("error", "AI 分析失败"))
+            self._toast("❌ %s" % self._report_ai_error)
         else:
             self._report_ai_text = result["text"]
+            self._report_ai_error = ""
             self._report_mode = "ai"
             for key, btn in getattr(self, "_report_mode_btns", {}).items():
                 btn.setChecked(key == "ai")
@@ -4500,15 +4512,33 @@ class MainWindow(QMainWindow):
         except RuntimeError:
             pass
 
+    def _make_report_subtitle(self):
+        """报告卡片标题下的说明（一句话讲清两个版本的数据边界）。"""
+        label = QLabel("基础版只读本机记录、不联网；"
+                       "AI 版会把统计数据（不含聊天记录与文件内容）"
+                       "发给你配置的模型做分析。")
+        label.setWordWrap(True)
+        label.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 10px;"
+            " background: transparent;")
+        return label
+
     def _build_report_card(self):
         """数据面板里的学习/工作报告卡片。"""
         # 版本状态在这里初始化，供 _refresh_report_preview / 导出读取
         self._report_mode = "basic"     # basic | ai
         self._report_ai_text = ""       # AI 分析正文（空表示还没生成）
+        self._report_ai_error = ""      # 上次 AI 分析失败的原因
         self._report_ai_busy = False
         self._report_period = "today"
 
         card = self._make_card("📄 学习/工作报告")
+        # 数据边界说明放在标题下方当副标题：
+        # 原来放在卡片底部，会被压在滚动区下面与内容重叠。
+        card.layout().addWidget(self._make_report_subtitle())
+        # 报告段落多（概览/每日/应用/时段/任务 + AI 面板），给足下限，
+        # 否则默认窗口下内容会被压到互相重叠。超出的部分卡片内滚动。
+        card.setMinimumHeight(470)
         layout = card.layout()
         layout.setSpacing(8)
 
@@ -4579,7 +4609,13 @@ class MainWindow(QMainWindow):
         scroll = QScrollArea()
         scroll.setWidgetResizable(True)
         scroll.setFrameShape(QFrame.Shape.NoFrame)
-        scroll.setMinimumHeight(150)
+        # 高度策略很关键：报告内容（概览+每日+应用+时段+任务+AI）展开后
+        # 最小高度会到 900+ px，如果让滚动区跟着内容撑，它就会把整个卡片
+        # 顶满、把可视区压到只剩两三行，反而看不到内容。
+        # 正确做法是让滚动区**能收缩**，内容高度交给滚动条处理。
+        scroll.setMinimumHeight(220)
+        scroll.setSizePolicy(QSizePolicy.Policy.Preferred,
+                             QSizePolicy.Policy.Ignored)
         scroll.setStyleSheet(
             "QScrollArea { background: transparent; border: none; }"
             "QScrollBar:vertical { width: 6px; background: transparent; }"
@@ -4587,27 +4623,22 @@ class MainWindow(QMainWindow):
             " border-radius: 3px; min-height: 20px; }")
         inner = QWidget()
         inner.setStyleSheet("background: transparent;")
+        # 内层容器同样不能把高度要求往上传，否则滚动区又被顶满
+        inner.setSizePolicy(QSizePolicy.Policy.Preferred,
+                            QSizePolicy.Policy.Ignored)
         inner_layout = QVBoxLayout(inner)
         inner_layout.setContentsMargins(0, 0, 0, 0)
-        self._report_preview = QLabel("生成中…")
-        self._report_preview.setWordWrap(True)
-        self._report_preview.setAlignment(
-            Qt.AlignmentFlag.AlignTop | Qt.AlignmentFlag.AlignLeft)
-        self._report_preview.setTextInteractionFlags(
-            Qt.TextInteractionFlag.TextSelectableByMouse)
-        self._report_preview.setStyleSheet(
-            f"color: {self._c('text')}; font-size: 11px; background: transparent;")
-        inner_layout.addWidget(self._report_preview)
+        # 卡片式报告视图：按数据渲染，不再显示 Markdown 源码
+        self._report_view = ReportView(self._c)
+        # AI 分析面板固定在滚动区**上方** —— 它是 AI 版的核心价值，
+        # 埋在滚动区底部的话用户会以为点了没反应
+        self._report_ai_panel = AIPanel(self._c)
+        self._report_view.ai_panel = self._report_ai_panel
+        layout.addWidget(self._report_ai_panel)
+        inner_layout.addWidget(self._report_view)
         inner_layout.addStretch()
         scroll.setWidget(inner)
         layout.addWidget(scroll, 1)
-
-        hint = QLabel("基础版完全基于本机记录生成，不联网、不上传。"
-                      "AI 版会把**统计数据**（不含聊天记录与文件内容）发给你配置的模型做分析。")
-        hint.setWordWrap(True)
-        hint.setStyleSheet(
-            f"color: {self._c('text2')}; font-size: 10px; background: transparent;")
-        layout.addWidget(hint)
         return card
 
     def _save_ai_settings(self):
