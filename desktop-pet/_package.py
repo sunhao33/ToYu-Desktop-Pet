@@ -66,6 +66,7 @@ SKIP_PATTERNS = (
     # 早期开发期的测试/截图脚本（命名不符合 _test_ 前缀，单列出来）
     "test_all.py", "test_tabs.py", "test_auto_home.py", "review_test.py",
     "screenshot_tabs.py", "_clean_imports.py", "_probe", "_soak", "_bug_",
+    "_isolate_data.py",
     "UI_OPTIMIZATION_PLAN.md", "UI_CHANGES_",
 )
 

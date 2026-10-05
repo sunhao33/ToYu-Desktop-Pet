@@ -102,13 +102,31 @@ TEXT_SEC = "#8B7355"      # muted brown
 BORDER = "#E8D5C0"        # warm beige border
 SUCCESS = "#6B9B37"       # earthy green
 DANGER = "#C0392B"        # red
+HOVER_BG = "#FFF3E0"      # 悬停底（浅色）
+PRESS_BG = "#FFE0B2"      # 按下底（浅色）
+DISABLE_BG = "#F0F0F0"    # 禁用底
+DISABLE_FG = "#BBBBBB"    # 禁用文字
+DISABLE_BDR = "#E0E0E0"   # 禁用描边
 
-DARK_BG = "#2A1F14"       # warm dark brown background
-DARK_CARD = "#3A2A1A"     # warm card background
-DARK_TEXT = "#E8D5C0"     # warm light text
-DARK_TEXT_SEC = "#A08B6E" # warm secondary text
-DARK_BORDER = "#4A3525"   # warm dark border
-DARK_HEADER = "#1E150D"   # warm dark header
+# ── 深色主题 ────────────────────────────────────────────────
+# 这套颜色是按**对比度实测**调出来的，不是凭观感挑的。原来的值有三处
+# 不达 WCAG AA（正文需 4.5:1）：
+#     次要文字/卡片 4.20、成功色/卡片 4.17、危险色/卡片 2.53 ——
+# 其中红色几乎看不见（时间不足、错误提示都受影响）。
+# 调整方向：保留"暖木色 + 土豆金"的调性，但把暗色底层提亮、
+# 亮色文字与语义色提亮到达标，同时拉开头部/背景/卡片的层次。
+DARK_BG = "#201710"       # 主背景（最暗一层）
+DARK_CARD = "#362718"     # 卡片（比背景亮 1.9 档，层次清）
+DARK_TEXT = "#F2E4D2"     # 正文（9.9:1）
+DARK_TEXT_SEC = "#BCA88C" # 次要文字（6.0:1，原来 4.20 不达标）
+DARK_BORDER = "#57402C"   # 描边（加深对比但不过刺眼）
+DARK_HEADER = "#2E2116"   # 头部（介于背景与卡片之间，不再是"倒挂"）
+# 深色下的土豆金：原色在暗底上偏暗，提亮后既保持金色又更醒目
+DARK_ACCENT = "#E0B65A"
+DARK_ACCENT_HOVER = "#EFC76E"
+# 语义色在深色底上必须提亮，否则小字看不清
+DARK_SUCCESS = "#8FBF52"
+DARK_DANGER = "#F0736A"
 
 CHECKER_SVG = """
 <svg width="16" height="16" xmlns="http://www.w3.org/2000/svg">
@@ -242,6 +260,10 @@ class MainWindow(QMainWindow):
             os.path.expanduser("~"), ".desktop_pet", "images"
         )
         self._is_dark_mode = False
+        # 主题重刷用：构建期记录用到的配色键，构建完捕获样式模板
+        self._theme_keys_used = set()
+        self._theme_styles = []
+        self._capturing_theme = False
         self._flow_active = False
         self._flow_window = None          # 心流模式是一个独立的顶层窗口
         self._mini_timer = None           # 悬浮计时小窗
@@ -255,7 +277,10 @@ class MainWindow(QMainWindow):
         self._report_builder = None
         self._report_ai_signal = None
 
+        self._capturing_theme = True
         self._init_ui()
+        self._capturing_theme = False
+        self._capture_theme_styles()
         self._init_tray()
         self._restore_state()
         self._apply_content_minimum_width()
@@ -400,6 +425,14 @@ class MainWindow(QMainWindow):
 
     def _c(self, key):
         """Return color for current mode. Keys: bg, card, text, text2, border, header, accent, accent_h, mid, success, danger"""
+        # 构建界面时记录"这个控件用了哪些配色键"。
+        # 用途见 _capture_theme_styles()：切主题时据此自动重刷，
+        # 避免每个控件都要手工登记（漏一个就会在深色下留着浅色）。
+        if getattr(self, "_capturing_theme", False):
+            try:
+                self._theme_keys_used.add(key)
+            except AttributeError:
+                pass
         m = {
             'bg':       (LIGHT_BG,    DARK_BG),
             'card':     (CARD_BG,     DARK_CARD),
@@ -407,20 +440,23 @@ class MainWindow(QMainWindow):
             'text2':    (TEXT_SEC,    DARK_TEXT_SEC),
             'border':   (BORDER,      DARK_BORDER),
             'header':   (DARK,        DARK_HEADER),
-            'accent':   (ACCENT,      ACCENT),
-            'accent_h': (ACCENT_HOVER, ACCENT_HOVER),
-            'mid':      (MID,         ACCENT),
-            'success':  (SUCCESS,     SUCCESS),
-            'danger':   (DANGER,      DANGER),
-            'hover_bg': ('#FFF3E0',   '#4A3525'),
-            'press_bg': ('#FFE0B2',   '#5A4535'),
-            'input_bg': ('#FAFAFA',   '#3A2A1A'),
-            'disable_bg': ('#f0f0f0', '#2A1F14'),
-            'disable_fg': ('#bbb',    '#6B5A48'),
-            'disable_bdr': ('#e0e0e0', '#3A2A1A'),
-            'tab_bg':   ('#FFF8E1',   '#3A2A1A'),
-            'handle':   ('#D7CCC8',   '#4A3525'),
-            'handle_h': ('#BCAAA4',   '#5A4535'),
+            # accent / success / danger 在深色下用**提亮版**：
+            # 原来的颜色直接放到暗底上对比度不足（危险红仅 2.53:1，
+            # 错误提示与"时间不足"这类小字几乎看不见）
+            'accent':   (ACCENT,      DARK_ACCENT),
+            'accent_h': (ACCENT_HOVER, DARK_ACCENT_HOVER),
+            'mid':      (MID,         DARK_ACCENT),
+            'success':  (SUCCESS,     DARK_SUCCESS),
+            'danger':   (DANGER,      DARK_DANGER),
+            'hover_bg': (HOVER_BG,   '#4A3525'),
+            'press_bg': (PRESS_BG,   '#5A4535'),
+            'input_bg': ('#FAFAFA',   '#2C2015'),
+            'disable_bg': (DISABLE_BG, '#2A1F14'),
+            'disable_fg': (DISABLE_FG, '#7A6650'),
+            'disable_bdr': (DISABLE_BDR, '#3A2A1A'),
+            'tab_bg':   ('#FFF8E1',   '#42301E'),
+            'handle':   ('#D7CCC8',   '#57402C'),
+            'handle_h': ('#BCAAA4',   '#6B523A'),
             'name_fg':  ('#2C1810',   DARK_TEXT),
         }
         pair = m.get(key, (TEXT, DARK_TEXT))
@@ -1233,7 +1269,8 @@ class MainWindow(QMainWindow):
             btn.setCheckable(True)
             btn.setFixedHeight(24)
             btn.setStyleSheet(
-                "QPushButton { background: #F0E6D6; border: none; border-radius: 6px;"
+                f"QPushButton {{ background: {self._c('tab_bg')}; border: none;"
+                  " border-radius: 6px;"
                 " font-size: 11px; padding: 0 10px; }"
                 "QPushButton:checked { background: #C49A3C; color: white; }"
             )
@@ -1270,7 +1307,8 @@ class MainWindow(QMainWindow):
         self._screen_time_list.setStyleSheet(
             "QScrollArea { background: transparent; border: none; }"
             "QScrollBar:vertical { width: 4px; background: transparent; }"
-            "QScrollBar::handle:vertical { background: #E8D5C0; border-radius: 2px; }"
+            f"QScrollBar::handle:vertical {{ background: {self._c('handle')};"
+                  " border-radius: 2px; }"
         )
         screen_layout.addWidget(self._screen_time_list)
         self._stat_stack.addWidget(screen_widget)
@@ -1286,7 +1324,8 @@ class MainWindow(QMainWindow):
         self._history_scroll.setStyleSheet(
             "QScrollArea { background: transparent; border: none; }"
             "QScrollBar:vertical { width: 4px; background: transparent; }"
-            "QScrollBar::handle:vertical { background: #E8D5C0; border-radius: 2px; }"
+            f"QScrollBar::handle:vertical {{ background: {self._c('handle')};"
+                  " border-radius: 2px; }"
         )
         init_container = QWidget()
         init_container.setStyleSheet("background: transparent;")
@@ -3029,7 +3068,7 @@ class MainWindow(QMainWindow):
         total_secs = sum(s for _, s in data)
         total_lbl = QLabel(f"🖥️ 今日总使用: {self._fmt_dur(total_secs)}")
         total_lbl.setStyleSheet(
-            "color: #2C1810; font-size: 14px; font-weight: bold;"
+            f"color: {self._c('text')}; font-size: 14px; font-weight: bold;"
         )
         summary_layout.addWidget(total_lbl)
 
@@ -3052,14 +3091,16 @@ class MainWindow(QMainWindow):
 
         app_count = len(data)
         count_lbl = QLabel(f"📱 使用了 {app_count} 个应用")
-        count_lbl.setStyleSheet("color: #8B7355; font-size: 11px;")
+        count_lbl.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 11px;")
         summary_layout.addWidget(count_lbl)
 
         layout.addWidget(summary)
 
         list_title = QLabel("应用排行")
         list_title.setStyleSheet(
-            "color: #2C1810; font-size: 12px; font-weight: bold; padding: 4px 0;"
+            f"color: {self._c('text')}; font-size: 12px; font-weight: bold;"
+                " padding: 4px 0;"
         )
         layout.addWidget(list_title)
 
@@ -3090,8 +3131,11 @@ class MainWindow(QMainWindow):
                     break
 
             card = QFrame()
+            # 颜色走主题：这几处原来写死浅色，深色模式下会变成
+            # 白底黑字的一块，与整体格格不入
             card.setStyleSheet(
-                f"QFrame {{ background: #FFFFFF; border: 1px solid #E8D5C0;"
+                f"QFrame {{ background: {self._c('card')};"
+                f" border: 1px solid {self._c('border')};"
                 f" border-radius: 8px; }}"
                 f"QFrame:hover {{ border-color: {clr}; }}"
             )
@@ -3115,19 +3159,21 @@ class MainWindow(QMainWindow):
 
             name_lbl = QLabel(app.replace(".exe", "").title())
             name_lbl.setStyleSheet(
-                "color: #2C1810; font-size: 12px; font-weight: bold;"
+                f"color: {self._c('text')}; font-size: 12px; font-weight: bold;"
             )
             top_row.addWidget(name_lbl, 1)
 
             pct_lbl = QLabel(f"{self._fmt_dur(secs)}  {pct:.0f}%")
-            pct_lbl.setStyleSheet("color: #8B7355; font-size: 11px;")
+            pct_lbl.setStyleSheet(
+                f"color: {self._c('text2')}; font-size: 11px;")
             top_row.addWidget(pct_lbl)
             card_layout.addLayout(top_row)
 
             bar_bg = QFrame()
             bar_bg.setFixedHeight(5)
             bar_bg.setStyleSheet(
-                "QFrame { background: #F0E6D6; border-radius: 2px; }"
+                f"QFrame {{ background: {self._c('border')};"
+                " border-radius: 2px; }"
             )
             bar_fill = QFrame(bar_bg)
             bar_fill.setGeometry(0, 0, max(bar_w, 3), 5)
@@ -3176,6 +3222,10 @@ class MainWindow(QMainWindow):
 
     def _update_charts(self, date_str, tasks):
         """Update pie and bar charts for the selected date."""
+        # 图表文字颜色跟随主题：图是渲染成 PNG 的，CSS 管不到，
+        # 必须把颜色传进绘图调用，否则深色模式下图上文字是深色的、看不清
+        _chart_fg = self._c('text')
+        _chart_sec = self._c('text2')
         import matplotlib
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
@@ -3191,7 +3241,9 @@ class MainWindow(QMainWindow):
         pie_colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
                       '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9']
         bar_color_active = '#4ECDC4'
-        bar_color_inactive = '#E8E8E8'
+        # 未选中日的柱子：原来固定浅灰 #E8E8E8，深色模式下是一排刺眼白柱。
+        # 改用主题描边色，深浅两模式都合适。
+        bar_color_inactive = self._c('border')
 
         def fmt(sec):
             if sec >= 3600: return f"{sec//3600}h{(sec%3600)//60}m"
@@ -3226,19 +3278,20 @@ class MainWindow(QMainWindow):
                 wedgeprops={'width': 0.35, 'edgecolor': '#FFFFFF', 'linewidth': 2}
             )
             ax1.text(0, 0, fmt(sum(times)), ha='center', va='center',
-                     fontsize=18, fontweight='bold', color='#2C1810')
+                     fontsize=18, fontweight='bold', color=_chart_fg)
             ax1.legend(
                 [f"{n} {fmt(t)}" for n, t in zip(names, times)],
                 loc='lower center', bbox_to_anchor=(0.5, -0.12),
                 fontsize=10, frameon=False, ncol=min(len(names), 2),
+                labelcolor=_chart_fg,
                 handlelength=0.8, handletextpad=0.3
             )
         else:
             # 无数据时不要留坐标轴边框和刻度，只显示一句提示
             ax1.axis('off')
             ax1.text(0.5, 0.5, '暂无完成记录', ha='center', va='center',
-                     fontsize=13, color='#8B7355')
-        ax1.set_title(f'{date_str}', fontsize=12, color='#8B7355', pad=10)
+                     fontsize=13, color=_chart_sec)
+        ax1.set_title(f'{date_str}', fontsize=12, color=_chart_sec, pad=10)
         fig1.subplots_adjust(left=0.02, right=0.98, top=0.88, bottom=0.15)
 
         buf1 = io.BytesIO()
@@ -3278,13 +3331,13 @@ class MainWindow(QMainWindow):
             if cnt > 0:
                 ax2.text(bar.get_x() + bar.get_width()/2, bar.get_height() + 0.3,
                          str(cnt), ha='center', va='bottom', fontsize=9,
-                         fontweight='bold', color='#2C1810')
+                         fontweight='bold', color=_chart_fg)
 
-        ax2.set_title('近7天', fontsize=12, color='#8B7355', pad=10)
-        ax2.tick_params(axis='x', labelsize=10, colors='#8B7355', length=0, pad=8)
-        ax2.tick_params(axis='y', labelsize=9, colors='#8B7355', length=0)
+        ax2.set_title('近7天', fontsize=12, color=_chart_sec, pad=10)
+        ax2.tick_params(axis='x', labelsize=10, colors=_chart_sec, length=0, pad=8)
+        ax2.tick_params(axis='y', labelsize=9, colors=_chart_sec, length=0)
         for s in ax2.spines.values(): s.set_visible(False)
-        ax2.yaxis.grid(True, color='#E0E0E0', linewidth=0.5, zorder=0)
+        ax2.yaxis.grid(True, color=self._c('border'), linewidth=0.5, zorder=0)
         ax2.set_axisbelow(True)
         if max(day_minutes) <= 0:
             # 7 天全都没有记录：matplotlib 会给 0.04/0.02 这种无意义刻度，
@@ -3292,7 +3345,7 @@ class MainWindow(QMainWindow):
             ax2.set_ylim(0, 60)
             ax2.set_yticks([])
             ax2.text(0.5, 0.5, '近 7 天暂无完成记录', transform=ax2.transAxes,
-                     ha='center', va='center', fontsize=11, color='#8B7355')
+                     ha='center', va='center', fontsize=11, color=_chart_sec)
         else:
             ax2.set_ylim(0, max(day_minutes) * 1.25)
         fig2.subplots_adjust(left=0.1, right=0.95, top=0.88, bottom=0.12)
@@ -3422,7 +3475,7 @@ class MainWindow(QMainWindow):
             }}
             QLabel#headerSub {{
                 font-size: 11px;
-                color: #C9B99A;
+                color: {TEXT_SEC};
             }}
 
             /* Section labels */
@@ -3463,16 +3516,16 @@ class MainWindow(QMainWindow):
                 font-size: 12px;
             }}
             QPushButton:hover {{
-                background: #FFF3E0;
+                background: {HOVER_BG};
                 border-color: {ACCENT};
             }}
             QPushButton:pressed {{
-                background: #FFE0B2;
+                background: {PRESS_BG};
             }}
             QPushButton:disabled {{
-                background: #f0f0f0;
-                color: #bbb;
-                border-color: #e0e0e0;
+                background: {DISABLE_BG};
+                color: {DISABLE_FG};
+                border-color: {DISABLE_BDR};
             }}
 
             QPushButton#startBtn {{
@@ -3492,7 +3545,7 @@ class MainWindow(QMainWindow):
             }}
 
             QPushButton#actionBtn {{
-                background: #FFF3E0;
+                background: {HOVER_BG};
                 border: 1px solid {ACCENT};
                 color: {MID};
                 font-size: 12px;
@@ -3501,19 +3554,19 @@ class MainWindow(QMainWindow):
                 border-radius: 6px;
             }}
             QPushButton#actionBtn:hover {{
-                background: #FFE0B2;
+                background: {PRESS_BG};
                 border-color: {ACCENT_HOVER};
             }}
             QPushButton#actionBtn:disabled {{
-                background: #f0f0f0;
-                color: #bbb;
-                border-color: #e0e0e0;
+                background: {DISABLE_BG};
+                color: {DISABLE_FG};
+                border-color: {DISABLE_BDR};
             }}
 
             /* Sliders */
             QSlider::groove:horizontal {{
                 height: 5px;
-                background: #E8DDD2;
+                background: {BORDER};
                 border-radius: 3px;
             }}
             QSlider::handle:horizontal {{
@@ -3568,10 +3621,10 @@ class MainWindow(QMainWindow):
                 font-size: 12px;
             }}
             QPushButton[modeToggle="true"]:hover {{
-                background: #FFF3E0;
+                background: {HOVER_BG};
             }}
             QPushButton[modeToggle="true"]:checked {{
-                background: #FFF3E0;
+                background: {HOVER_BG};
                 border-color: {ACCENT};
                 color: {MID};
                 font-weight: bold;
@@ -3602,11 +3655,11 @@ class MainWindow(QMainWindow):
             }}
             QPushButton[petThumb="true"]:hover {{
                 border-color: {ACCENT};
-                background: #FFF3E0;
+                background: {HOVER_BG};
             }}
             QPushButton[petThumb="true"]:checked {{
                 border: 3px solid {ACCENT};
-                background: #FFF3E0;
+                background: {HOVER_BG};
             }}
 
             /* Favorites scroll area */
@@ -3623,11 +3676,11 @@ class MainWindow(QMainWindow):
             }}
             QPushButton[showcaseThumb="true"]:hover {{
                 border-color: {ACCENT};
-                background: #FFF3E0;
+                background: {HOVER_BG};
             }}
             QPushButton[showcaseThumb="true"]:checked {{
                 border: 3px solid {ACCENT};
-                background: #FFF3E0;
+                background: {HOVER_BG};
             }}
 
             /* Showcase scroll area */
@@ -4763,8 +4816,90 @@ class MainWindow(QMainWindow):
             self.setStyleSheet(self._global_stylesheet())
         self._refresh_inline_styles()
 
+    def _capture_theme_styles(self):
+        """构建界面后，把「用到了配色」的控件样式存成可套色的模板。
+
+        做法：记录构建期间屏幕/工具栏总共用过哪些配色键（_theme_keys_used），
+        然后逐个控件把样式表里的**当前颜色值**换回 {key} 占位符。
+        切主题时用新颜色替换占位符再设回去 —— 这样任何在构建期用
+        self._c(...) 上色的控件都会自动跟随主题，
+        不需要在 _refresh_inline_styles 里逐个登记（漏登记就会出现
+        "深色模式下还留着浅色"）。
+
+        只处理带样式的控件；运行时动态改样式的控件（如按钮选中态）
+        本来就会在各自逻辑里重新上色。
+        """
+        used = getattr(self, "_theme_keys_used", None)
+        if not used:
+            return
+        # 当前颜色值 -> 键名（只在浅色/深色各自取值下匹配）
+        value_to_key = {}
+        for key in used:
+            try:
+                value_to_key.setdefault(self._c(key).lower(), key)
+            except Exception:  # noqa: BLE001
+                continue
+        captured = []
+        for w in self.findChildren(QWidget):
+            try:
+                ss = w.styleSheet()
+            except RuntimeError:
+                continue
+            if not ss:
+                continue
+            template = ss
+            hit = False
+            for value, key in value_to_key.items():
+                if value in template.lower():
+                    # 大小写不敏感替换
+                    template = re.sub(re.escape(value), "{%s}" % key,
+                                      template, flags=re.IGNORECASE)
+                    hit = True
+            if hit:
+                captured.append((w, template))
+        self._theme_styles = captured
+
+    def _reapply_theme_styles(self):
+        """切主题后，把捕获的模板用新配色重新套一遍。
+
+        用正则逐个替换 {key} 占位符，**不用 str.format** ——
+        模板里还留着 CSS 自己的花括号，format 会解析失败。
+        """
+        keys = getattr(self, "_theme_keys_used", ())
+        pattern = re.compile(r"\{(" + "|".join(re.escape(k) for k in keys) + r")\}")
+        for w, template in getattr(self, "_theme_styles", []):
+            try:
+                w.setStyleSheet(pattern.sub(lambda m: self._c(m.group(1)),
+                                            template))
+            except RuntimeError:
+                continue      # 控件已销毁
+
+    def _redraw_charts_for_theme(self):
+        """切主题后重画统计图（用当前选中的日期，没有就用今天）。
+
+        图表是 matplotlib 渲染成 PNG 再当 QPixmap 显示的，
+        样式表管不到它的文字颜色 —— 不重画就会在暗底上留着深色字。
+        """
+        if not getattr(self, "_study_charts_drawn", False):
+            return
+        date_str = getattr(self, "_selected_chart_date", "") or \
+            datetime.now().strftime("%Y-%m-%d")
+        try:
+            self._refresh_charts_for_date(date_str)
+        except Exception as exc:  # noqa: BLE001
+            print("[Charts] 主题切换重画失败: %s" % exc)
+
     def _refresh_inline_styles(self):
         """Re-apply all inline styles after dark mode toggle."""
+        # 先跑自动重刷：覆盖所有在构建期用 self._c(...) 上色的控件
+        self._reapply_theme_styles()
+        if hasattr(self, "_drop_area"):
+            try:
+                self._drop_area.set_dark(self._is_dark_mode)
+            except (RuntimeError, AttributeError):
+                pass
+        # 图表是渲染成 PNG 再显示的，CSS 管不到 —— 必须重画才会换色
+        self._redraw_charts_for_theme()
         btn_style = f"""
             QPushButton {{
                 background: transparent;
@@ -4971,17 +5106,17 @@ class MainWindow(QMainWindow):
             /* Header */
             QWidget#header {{
                 background: qlineargradient(x1:0, y1:0, x2:1, y2:0,
-                    stop:0 {DARK_HEADER}, stop:1 #2A1F14);
+                    stop:0 {DARK_HEADER}, stop:1 {DARK_BG});
             }}
             QLabel#headerTitle {{
                 font-size: 24px;
                 font-weight: bold;
-                color: {ACCENT};
+                color: {DARK_ACCENT};
                 font-family: "Segoe UI", "Microsoft YaHei";
             }}
             QLabel#headerSub {{
                 font-size: 11px;
-                color: #A08B6E;
+                color: {DARK_TEXT_SEC};
             }}
 
             /* Section labels */
@@ -5000,7 +5135,7 @@ class MainWindow(QMainWindow):
             QFrame#card QLabel#cardTitle {{
                 font-size: 12px;
                 font-weight: bold;
-                color: {ACCENT};
+                color: {DARK_ACCENT};
                 padding-bottom: 6px;
                 border-bottom: 1px solid {DARK_BORDER};
             }}
@@ -5022,20 +5157,20 @@ class MainWindow(QMainWindow):
                 font-size: 12px;
             }}
             QPushButton:hover {{
-                background: #4A3525;
-                border-color: {ACCENT};
+                background: {DARK_BORDER};
+                border-color: {DARK_ACCENT};
             }}
             QPushButton:pressed {{
-                background: #5A4535;
+                background: {DARK_BORDER};
             }}
             QPushButton:disabled {{
-                background: #2A1F14;
-                color: #6B5A48;
-                border-color: #3A2A1A;
+                background: {DARK_BG};
+                color: {DARK_TEXT_SEC};
+                border-color: {DARK_CARD};
             }}
 
             QPushButton#startBtn {{
-                background: {ACCENT};
+                background: {DARK_ACCENT};
                 color: white;
                 border: none;
                 font-weight: bold;
@@ -5043,16 +5178,16 @@ class MainWindow(QMainWindow):
                 border-radius: 8px;
             }}
             QPushButton#startBtn:hover {{
-                background: {ACCENT_HOVER};
+                background: {DARK_ACCENT_HOVER};
             }}
             QPushButton#startBtn:disabled {{
-                background: #3A2A1A;
-                color: #6B5A48;
+                background: {DARK_CARD};
+                color: {DARK_TEXT_SEC};
             }}
 
             QPushButton#actionBtn {{
-                background: #3A2A1A;
-                border: 1px solid {ACCENT};
+                background: {DARK_CARD};
+                border: 1px solid {DARK_ACCENT};
                 color: {DARK_TEXT};
                 font-size: 12px;
                 font-weight: bold;
@@ -5060,30 +5195,30 @@ class MainWindow(QMainWindow):
                 border-radius: 6px;
             }}
             QPushButton#actionBtn:hover {{
-                background: #4A3525;
-                border-color: {ACCENT_HOVER};
+                background: {DARK_BORDER};
+                border-color: {DARK_ACCENT_HOVER};
             }}
             QPushButton#actionBtn:disabled {{
-                background: #2A1F14;
-                color: #6B5A48;
-                border-color: #3A2A1A;
+                background: {DARK_BG};
+                color: {DARK_TEXT_SEC};
+                border-color: {DARK_CARD};
             }}
 
             /* Sliders */
             QSlider::groove:horizontal {{
                 height: 5px;
-                background: #3A2A1A;
+                background: {DARK_CARD};
                 border-radius: 3px;
             }}
             QSlider::handle:horizontal {{
                 width: 16px;
                 height: 16px;
-                background: {ACCENT};
+                background: {DARK_ACCENT};
                 border-radius: 8px;
                 margin: -6px 0;
             }}
             QSlider::handle:horizontal:hover {{
-                background: {ACCENT_HOVER};
+                background: {DARK_ACCENT_HOVER};
             }}
 
             /* Checkboxes */
@@ -5096,11 +5231,11 @@ class MainWindow(QMainWindow):
                 width: 16px;
                 height: 16px;
                 border-radius: 3px;
-                border: 2px solid #6B5A48;
+                border: 2px solid {DARK_TEXT_SEC};
             }}
             QCheckBox::indicator:checked {{
-                background: {ACCENT};
-                border-color: {ACCENT};
+                background: {DARK_ACCENT};
+                border-color: {DARK_ACCENT};
             }}
 
             /* Status bar */
@@ -5127,12 +5262,12 @@ class MainWindow(QMainWindow):
                 font-size: 12px;
             }}
             QPushButton[modeToggle="true"]:hover {{
-                background: #4A3525;
+                background: {DARK_BORDER};
             }}
             QPushButton[modeToggle="true"]:checked {{
-                background: #4A3525;
-                border-color: {ACCENT};
-                color: {ACCENT};
+                background: {DARK_BORDER};
+                border-color: {DARK_ACCENT};
+                color: {DARK_ACCENT};
                 font-weight: bold;
             }}
 
@@ -5142,12 +5277,12 @@ class MainWindow(QMainWindow):
                 background: transparent;
             }}
             QScrollBar::handle:horizontal {{
-                background: #4A3525;
+                background: {DARK_BORDER};
                 border-radius: 3px;
                 min-width: 20px;
             }}
             QScrollBar::handle:horizontal:hover {{
-                background: #5A4535;
+                background: {DARK_BORDER};
             }}
             QScrollBar::add-line:horizontal, QScrollBar::sub-line:horizontal {{
                 width: 0px;
@@ -5158,12 +5293,12 @@ class MainWindow(QMainWindow):
                 background: transparent;
             }}
             QScrollBar::handle:vertical {{
-                background: #4A3525;
+                background: {DARK_BORDER};
                 border-radius: 3px;
                 min-height: 20px;
             }}
             QScrollBar::handle:vertical:hover {{
-                background: #5A4535;
+                background: {DARK_BORDER};
             }}
             QScrollBar::add-line:vertical, QScrollBar::sub-line:vertical {{
                 height: 0px;
@@ -5173,15 +5308,15 @@ class MainWindow(QMainWindow):
             QPushButton[petThumb="true"] {{
                 border: 2px solid {DARK_BORDER};
                 border-radius: 8px;
-                background: #3A2A1A;
+                background: {DARK_CARD};
             }}
             QPushButton[petThumb="true"]:hover {{
-                border-color: {ACCENT};
-                background: #4A3525;
+                border-color: {DARK_ACCENT};
+                background: {DARK_BORDER};
             }}
             QPushButton[petThumb="true"]:checked {{
-                border: 3px solid {ACCENT};
-                background: #4A3525;
+                border: 3px solid {DARK_ACCENT};
+                background: {DARK_BORDER};
             }}
 
             /* Favorites scroll area */
@@ -5194,15 +5329,15 @@ class MainWindow(QMainWindow):
             QPushButton[showcaseThumb="true"] {{
                 border: 2px solid {DARK_BORDER};
                 border-radius: 8px;
-                background: #3A2A1A;
+                background: {DARK_CARD};
             }}
             QPushButton[showcaseThumb="true"]:hover {{
-                border-color: {ACCENT};
-                background: #4A3525;
+                border-color: {DARK_ACCENT};
+                background: {DARK_BORDER};
             }}
             QPushButton[showcaseThumb="true"]:checked {{
-                border: 3px solid {ACCENT};
-                background: #4A3525;
+                border: 3px solid {DARK_ACCENT};
+                background: {DARK_BORDER};
             }}
 
             /* Showcase scroll area */
@@ -5221,7 +5356,7 @@ class MainWindow(QMainWindow):
                 font-size: 11px;
             }}
             QComboBox:hover {{
-                border-color: {ACCENT};
+                border-color: {DARK_ACCENT};
             }}
             QComboBox::drop-down {{
                 border: none;
