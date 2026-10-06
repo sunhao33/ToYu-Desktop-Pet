@@ -247,7 +247,8 @@ class DesktopToolsHub:
     def _on_rest(self, rest_minutes, count):
         self.settings.clipboard_history = self.clipboard.history
         if self.notify:
-            self.notify("eye_rest", f"👀  该让眼睛歇一会儿了！", f"{rest_minutes} 分钟后再继续 · 已专注 {count} 轮")
+            self.notify("eye_rest", "👀  该让眼睛歇一会儿了！",
+                        f"{rest_minutes} 分钟后再继续 · 已专注 {count} 轮")
         self._emit("eyedata", self.eye_care)
 
     def _on_resume(self):

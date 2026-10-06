@@ -165,14 +165,14 @@ class SettingsDialog(QDialog):
         btn_layout.addStretch()
 
         reset_btn = QPushButton("🔄 恢复默认")
-        reset_btn.setStyleSheet(f"""
-            QPushButton {{
+        reset_btn.setStyleSheet("""
+            QPushButton {
                 background: #95A5A6;
                 color: white;
-            }}
-            QPushButton:hover {{
+            }
+            QPushButton:hover {
                 background: #7F8C8D;
-            }}
+            }
         """)
         reset_btn.clicked.connect(self._reset_defaults)
         btn_layout.addWidget(reset_btn)

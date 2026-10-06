@@ -8,6 +8,10 @@ import ctypes
 from ctypes import wintypes
 from datetime import datetime
 from enum import Enum as _Enum
+# L147 有 `self._on_turn_finished: Optional[Callable[[str], None]] = None`
+# 这类注解。Python 3.14 因 PEP 649（注解延迟求值）不会崩，但 3.12 及以前
+# 会直接 NameError —— 显式导入才是对的。
+from typing import Callable, Optional
 from PyQt6.QtCore import (
     Qt, QTimer, QPoint, QRect, QSize
 )

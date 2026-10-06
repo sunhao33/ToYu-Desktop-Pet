@@ -2,6 +2,59 @@
   ToYu 桌面宠物 — 更新日志
 ============================================================
 
+v0.82.0 (2026-10-06)
+────────────────────
+【代码审查：修 3 个真 bug + 深色模式覆盖到独立窗口】
+
+  一、**深色模式不持久化**（真 bug，用户可感知）
+      两个切换函数（_toggle_dark_mode / _on_settings_dark_mode）只改内存里的
+      _is_dark_mode，__init__ 里写死 False —— **重启就回到浅色**。
+      新增 settings.dark_mode 字段并接上读写；抽出 _apply_dark_mode() 供
+      「切换」和「启动恢复」共用。实测：切深色 -> 重启 -> 仍是深色 ✓
+
+  二、**日历右键菜单的事件事永远是黑点**（真 bug）
+      calendar_widget.py:327 算出了事件颜色存进 dot，下一行却硬编码 ●。
+      同文件的工具提示用的是带颜色的 <span>，两处表现不一致。
+      QAction 不支持富文本，改用 setIcon 画 10x10 真彩色圆点。
+
+  三、**日历"选中非今天"白字浅底看不清**（真 bug）
+      _day_style 对选中态写死 color: white，浅色下底色是 #E8D5C0 米色，
+      对比度不足。改为按底色明暗自动选字色。
+
+  四、**深色模式覆盖到原先没接主题的窗口**（这是"深色做得不好"的根因）
+      主题系统本身有自动重刷机制（_capture_theme_styles），但这几个
+      独立窗口/控件根本没接进来：
+        · ui/bead_editor.py   40 处硬编码 —— 深色下**整个窗口还是白底**
+        · ui/calendar_widget.py 10 处 —— 白底 + 白色圆形翻页按钮
+        · 日历右键菜单           —— 白底橙色高亮
+        · ui/import_dialog.py    9 处 —— 白底 + 蓝色系
+      新增 ui/theme.py 集中调色板（原来 ACCENT/LIGHT_BG/BORDER 等
+      在 6 个文件里各抄一份，共 29 个重复常量），并提供 Palette / is_dark()。
+      各窗口加 set_dark()，主窗口切主题时通过 _notify_theme_windows() 推送。
+
+      顺带统一配色：日历原用**橙色系**（#FF6B47）、导入对话框用**蓝色系**
+      （#4a90d9），都跟软件主色（土豆金 #C49A3C）不是一家人，已归拢。
+
+  五、**Python 版本兼容隐患**
+      pet_engine/pet_window.py:147 用了 Optional / Callable 却没导入 typing。
+      Python 3.14 因 PEP 649（注解延迟求值）不崩，但 **3.12 及以前会直接
+      NameError**。已补导入。
+
+  六、清理死代码
+      CARD_W / sb_style / current_name / name / pet_cx 五处赋值后从未使用；
+      重复导入 QImage、未用的 Counter、AICompanion；2 处无占位符的 f-string。
+
+  七、测试
+      全量回归 **27/27 通过**（133.1 秒）。
+      新增验证脚本：深色持久化往返、日历跟随主题、拼豆编辑器主题往返。
+
+  遗留（已确认但未改）：
+      · ui/import_dialog.py **全项目零引用**（主窗口在 _on_select_image 里
+        内联做了同样的事），是完整的死文件。已顺手主题化，但没删 ——
+        等确认是否要补上这个对话框再做决定。
+      · 86 处未用导入：多是 try/except 里的可选依赖保护（如 rembg、
+        matplotlib），属正常写法，不动。
+
 v0.81.0 (2026-10-05)
 ────────────────────
 【宠物页排版重做 + 修一处渲染 bug】

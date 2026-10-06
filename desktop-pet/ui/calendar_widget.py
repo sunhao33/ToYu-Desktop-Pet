@@ -8,23 +8,91 @@ from PyQt6.QtWidgets import (QWidget, QVBoxLayout, QHBoxLayout, QLabel, QPushBut
                               QSizePolicy, QMenu, QScrollArea, QFrame, QDialog,
                               QLineEdit, QDialogButtonBox)
 
-ACCENT = "#FF6B47"
-ACCENT_LIGHT = "#FFD4C4"
-TODAY_BG = "#FFF0E6"
-WEEKDAY = "#8B6914"
-WEEKEND = "#E74C3C"
-NORMAL = "#5A3E18"
-OTHER_MONTH = "#CCB89A"
-HEADER = "#FF6B47"
-BTN_HOVER = "#FFEEE0"
+from ui.theme import Palette
 
-EVENT_COLORS = {
+# ── 日历配色 ──────────────────────────────────────────────
+# 原来这套是**独立的橙色系**（#FF6B47 / #FFD4C4），跟软件主色（土豆金
+# #C49A3C）不是一家人；而且全部写死浅色，主窗口切深色后日历仍是白底 +
+# 白圆按钮，非常突兀。
+#
+# 现在改成「浅色/深色两套」，由 apply_palette(dark) 在运行时切换。
+# 仍然用模块级常量名（ACCENT、HEADER…）是因为它们在这个文件里被引用了
+# 40 次，逐个改成 self._p.xxx 改动面太大、容易漏；这里用「换值不换名」
+# 的办法，改一处就全局生效，风险最小。
+#
+# 浅色这套同时把色相从橙色往品牌金靠拢，和主界面统一。
+_LIGHT = {
+    "ACCENT":       "#C49A3C",   # 品牌土豆金（原 #FF6B47 橙）
+    "ACCENT_LIGHT": "#E8D5C0",   # 暖米色描边（原 #FFD4C4 橙粉）
+    "TODAY_BG":     "#FFF3E0",
+    "WEEKDAY":      "#8B7355",
+    "WEEKEND":      "#C0392B",
+    "NORMAL":       "#2C1810",
+    "OTHER_MONTH":  "#BCAAA4",
+    "HEADER":       "#C49A3C",
+    "BTN_HOVER":    "#FFF3E0",
+    "SUCCESS":      "#6B9B37",
+}
+
+_DARK = {
+    "ACCENT":       "#D2A44A",   # 冷底上提亮，保证可读
+    "ACCENT_LIGHT": "#33383F",
+    "TODAY_BG":     "#2A2E34",
+    "WEEKDAY":      "#959DA6",
+    "WEEKEND":      "#E06C75",   # 深色下的语义红（原 #E74C3C 对比不足）
+    "NORMAL":       "#E4E7EB",
+    "OTHER_MONTH":  "#5F6670",
+    "HEADER":       "#D2A44A",
+    "BTN_HOVER":    "#2C3036",
+    "SUCCESS":      "#7FB069",
+}
+
+# 事件标注色：浅色/深色各一套（深色下的浅底要换暗底，否则白得刺眼）
+_EVENT_LIGHT = {
     "yellow": ("#F5A623", "#FFF8E1"),
     "blue":   ("#4A90D9", "#E3F2FD"),
     "green":  ("#2ECC71", "#E8F5E9"),
 }
+_EVENT_DARK = {
+    "yellow": ("#E0B05A", "#3A3222"),
+    "blue":   ("#5AA9E6", "#1F2C38"),
+    "green":  ("#7FB069", "#243325"),
+}
+EVENT_COLORS = dict(_EVENT_LIGHT)
 DEFAULT_EVENT_COLOR = "yellow"
-SUCCESS = "#4CAF50"
+
+# 当前生效的一整套（由 apply_palette 改写）
+ACCENT = _LIGHT["ACCENT"]
+ACCENT_LIGHT = _LIGHT["ACCENT_LIGHT"]
+TODAY_BG = _LIGHT["TODAY_BG"]
+WEEKDAY = _LIGHT["WEEKDAY"]
+WEEKEND = _LIGHT["WEEKEND"]
+NORMAL = _LIGHT["NORMAL"]
+OTHER_MONTH = _LIGHT["OTHER_MONTH"]
+HEADER = _LIGHT["HEADER"]
+BTN_HOVER = _LIGHT["BTN_HOVER"]
+SUCCESS = _LIGHT["SUCCESS"]
+
+_IS_DARK = False
+
+
+def apply_palette(dark):
+    """切换日历用的整套配色（模块级常量就地改写）。"""
+    global ACCENT, ACCENT_LIGHT, TODAY_BG, WEEKDAY, WEEKEND, NORMAL
+    global OTHER_MONTH, HEADER, BTN_HOVER, SUCCESS, EVENT_COLORS, _IS_DARK
+    src = _DARK if dark else _LIGHT
+    ACCENT = src["ACCENT"]
+    ACCENT_LIGHT = src["ACCENT_LIGHT"]
+    TODAY_BG = src["TODAY_BG"]
+    WEEKDAY = src["WEEKDAY"]
+    WEEKEND = src["WEEKEND"]
+    NORMAL = src["NORMAL"]
+    OTHER_MONTH = src["OTHER_MONTH"]
+    HEADER = src["HEADER"]
+    BTN_HOVER = src["BTN_HOVER"]
+    SUCCESS = src["SUCCESS"]
+    EVENT_COLORS = dict(_EVENT_DARK if dark else _EVENT_LIGHT)
+    _IS_DARK = bool(dark)
 
 SAVE_FILE = os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))),
                          "calendar_events.json")
@@ -127,13 +195,13 @@ class EventDialog(QDialog):
             if n == name:
                 btn.setStyleSheet(
                     f"QPushButton {{ background: {dot_color}; border-radius: 14px;"
-                    f" border: 3px solid #5A3E18; }}"
+                    f" border: 3px solid {NORMAL}; }}"
                 )
             else:
                 btn.setStyleSheet(
                     f"QPushButton {{ background: {dot_color}; border-radius: 14px;"
                     f" border: 3px solid transparent; }}"
-                    f"QPushButton:hover {{ border-color: #5A3E18; }}"
+                    f"QPushButton:hover {{ border-color: {NORMAL}; }}"
                 )
 
     def get_result(self):
@@ -159,6 +227,61 @@ class CuteCalendar(QWidget):
         self._load_events()
         self._init_ui()
         self._update_calendar()
+
+    def set_dark(self, dark):
+        """切换深色模式：换掉整套配色并重刷。
+
+        原来这个控件写死浅色（白底 + 白色圆形翻页按钮），主窗口切深色后
+        它还是白花花一块，和数据面板其它卡片完全不搭。
+        """
+        apply_palette(dark)
+        self._restyle()
+
+    def _restyle(self):
+        """按当前配色重刷所有用到颜色的控件（含动态生成的日历格）。"""
+        try:
+            # 日格样式是在 _update_calendar 里拼字符串生成的，重跑即可
+            self._update_calendar()
+
+            if hasattr(self, "_title"):
+                self._title.setStyleSheet(
+                    f"color: {HEADER}; font-size: 16px; font-weight: bold;"
+                    " padding: 2px;")
+            for btn in (getattr(self, "_prev_btn", None),
+                        getattr(self, "_next_btn", None)):
+                if btn is not None:
+                    btn.setStyleSheet(self._nav_btn_style())
+            if hasattr(self, "_today_btn"):
+                self._today_btn.setStyleSheet(self._today_btn_style())
+            if hasattr(self, "_info_lbl"):
+                self._info_lbl.setStyleSheet(
+                    f"color: {WEEKDAY}; font-size: 11px;")
+            for i, lbl in enumerate(getattr(self, "_weekday_labels", ())):
+                lbl.setStyleSheet(
+                    "color: %s; font-size: 13px; font-weight: bold;"
+                    % (WEEKEND if i >= 5 else WEEKDAY))
+            if getattr(self, "_sep", None) is not None:
+                self._sep.setStyleSheet(f"color: {ACCENT_LIGHT}; margin: 4px 0;")
+            if hasattr(self, "_events_label"):
+                self._events_label.setStyleSheet(
+                    f"color: {NORMAL}; font-size: 12px; padding: 4px 0;")
+        except (RuntimeError, AttributeError) as exc:
+            print("[Calendar] 切主题刷新失败: %s" % exc)
+
+    def _today_btn_style(self):
+        return (
+            f"QPushButton {{ color: {ACCENT}; background: {TODAY_BG};"
+            f" border-radius: 8px; padding: 4px 14px; font-size: 12px;"
+            f" border: 1px solid {ACCENT_LIGHT}; }}"
+            f"QPushButton:hover {{ background: {ACCENT}; color: #FFFFFF; }}")
+
+    def _nav_btn_style(self):
+        return (
+            f"QPushButton {{ color: {ACCENT}; background: {TODAY_BG};"
+            f" border-radius: 18px; font-size: 16px; font-weight: bold;"
+            f" border: 2px solid {ACCENT_LIGHT}; }}"
+            f"QPushButton:hover {{ background: {ACCENT}; color: #FFFFFF;"
+            f" border-color: {ACCENT}; }}")
 
     def _init_ui(self):
         layout = QVBoxLayout(self)
@@ -190,24 +313,20 @@ class CuteCalendar(QWidget):
 
         self._today_btn = QPushButton("📅 今天")
         self._today_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        self._today_btn.setStyleSheet(
-            f"QPushButton {{ color: {ACCENT}; background: {TODAY_BG};"
-            f" border-radius: 8px; padding: 4px 14px; font-size: 12px;"
-            f" border: 1px solid {ACCENT_LIGHT}; }}"
-            f"QPushButton:hover {{ background: {ACCENT}; color: white; }}"
-        )
+        self._today_btn.setStyleSheet(self._today_btn_style())
         self._today_btn.clicked.connect(self._go_today)
         info_row.addWidget(self._today_btn)
 
         self._info_lbl = QLabel()
         self._info_lbl.setAlignment(Qt.AlignmentFlag.AlignRight | Qt.AlignmentFlag.AlignVCenter)
-        self._info_lbl.setStyleSheet(f"color: #8B6914; font-size: 11px;")
+        self._info_lbl.setStyleSheet(f"color: {WEEKDAY}; font-size: 11px;")
         info_row.addWidget(self._info_lbl, 1)
 
         layout.addLayout(info_row)
 
         week_row = QHBoxLayout()
         week_row.setSpacing(0)
+        self._weekday_labels = []
         for day in ["一", "二", "三", "四", "五", "六", "日"]:
             lbl = QLabel(day)
             lbl.setAlignment(Qt.AlignmentFlag.AlignCenter)
@@ -216,6 +335,7 @@ class CuteCalendar(QWidget):
             color = WEEKEND if day in ["六", "日"] else WEEKDAY
             lbl.setStyleSheet(f"color: {color}; font-size: 13px; font-weight: bold;")
             week_row.addWidget(lbl)
+            self._weekday_labels.append(lbl)
         layout.addLayout(week_row)
 
         self._day_btns = []
@@ -240,10 +360,10 @@ class CuteCalendar(QWidget):
             grid.addLayout(row_layout)
         layout.addLayout(grid)
 
-        sep = QFrame()
-        sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f"color: {ACCENT_LIGHT}; margin: 4px 0;")
-        layout.addWidget(sep)
+        self._sep = QFrame()
+        self._sep.setFrameShape(QFrame.Shape.HLine)
+        self._sep.setStyleSheet(f"color: {ACCENT_LIGHT}; margin: 4px 0;")
+        layout.addWidget(self._sep)
 
         self._events_label = QLabel()
         self._events_label.setWordWrap(True)
@@ -259,12 +379,7 @@ class CuteCalendar(QWidget):
         btn = QPushButton(text)
         btn.setFixedSize(36, 36)
         btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        btn.setStyleSheet(
-            f"QPushButton {{ color: {ACCENT}; background: {TODAY_BG};"
-            f" border-radius: 18px; font-size: 16px; font-weight: bold;"
-            f" border: 2px solid {ACCENT_LIGHT}; }}"
-            f"QPushButton:hover {{ background: {ACCENT}; color: white; border-color: {ACCENT}; }}"
-        )
+        btn.setStyleSheet(self._nav_btn_style())
         return btn
 
     def _prev_month(self):
@@ -299,6 +414,44 @@ class CuteCalendar(QWidget):
             self._update_calendar()
             self.date_selected.emit(date.toString("yyyy-MM-dd"))
 
+    def _menu_style(self):
+        """右键菜单样式（跟随主题）。
+
+        原来写死白底 + 橙色高亮，深色模式下弹出一块白色菜单，
+        和主界面完全脱节。
+        """
+        p = Palette(_IS_DARK)
+        return (
+            "QMenu { background: %(card)s; border: 1px solid %(border)s;"
+            " border-radius: 8px; padding: 6px; }"
+            "QMenu::item { padding: 6px 20px; color: %(text)s;"
+            " border-radius: 4px; }"
+            "QMenu::item:selected { background: %(hover_bg)s;"
+            " color: %(accent)s; }"
+            "QMenu::separator { height: 1px; background: %(border)s;"
+            " margin: 4px 8px; }"
+            % {"card": p.card, "border": p.border, "text": p.text,
+               "hover_bg": p.hover_bg, "accent": p.accent})
+
+    def _dot_icon(self, color_key):
+        """画一个该事件颜色的小圆点，用作菜单项图标。
+
+        QAction 不支持富文本，所以不能像工具提示那样写 <span>；
+        返回一个 10x10 的圆点图标代替（原来干脆写死黑点 ●）。
+        """
+        from PyQt6.QtGui import QIcon, QPixmap
+        rgb = EVENT_COLORS.get(color_key, EVENT_COLORS[DEFAULT_EVENT_COLOR])[0]
+        size = 10
+        pm = QPixmap(size, size)
+        pm.fill(Qt.GlobalColor.transparent)
+        painter = QPainter(pm)
+        painter.setRenderHint(QPainter.RenderHint.Antialiasing, True)
+        painter.setPen(Qt.PenStyle.NoPen)
+        painter.setBrush(QBrush(QColor(rgb)))
+        painter.drawEllipse(0, 0, size - 1, size - 1)
+        painter.end()
+        return QIcon(pm)
+
     def _on_right_click(self, row, col, pos):
         idx = row * 7 + col
         btn = self._day_btns[idx]
@@ -310,12 +463,7 @@ class CuteCalendar(QWidget):
         existing = self._events.get(key, [])
 
         menu = QMenu(self)
-        menu.setStyleSheet(
-            "QMenu { background: white; border: 1px solid #FFD4C4;"
-            " border-radius: 8px; padding: 6px; }"
-            "QMenu::item { padding: 6px 20px; color: #5A3E18; border-radius: 4px; }"
-            "QMenu::item:selected { background: #FFF0E6; color: #FF6B47; }"
-        )
+        menu.setStyleSheet(self._menu_style())
 
         add_action = menu.addAction("📌 添加标注")
 
@@ -324,8 +472,16 @@ class CuteCalendar(QWidget):
             for evt in existing:
                 text = evt["text"] if isinstance(evt, dict) else evt
                 color = evt.get("color", DEFAULT_EVENT_COLOR) if isinstance(evt, dict) else DEFAULT_EVENT_COLOR
-                dot = EVENT_COLORS.get(color, EVENT_COLORS[DEFAULT_EVENT_COLOR])[0]
-                del_action = menu.addAction(f"● {text}")
+                # 用事件自己的颜色画圆点。
+                # 原来这里算出了 dot 却没用，菜单里一律是黑点 ——
+                # 同一个文件里的工具提示（_update_upcoming）用的是带颜色的
+                # span，两处表现不一致。QAction 不支持富文本，
+                # 所以用 setIcon 画一个真正带颜色的圆点。
+                del_action = menu.addAction(text)
+                try:
+                    del_action.setIcon(self._dot_icon(color))
+                except Exception:      # noqa: BLE001
+                    del_action.setText(f"● {text}")
                 del_action.setData(("del", key, evt))
 
         action = menu.exec(btn.mapToGlobal(pos))
@@ -479,6 +635,9 @@ class CuteCalendar(QWidget):
             self._task_history = {}
 
     def _day_style(self, color, is_today, is_selected, is_current, evt_color):
+        # "选中但不是今天"用的是浅色底（ACCENT_LIGHT），白字在上面几乎看不见
+        # —— 浅色下它被换成 #E8D5C0 米色，白字对比度不足。按底色明暗选字色。
+        on_light = _IS_DARK      # 深色模式下 ACCENT_LIGHT 是深灰，才配白字
         if is_today and is_selected:
             base = (
                 f"QPushButton {{ color: white; background: {ACCENT};"
@@ -492,8 +651,9 @@ class CuteCalendar(QWidget):
                 f" border: 2px solid {ACCENT}; }}"
             )
         elif is_selected:
+            fg = "#FFFFFF" if on_light else NORMAL
             base = (
-                f"QPushButton {{ color: white; background: {ACCENT_LIGHT};"
+                f"QPushButton {{ color: {fg}; background: {ACCENT_LIGHT};"
                 f" border-radius: 8px; font-size: 13px; font-weight: bold;"
                 f" border: none; }}"
             )

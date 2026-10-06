@@ -900,7 +900,6 @@ class ChatBubble(QWidget):
         if not self._pet_window:
             return
         pet_geo = self._pet_window.geometry()
-        pet_cx = pet_geo.x() + pet_geo.width() // 2
         x = pet_geo.x() + pet_geo.width() + 10
         y = pet_geo.y() + pet_geo.height() // 2 - self.height() // 2
         screen = QApplication.primaryScreen().availableGeometry()

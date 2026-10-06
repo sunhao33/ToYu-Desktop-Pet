@@ -271,7 +271,11 @@ class MainWindow(QMainWindow):
         self._app_data_dir = os.path.join(
             os.path.expanduser("~"), ".desktop_pet", "images"
         )
-        self._is_dark_mode = False
+        # 深色模式从设置恢复（原来写死 False，用户上次选的深色重启就丢了）
+        try:
+            self._is_dark_mode = bool(self.settings.dark_mode)
+        except Exception:      # noqa: BLE001
+            self._is_dark_mode = False
         # 主题重刷用：构建期记录用到的配色键，构建完捕获样式模板
         self._theme_keys_used = set()
         self._theme_styles = []
@@ -293,6 +297,13 @@ class MainWindow(QMainWindow):
         self._init_ui()
         self._capturing_theme = False
         self._capture_theme_styles()
+        # 恢复上次的深色设置。必须在 _capture_theme_styles 之后 ——
+        # 那时样式模板才捕获好，_apply_dark_mode 才能把它们换成深色值。
+        if self._is_dark_mode:
+            try:
+                self._apply_dark_mode()
+            except Exception as exc:      # noqa: BLE001
+                print("[Theme] 启动时套用深色失败: %s" % exc)
         self._init_tray()
         self._restore_state()
         self._apply_content_minimum_width()
@@ -1463,6 +1474,13 @@ class MainWindow(QMainWindow):
 
         from ui.calendar_widget import CuteCalendar
         self._calendar = CuteCalendar()
+        # 深色启动时：_apply_dark_mode() 在 _init_ui 之前就跑过了，
+        # 那时日历还不存在，所以这里补一次，否则日历会停在浅色配色
+        if self._is_dark_mode:
+            try:
+                self._calendar.set_dark(True)
+            except Exception as exc:      # noqa: BLE001
+                print("[Theme] 日历初始深色失败: %s" % exc)
         self._calendar.date_selected.connect(self._on_calendar_date_selected)
         right_card_layout.addWidget(self._calendar)
 
@@ -2352,10 +2370,7 @@ class MainWindow(QMainWindow):
 
     def _on_fav_thumb_context_menu(self, pos, path, btn):
         menu = QMenu(self)
-        favs = self.settings.favorites
-        item = next((f for f in favs if f["path"] == path), None)
-        current_name = item["name"] if item else os.path.basename(path)
-
+        # 改名逻辑在 _on_rename_favorite 里各自取名，这里不需要提前算
         rename_action = QAction("修改名字", menu)
         rename_action.triggered.connect(lambda: self._on_rename_favorite(path))
         menu.addAction(rename_action)
@@ -2588,7 +2603,6 @@ class MainWindow(QMainWindow):
         menu = QMenu(self)
         png_path = creation.get("png_path", "")
         json_path = creation.get("json_path", "")
-        name = creation.get("display_name") or creation.get("name", "")
 
         apply_action = QAction("应用为宠物", menu)
         apply_action.triggered.connect(
@@ -3604,15 +3618,13 @@ class MainWindow(QMainWindow):
         import matplotlib
         matplotlib.use('Agg')
         import matplotlib.pyplot as plt
-        from PyQt6.QtGui import QPixmap, QImage
+        from PyQt6.QtGui import QPixmap
         import io, json, os
-        from collections import Counter, defaultdict
+        from collections import defaultdict
         from datetime import datetime, timedelta
 
         plt.rcParams['font.sans-serif'] = ['Microsoft YaHei', 'SimHei', 'sans-serif']
         plt.rcParams['axes.unicode_minus'] = False
-
-        CARD_W = max(self._pie_label.width(), 130)
         pie_colors = ['#FF6B6B', '#4ECDC4', '#45B7D1', '#96CEB4', '#FFEAA7',
                       '#DDA0DD', '#98D8C8', '#F7DC6F', '#BB8FCE', '#85C1E9']
         bar_color_active = '#4ECDC4'
@@ -4130,15 +4142,13 @@ class MainWindow(QMainWindow):
         self.settings.walking_speed_min = max(0.3, speed * 0.3)
 
     def _on_settings_dark_mode(self, enabled):
-        """实时预览深色模式"""
+        """设置对话框里的深色开关（实时预览 + 持久化）"""
         self._is_dark_mode = enabled
-        if enabled:
-            self._dark_mode_btn.setText("☀️ 浅色")
-            self.setStyleSheet(self._dark_stylesheet())
-        else:
-            self._dark_mode_btn.setText("🌙 深色")
-            self.setStyleSheet(self._global_stylesheet())
-        self._refresh_inline_styles()
+        self._apply_dark_mode()
+        try:
+            self.settings.dark_mode = enabled
+        except Exception as exc:      # noqa: BLE001
+            print("[Theme] 保存深色设置失败: %s" % exc)
 
     def _on_auto_home_changed(self, value):
         """自动回家时间变更"""
@@ -5151,7 +5161,7 @@ class MainWindow(QMainWindow):
     def _save_ai_settings(self):
         """Save AI settings from the AI page."""
         try:
-            from pet_engine.pet_ai import AIConfig, AICompanion
+            from pet_engine.pet_ai import AIConfig
             config = AIConfig()
             config.enabled = self._ai_enabled_check.isChecked()
             config.api_base = self._ai_api_base_input.text().strip()
@@ -5185,6 +5195,15 @@ class MainWindow(QMainWindow):
     def _toggle_dark_mode(self):
         """切换深色模式"""
         self._is_dark_mode = not self._is_dark_mode
+        self._apply_dark_mode()
+        # 持久化：原来只改内存，重启就丢（用户反馈过"深色设置没保存"）
+        try:
+            self.settings.dark_mode = self._is_dark_mode
+        except Exception as exc:      # noqa: BLE001
+            print("[Theme] 保存深色设置失败: %s" % exc)
+
+    def _apply_dark_mode(self):
+        """按当前 _is_dark_mode 套用样式（切换与启动恢复共用）。"""
         if self._is_dark_mode:
             self._dark_mode_btn.setText("☀️ 浅色")
             self._dark_mode_btn.setToolTip("切换到浅色模式")
@@ -5194,6 +5213,35 @@ class MainWindow(QMainWindow):
             self._dark_mode_btn.setToolTip("切换到深色模式")
             self.setStyleSheet(self._global_stylesheet())
         self._refresh_inline_styles()
+        # 通知独立窗口跟随主题（拼豆编辑器、导入对话框等原来不跟）
+        self._notify_theme_windows()
+
+    def _notify_theme_windows(self):
+        """把当前主题推给需要手动跟随的控件/独立窗口。
+
+        这些控件不在 _theme_styles 的自动重刷范围里：
+          · 日历：配色是模块级常量 + 动态拼字符串生成的日格样式
+          · 拼豆编辑器 / 导入对话框：独立顶层窗口，样式各自维护
+        """
+        # 日历控件（数据面板里）
+        cal = getattr(self, "_calendar", None)
+        if cal is not None and hasattr(cal, "set_dark"):
+            try:
+                cal.set_dark(self._is_dark_mode)
+            except Exception as exc:      # noqa: BLE001
+                print("[Theme] 日历跟随主题失败: %s" % exc)
+
+        for attr in ("_bead_editor", "_import_dialog", "_settings_dialog_obj"):
+            win = getattr(self, attr, None)
+            if win is None:
+                continue
+            setter = getattr(win, "set_dark", None) or \
+                getattr(win, "apply_theme", None)
+            if callable(setter):
+                try:
+                    setter(self._is_dark_mode)
+                except Exception as exc:      # noqa: BLE001
+                    print("[Theme] %s 跟随主题失败: %s" % (attr, exc))
 
     def _capture_theme_styles(self):
         """构建界面后，把「用到了配色」的控件样式存成可套色的模板。
@@ -5319,7 +5367,8 @@ class MainWindow(QMainWindow):
         for btn in self._page_btns.values():
             btn.setStyleSheet(btn_style)
 
-        sb_style = f"QScrollBar::handle:vertical {{ background: {self._c('handle')}; border-radius: 3px; min-height: 20px; }}"
+        # 滚动条手柄颜色：用正则替换已有的 handle 规则（不整段重设样式表，
+        # 否则会把各滚动区自己的其它规则一起冲掉）
         for scroll in self.findChildren(QScrollArea):
             old = scroll.styleSheet()
             if 'QScrollBar::handle:vertical' in old:

@@ -368,6 +368,18 @@ class SettingsManager:
     def typing_enabled(self, value):
         self._settings.setValue("ui/typing_enabled", bool(value))
 
+    # ── 深色模式 ────────────────────────────────────────────
+    # 原来这个开关**没有持久化**：_toggle_dark_mode / _on_settings_dark_mode
+    # 只改内存里的 _is_dark_mode，重启就回到浅色。独立窗口（拼豆编辑器、
+    # 导入对话框等）也拿不到当前主题，所以深色下它们还是白底。
+    @property
+    def dark_mode(self):
+        return self._bool("ui/dark_mode", False)
+
+    @dark_mode.setter
+    def dark_mode(self, value):
+        self._settings.setValue("ui/dark_mode", bool(value))
+
     def _bool(self, key, default=False):
         val = self._settings.value(key, default)
         if isinstance(val, str):

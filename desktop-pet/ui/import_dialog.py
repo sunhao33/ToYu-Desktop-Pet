@@ -12,6 +12,7 @@ from PyQt6.QtGui import QPixmap, QImage
 from image_processor.processor import (
     process_image, process_and_save, get_default_pet_path
 )
+from ui.theme import Palette, is_dark
 
 class ImportDialog(QDialog):
     """Dialog for importing and processing a pet image."""
@@ -25,6 +26,8 @@ class ImportDialog(QDialog):
         self._app_data_dir = os.path.join(
             os.path.expanduser("~"), ".desktop_pet", "images"
         )
+        # 跟随当前主题（原来写死浅色 + 蓝色系，深色下是一片白）
+        self._dark = is_dark(settings)
 
         self._init_ui()
 
@@ -48,7 +51,10 @@ class ImportDialog(QDialog):
         self._before_label = QLabel("No image selected")
         self._before_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._before_label.setMinimumSize(200, 200)
-        self._before_label.setStyleSheet("background: #f8f8f8; border-radius: 8px;")
+        _p = Palette(self._dark)
+        self._before_label.setStyleSheet(
+            "background: %s; border-radius: 8px; color: %s;"
+            % (_p.input_bg, _p.text2))
         before_layout.addWidget(self._before_label)
         preview_layout.addWidget(before_group)
 
@@ -63,9 +69,9 @@ class ImportDialog(QDialog):
         self._after_label.setAlignment(Qt.AlignmentFlag.AlignCenter)
         self._after_label.setMinimumSize(200, 200)
         self._after_label.setStyleSheet(
-            "background: #f8f8f8; border-radius: 8px;"
+            "background: %s; border-radius: 8px; color: %s;"
             "background-image: url(checkerboard);"
-        )
+            % (_p.input_bg, _p.text2))
         after_layout.addWidget(self._after_label)
         preview_layout.addWidget(after_group)
 
@@ -216,25 +222,35 @@ class ImportDialog(QDialog):
         finally:
             self._progress.setVisible(False)
 
-    @staticmethod
-    def _stylesheet():
+    def _stylesheet(self):
+        """对话框整体样式（跟随主题）。
+
+        原来写死浅色 + **蓝色系**（#4a90d9），既跟软件主色（土豆金
+        #C49A3C）不是一家人，深色模式下还是一片白。
+        """
+        p = Palette(self._dark)
         return """
             QDialog {
-                background: #ffffff;
+                background: %(bg)s;
+                color: %(text)s;
+            }
+            QLabel {
+                color: %(text)s;
             }
             QLabel#title {
                 font-size: 18px;
                 font-weight: bold;
-                color: #333;
+                color: %(text)s;
             }
             QLabel#arrow {
                 font-size: 28px;
-                color: #4a90d9;
+                color: %(accent)s;
                 font-weight: bold;
             }
             QGroupBox {
                 font-weight: bold;
-                border: 1px solid #ddd;
+                color: %(text)s;
+                border: 1px solid %(border)s;
                 border-radius: 8px;
                 margin-top: 8px;
                 padding-top: 16px;
@@ -245,38 +261,73 @@ class ImportDialog(QDialog):
                 padding: 0 5px;
             }
             QPushButton#primaryBtn {
-                background: #4a90d9;
-                color: white;
+                background: %(accent)s;
+                color: #FFFFFF;
                 border: none;
                 border-radius: 6px;
                 padding: 8px 20px;
                 font-weight: bold;
             }
             QPushButton#primaryBtn:hover {
-                background: #3a7bc8;
+                background: %(accent_h)s;
             }
             QPushButton#primaryBtn:disabled {
-                background: #bbb;
+                background: %(disable_bg)s;
+                color: %(disable_fg)s;
             }
             QPushButton {
                 padding: 8px 16px;
                 border-radius: 6px;
-                border: 1px solid #ddd;
-                background: #f5f5f5;
+                border: 1px solid %(border)s;
+                background: %(card)s;
+                color: %(text)s;
             }
             QPushButton:hover {
-                background: #e8e8e8;
+                background: %(hover_bg)s;
+                border-color: %(accent)s;
+            }
+            QCheckBox {
+                color: %(text)s;
+            }
+            QProgressBar {
+                border: 1px solid %(border)s;
+                border-radius: 4px;
+                background: %(input_bg)s;
+                color: %(text)s;
+                text-align: center;
+            }
+            QProgressBar::chunk {
+                background: %(accent)s;
+                border-radius: 3px;
             }
             QSlider::groove:horizontal {
                 height: 6px;
-                background: #ddd;
+                background: %(border)s;
                 border-radius: 3px;
             }
             QSlider::handle:horizontal {
                 width: 16px;
                 height: 16px;
-                background: #4a90d9;
+                background: %(accent)s;
                 border-radius: 8px;
                 margin: -5px 0;
             }
-        """
+        """ % {"bg": p.bg, "card": p.card, "text": p.text,
+               "border": p.border, "accent": p.accent,
+               "accent_h": p.accent_h, "hover_bg": p.hover_bg,
+               "input_bg": p.input_bg, "disable_bg": p.disable_bg,
+               "disable_fg": p.disable_fg}
+
+    def set_dark(self, dark):
+        """供主窗口切换主题时调用。"""
+        self._dark = bool(dark)
+        self.setStyleSheet(self._stylesheet())
+        # 这两块预览底色是单独设的，要一起刷
+        p = Palette(self._dark)
+        for lbl, extra in ((getattr(self, "_before_label", None), ""),
+                           (getattr(self, "_after_label", None),
+                            "background-image: url(checkerboard);")):
+            if lbl is not None:
+                lbl.setStyleSheet(
+                    "background: %s; border-radius: 8px; color: %s; %s"
+                    % (p.input_bg, p.text2, extra))

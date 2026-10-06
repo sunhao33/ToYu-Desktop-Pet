@@ -4,7 +4,10 @@ import os
 import json
 from datetime import datetime
 from enum import Enum
+import re
+
 from PyQt6.QtCore import Qt, QPoint, QSize, QRect, QTimer
+from ui.theme import Palette, is_dark
 from PyQt6.QtGui import (
     QPainter, QColor, QBrush, QPen, QMouseEvent, QPixmap, QImage, QIcon, QPainterPath
 )
@@ -527,30 +530,73 @@ class BeadEditor(QMainWindow):
         self._showcase_save_callback = on_showcase_save
         self._palette_btns = {}
         self._custom_color = QColor(255, 255, 255)
+        self._dark = False
+        self._themed = []          # [(控件, 样式模板)]，套色时按模板重设
         self._init_ui()
         self._update_title()
+        # 跟随当前主题：原来这个窗口写死浅色，主窗口切深色后整窗还是白的
+        self.set_dark(is_dark(getattr(parent, "settings", None)))
+
+    # ── 主题 ────────────────────────────────────────────────
+    def _theme(self, widget, template):
+        """登记控件的样式模板（模板里用 {key} 占位主题色）。
+
+        构造期只登记，_apply_theme() 统一套色；切主题时重套一次即可，
+        不用再去改每处 setStyleSheet。
+        """
+        self._themed.append((widget, template))
+        return widget
+
+    def _apply_theme(self):
+        """把登记的模板用当前配色套上去。
+
+        用**正则替换**而不是 str.format —— CSS 自己的花括号与 format 的
+        占位符语法冲突，漏转义一处就 KeyError（实测 `QComboBox:hover {`
+        里的花括号被当成字段名）。主窗口 _reapply_theme_styles 同理。
+        """
+        p = Palette(self._dark)
+        keys = ("bg", "card", "text", "text2", "border", "accent",
+                "accent_h", "hover_bg", "input_bg", "tab_bg",
+                "success", "danger", "warn")
+        pattern = re.compile(r"\{(" + "|".join(keys) + r")\}")
+        for widget, template in self._themed:
+            try:
+                widget.setStyleSheet(
+                    pattern.sub(lambda m: getattr(p, m.group(1)), template))
+            except RuntimeError:
+                continue          # 控件已销毁
+
+    def set_dark(self, dark):
+        """供主窗口切主题时调用；构造时也用它初始化。"""
+        self._dark = bool(dark)
+        self._apply_theme()
+        # 色块是运行时逐个上色的（不在 _themed 里），要重刷一遍才对
+        try:
+            self._select_color(self._canvas._current_color)
+        except (RuntimeError, AttributeError):
+            pass
 
     def _init_ui(self):
         self.setWindowTitle("拼豆编辑器 — 设计你的像素宠物")
         self.setMinimumSize(800, 680)
         self.resize(860, 720)
-        self.setStyleSheet("""
+        self._theme(self, """
             QComboBox {
                 padding: 3px 8px;
-                border: 1px solid #E8D5C0;
+                border: 1px solid {border};
                 border-radius: 4px;
-                background: #FFFFFF;
-                color: #2C1810;
+                background: {card};
+                color: {text};
                 font-size: 11px;
             }
-            QComboBox:hover { border-color: #C49A3C; }
+            QComboBox:hover { border-color: {accent}; }
             QComboBox::drop-down { border: none; width: 18px; }
             QComboBox QAbstractItemView {
-                background: #FFFFFF;
-                color: #2C1810;
-                selection-background-color: #FFF3E0;
-                selection-color: #2C1810;
-                border: 1px solid #E8D5C0;
+                background: {card};
+                color: {text};
+                selection-background-color: {hover_bg};
+                selection-color: {text};
+                border: 1px solid {border};
                 outline: none;
             }
         """)
@@ -566,10 +612,9 @@ class BeadEditor(QMainWindow):
 
         canvas_frame = QFrame()
         canvas_frame.setObjectName("canvasFrame")
-        canvas_frame.setStyleSheet(
-            "QFrame#canvasFrame { background: #FAFAFA; border: 1px solid #E8D5C0; "
-            "border-radius: 8px; }"
-        )
+        self._theme(canvas_frame,
+                    "QFrame#canvasFrame { background: {input_bg};"
+                    " border: 1px solid {border}; border-radius: 8px; }")
         canvas_frame_layout = QVBoxLayout(canvas_frame)
         canvas_frame_layout.setContentsMargins(12, 12, 12, 12)
         self._canvas = BeadCanvas(grid_size=GRID_SIZE)
@@ -580,7 +625,8 @@ class BeadEditor(QMainWindow):
         tools_bar.setSpacing(4)
 
         tool_label = QLabel("工具:")
-        tool_label.setStyleSheet("font-size: 11px; color: #8B7355; font-weight: bold;")
+        self._theme(tool_label,
+                    "font-size: 11px; color: {text2}; font-weight: bold;")
         tools_bar.addWidget(tool_label)
 
         self._tool_group = QButtonGroup(self)
@@ -605,20 +651,20 @@ class BeadEditor(QMainWindow):
             btn.setCursor(Qt.CursorShape.PointingHandCursor)
             btn.setIcon(QIcon(_make_tool_icon(tool, 20)))
             btn.setIconSize(QSize(20, 20))
-            btn.setStyleSheet("""
+            self._theme(btn, """
                 QPushButton {
-                    background: #FFFFFF;
-                    border: 2px solid #E8D5C0;
+                    background: {card};
+                    border: 2px solid {border};
                     border-radius: 6px;
                     padding: 2px;
                 }
                 QPushButton:checked {
-                    background: #FFF3E0;
-                    border-color: #C49A3C;
+                    background: {hover_bg};
+                    border-color: {accent};
                 }
                 QPushButton:hover {
-                    border-color: #C49A3C;
-                    background: #FFF8F0;
+                    border-color: {accent};
+                    background: {bg};
                 }
             """)
             btn.clicked.connect(lambda checked, t=tool: self._on_tool_selected(t))
@@ -649,7 +695,8 @@ class BeadEditor(QMainWindow):
         toolbar.addStretch()
 
         grid_label = QLabel("网格:")
-        grid_label.setStyleSheet("font-size: 11px; color: #8B7355; font-weight: bold;")
+        self._theme(grid_label,
+                    "font-size: 11px; color: {text2}; font-weight: bold;")
         toolbar.addWidget(grid_label)
         self._grid_combo = QComboBox()
         self._grid_combo.addItems([f"{s}×{s}" for s in GRID_SIZES])
@@ -670,11 +717,10 @@ class BeadEditor(QMainWindow):
         toolbar.addWidget(load_btn)
 
         export_btn = QPushButton("导出宠物")
-        export_btn.setStyleSheet(
-            "QPushButton { background: #C49A3C; color: white; font-weight: bold; "
-            "border-radius: 6px; padding: 6px 14px; } "
-            "QPushButton:hover { background: #D4AE50; }"
-        )
+        self._theme(export_btn,
+                    "QPushButton { background: {accent}; color: #FFFFFF;"
+                    " font-weight: bold; border-radius: 6px; padding: 6px 14px; }"
+                    "QPushButton:hover { background: {accent_h}; }")
         export_btn.clicked.connect(self._on_export)
         toolbar.addWidget(export_btn)
 
@@ -686,10 +732,10 @@ class BeadEditor(QMainWindow):
 
         preview_card = QFrame()
         preview_card.setFixedHeight(90)
-        preview_card.setStyleSheet("""
+        self._theme(preview_card, """
             QFrame {
-                background: #FFFFFF;
-                border: 2px solid #E8D5C0;
+                background: {card};
+                border: 2px solid {border};
                 border-radius: 10px;
                 padding: 4px;
             }
@@ -700,22 +746,21 @@ class BeadEditor(QMainWindow):
 
         self._preview = QLabel()
         self._preview.setFixedSize(74, 74)
-        self._preview.setStyleSheet(
-            "border: 1px solid #E8D5C0; border-radius: 4px; "
-            "background: #FAFAFA;"
-        )
+        self._theme(self._preview,
+                    "border: 1px solid {border}; border-radius: 4px;"
+                    " background: {input_bg};")
         self._preview.setAlignment(Qt.AlignmentFlag.AlignCenter)
         preview_inner.addWidget(self._preview, alignment=Qt.AlignmentFlag.AlignVCenter)
 
         preview_info = QVBoxLayout()
         preview_info.setSpacing(2)
         preview_title = QLabel("实时预览")
-        preview_title.setStyleSheet("font-weight: bold; font-size: 11px; color: #5C3D1E;")
+        self._theme(preview_title,
+                    "font-weight: bold; font-size: 11px; color: {text};")
         preview_info.addWidget(preview_title)
         self._preview_info_label = QLabel("32×32 像素 · 4 色")
-        self._preview_info_label.setStyleSheet(
-            "font-size: 10px; color: #8B7355;"
-        )
+        self._theme(self._preview_info_label,
+                    "font-size: 10px; color: {text2};")
         preview_info.addWidget(self._preview_info_label)
         preview_info.addStretch()
         preview_inner.addLayout(preview_info)
@@ -724,10 +769,10 @@ class BeadEditor(QMainWindow):
         right_col.addWidget(preview_card)
 
         palette_card = QFrame()
-        palette_card.setStyleSheet("""
+        self._theme(palette_card, """
             QFrame {
-                background: #FFFFFF;
-                border: 2px solid #E8D5C0;
+                background: {card};
+                border: 2px solid {border};
                 border-radius: 10px;
                 padding: 6px;
             }
@@ -737,15 +782,15 @@ class BeadEditor(QMainWindow):
         palette_card_inner.setSpacing(4)
 
         palette_label = QLabel("调色板")
-        palette_label.setStyleSheet("font-weight: bold; font-size: 11px; color: #5C3D1E;")
+        self._theme(palette_label,
+                    "font-weight: bold; font-size: 11px; color: {text};")
         palette_card_inner.addWidget(palette_label)
 
         palette_scroll = QScrollArea()
         palette_scroll.setWidgetResizable(True)
         palette_scroll.setHorizontalScrollBarPolicy(Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
-        palette_scroll.setStyleSheet(
-            "QScrollArea { border: none; background: transparent; }"
-        )
+        self._theme(palette_scroll,
+                    "QScrollArea { border: none; background: transparent; }")
 
         palette_widget = QWidget()
         palette_widget.setStyleSheet("background: transparent;")
@@ -772,10 +817,9 @@ class BeadEditor(QMainWindow):
         for section_name, section_keys in PALETTE_SECTIONS:
             if section_name:
                 lbl = QLabel(section_name)
-                lbl.setStyleSheet(
-                    "font-size: 10px; color: #8B7355; font-weight: bold; "
-                    "padding-top: 6px; padding-bottom: 1px;"
-                )
+                self._theme(lbl,
+                            "font-size: 10px; color: {text2}; font-weight: bold;"
+                            " padding-top: 6px; padding-bottom: 1px;")
                 layout.addWidget(lbl)
 
             for r in range(0, len(section_keys), row_len):
@@ -790,20 +834,12 @@ class BeadEditor(QMainWindow):
                     btn = QPushButton()
                     btn.setFixedSize(28, 28)
                     btn.setToolTip(f"{name} [{key}]")
+                    btn.setProperty("_swatch_key", key)
                     if key == '.':
-                        btn.setStyleSheet(
-                            "QPushButton { border: 2px solid #ccc; border-radius: 4px; "
-                            "background: #fafafa; } "
-                            "QPushButton:hover { border-color: #C49A3C; }"
-                        )
+                        self._theme_swatch(btn, None)
                         btn.setText("✕")
                     else:
-                        border = "#C49A3C" if key == self._canvas._current_color else "#ddd"
-                        btn.setStyleSheet(
-                            f"QPushButton {{ border: 2px solid {border}; border-radius: 4px; "
-                            f"background: {color.name()}; }} "
-                            f"QPushButton:hover {{ border-color: #C49A3C; }}"
-                        )
+                        self._theme_swatch(btn, color)
                     btn.clicked.connect(lambda checked, k=key: self._select_color(k))
                     self._palette_btns[key] = btn
                     row.addWidget(btn)
@@ -813,21 +849,22 @@ class BeadEditor(QMainWindow):
         custom_row = QHBoxLayout()
         custom_row.setSpacing(3)
         custom_lbl = QLabel("自定义")
-        custom_lbl.setStyleSheet(
-            "font-size: 10px; color: #8B7355; font-weight: bold; "
-            "padding-top: 6px; padding-bottom: 1px;"
-        )
+        self._theme(custom_lbl,
+                    "font-size: 10px; color: {text2}; font-weight: bold;"
+                    " padding-top: 6px; padding-bottom: 1px;")
         layout.addWidget(custom_lbl)
         picker_btn = QPushButton("+")
         picker_btn.setFixedSize(28, 28)
         picker_btn.setToolTip("自定义颜色…")
-        picker_btn.setStyleSheet(
-            "QPushButton { border: 2px dashed #C49A3C; border-radius: 4px; "
-            "background: qlineargradient(x1:0, y1:0, x2:1, y2:1, "
-            "stop:0 #ff0000, stop:0.25 #00ff00, stop:0.5 #0000ff, stop:1 #ff00ff); "
-            "color: white; font-weight: bold; font-size: 14px; } "
-            "QPushButton:hover { border-color: #D4AE50; }"
-        )
+        # 这个按钮用彩虹渐变表示"自定义"，是功能语义色，不跟随主题；
+        # 只把 hover 的边框色接上主题
+        self._theme(picker_btn,
+                    "QPushButton { border: 2px dashed {accent}; border-radius: 4px;"
+                    " background: qlineargradient(x1:0, y1:0, x2:1, y2:1,"
+                    " stop:0 #ff0000, stop:0.25 #00ff00, stop:0.5 #0000ff,"
+                    " stop:1 #ff00ff); color: #FFFFFF; font-weight: bold;"
+                    " font-size: 14px; }"
+                    "QPushButton:hover { border-color: {accent_h}; }")
         picker_btn.clicked.connect(self._on_pick_custom_color)
         custom_row.addWidget(picker_btn)
         custom_row.addStretch()
@@ -835,18 +872,43 @@ class BeadEditor(QMainWindow):
 
         self._select_color(self._canvas._current_color)
 
+    def _theme_swatch(self, btn, color, selected=None):
+        """给调色板色块上色。
+
+        色块**本身的颜色必须保留**（那是它代表的实际颜色，不能跟随主题），
+        但边框、未选中态的描边、hover 色应该跟随主题 —— 原来写死 #ddd，
+        在深色下太亮、和背景糊在一起。
+        """
+        p = Palette(self._dark)
+        if selected is None:
+            selected = (color is not None
+                        and getattr(self._canvas, "_current_color", None)
+                        is not None
+                        and btn.property("_swatch_key")
+                        == getattr(self._canvas, "_current_color", None))
+        border = p.accent if selected else p.border
+        if color is None:                      # 橡皮/透明格
+            bg = p.input_bg
+            fg = p.text2
+        else:
+            bg = color.name()
+            fg = p.text
+        btn.setStyleSheet(
+            "QPushButton { border: 2px solid %s; border-radius: 4px;"
+            " background: %s; color: %s; font-weight: bold; }"
+            "QPushButton:hover { border-color: %s; }"
+            % (border, bg, fg, p.accent))
+
     def _select_color(self, key):
         self._canvas.set_color(key)
         for k, btn in self._palette_btns.items():
             if k == '.':
+                btn.setProperty("_swatch_key", k)
+                self._theme_swatch(btn, None, selected=(k == key))
                 continue
-            name, color = BEAD_PALETTE[k]
-            border = "#C49A3C" if k == key else "#ddd"
-            btn.setStyleSheet(
-                f"QPushButton {{ border: 2px solid {border}; border-radius: 4px; "
-                f"background: {color.name()}; }} "
-                f"QPushButton:hover {{ border-color: #C49A3C; }}"
-            )
+            _name, color = BEAD_PALETTE[k]
+            btn.setProperty("_swatch_key", k)
+            self._theme_swatch(btn, color, selected=(k == key))
 
     def _on_tool_selected(self, tool: Tool):
         self._canvas.set_tool(tool)
@@ -866,6 +928,28 @@ class BeadEditor(QMainWindow):
         gs = self._canvas.grid_size
         self.setWindowTitle(f"拼豆编辑器 — {gs}×{gs} 像素宠物")
 
+    def _style_message_box(self):
+        """QMessageBox / QColorDialog 的共用样式（跟随主题）。
+
+        原来这段在 _show_info 和 _ask_yes_no_cancel 里各抄了一份，
+        _style_message_box 还是个空的兼容壳 —— 统一到这里。
+        """
+        p = Palette(self._dark)
+        return """
+            QMessageBox, QColorDialog { background: %(bg)s; }
+            QMessageBox QLabel, QColorDialog QLabel,
+            QColorDialog QWidget { color: %(text)s; font-size: 12px; }
+            QMessageBox QPushButton, QColorDialog QPushButton {
+                background: %(card)s; border: 2px solid %(border)s;
+                border-radius: 6px; padding: 4px 14px;
+                color: %(text)s; font-weight: bold; min-width: 60px;
+            }
+            QMessageBox QPushButton:hover, QColorDialog QPushButton:hover {
+                border-color: %(accent)s; background: %(hover_bg)s;
+            }
+        """ % {"bg": p.bg, "card": p.card, "border": p.border,
+               "text": p.text, "accent": p.accent, "hover_bg": p.hover_bg}
+
     def _show_info(self, title, text):
         """Show a styled info message box."""
         box = QMessageBox(self)
@@ -873,16 +957,7 @@ class BeadEditor(QMainWindow):
         box.setText(text)
         box.setIcon(QMessageBox.Icon.Information)
         box.setStandardButtons(QMessageBox.StandardButton.Ok)
-        box.setStyleSheet("""
-            QMessageBox { background: #FFF8F0; }
-            QLabel { color: #2C1810; font-size: 12px; }
-            QPushButton {
-                background: #FFFFFF; border: 2px solid #E8D5C0;
-                border-radius: 6px; padding: 4px 14px;
-                color: #2C1810; font-weight: bold; min-width: 60px;
-            }
-            QPushButton:hover { border-color: #C49A3C; background: #FFF3E0; }
-        """)
+        box.setStyleSheet(self._style_message_box())
         box.exec()
 
     def _ask_yes_no_cancel(self, title, text):
@@ -897,82 +972,62 @@ class BeadEditor(QMainWindow):
             | QMessageBox.StandardButton.Cancel
         )
         box.setDefaultButton(QMessageBox.StandardButton.Yes)
-        box.setStyleSheet("""
-            QMessageBox { background: #FFF8F0; }
-            QLabel { color: #2C1810; font-size: 12px; }
-            QPushButton {
-                background: #FFFFFF; border: 2px solid #E8D5C0;
-                border-radius: 6px; padding: 4px 14px;
-                color: #2C1810; font-weight: bold; min-width: 60px;
-            }
-            QPushButton:hover { border-color: #C49A3C; background: #FFF3E0; }
-        """)
+        box.setStyleSheet(self._style_message_box())
         return box.exec()
-
-    def _style_message_box(self):
-        """No-op kept for compatibility."""
-        pass
 
     def _on_pick_custom_color(self):
         dlg = QColorDialog(self._custom_color, self)
         dlg.setWindowTitle("选择自定义颜色")
+        p = Palette(self._dark)
         dlg.setStyleSheet("""
-            QColorDialog {
-                background: #FFF8F0;
-                color: #2C1810;
-            }
-            QColorDialog QWidget {
-                background: #FFF8F0;
-                color: #2C1810;
-            }
+            QColorDialog { background: %(bg)s; color: %(text)s; }
+            QColorDialog QWidget { background: %(bg)s; color: %(text)s; }
             QPushButton {
-                background: #FFFFFF;
-                border: 2px solid #E8D5C0;
+                background: %(card)s;
+                border: 2px solid %(border)s;
                 border-radius: 6px;
                 padding: 4px 10px;
-                color: #2C1810;
+                color: %(text)s;
                 font-weight: bold;
             }
             QPushButton:hover {
-                border-color: #C49A3C;
-                background: #FFF3E0;
+                border-color: %(accent)s;
+                background: %(hover_bg)s;
             }
             QSpinBox, QLineEdit, QComboBox {
-                background: #FFFFFF;
-                border: 1px solid #E8D5C0;
+                background: %(card)s;
+                border: 1px solid %(border)s;
                 border-radius: 4px;
-                color: #2C1810;
+                color: %(text)s;
                 padding: 2px;
             }
             QTabWidget::pane {
-                border: 1px solid #E8D5C0;
-                background: #FFF8F0;
+                border: 1px solid %(border)s;
+                background: %(bg)s;
             }
             QTabBar::tab {
-                background: #F5EFE5;
-                border: 1px solid #E8D5C0;
+                background: %(tab_bg)s;
+                border: 1px solid %(border)s;
                 padding: 4px 8px;
-                color: #5C3D1E;
+                color: %(text2)s;
             }
             QTabBar::tab:selected {
-                background: #FFF8F0;
-                border-bottom-color: #FFF8F0;
-                color: #2C1810;
+                background: %(bg)s;
+                border-bottom-color: %(bg)s;
+                color: %(text)s;
             }
-            QLabel {
-                color: #2C1810;
-            }
+            QLabel { color: %(text)s; }
             QGroupBox {
-                color: #2C1810;
-                border: 1px solid #E8D5C0;
+                color: %(text)s;
+                border: 1px solid %(border)s;
                 border-radius: 6px;
                 margin-top: 6px;
                 padding-top: 6px;
             }
-            QGroupBox::title {
-                color: #5C3D1E;
-            }
-        """)
+            QGroupBox::title { color: %(text2)s; }
+        """ % {"bg": p.bg, "card": p.card, "border": p.border,
+               "text": p.text, "text2": p.text2, "accent": p.accent,
+               "hover_bg": p.hover_bg, "tab_bg": p.tab_bg})
         if dlg.exec() != QColorDialog.DialogCode.Accepted:
             return
         color = dlg.selectedColor()
