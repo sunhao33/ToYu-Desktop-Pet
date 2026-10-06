@@ -3301,11 +3301,14 @@ class MainWindow(QMainWindow):
             self._finish_calendar_selection(date_str, tasks)
             return
 
-        CARD_BG = "#FFFFFF"
-        BORDER = "#E8D5C0"
-        TEXT = "#2C1810"
-        TEXT_SEC = "#8B7355"
-        DONE_GREEN = "#4CAF50"
+        # 这些颜色要走 self._c()，不能用模块级的 CARD_BG / TEXT 常量 ——
+        # 常量永远是浅色值，深色模式下任务行会变成一块白底（实测截图发现）。
+        # 本函数每次选日期都会重跑，所以直接用当前主题色即可。
+        _card_bg = self._c('card')
+        _border = self._c('border')
+        _text = self._c('text')
+        _text_sec = self._c('text2')
+        _done_green = self._c('success')
 
         for t in tasks:
             text = t.get("text", "")
@@ -3327,7 +3330,7 @@ class MainWindow(QMainWindow):
 
             card = QFrame()
             card.setStyleSheet(
-                f"QFrame {{ background: {CARD_BG}; border: 1px solid {BORDER};"
+                f"QFrame {{ background: {_card_bg}; border: 1px solid {_border};"
                 f" border-radius: 8px; }}"
             )
             row = QHBoxLayout(card)
@@ -3335,12 +3338,12 @@ class MainWindow(QMainWindow):
             row.setSpacing(6)
 
             check = QLabel("✓")
-            check.setStyleSheet(f"color: {DONE_GREEN}; font-size: 14px; font-weight: bold; background: transparent;")
+            check.setStyleSheet(f"color: {_done_green}; font-size: 14px; font-weight: bold; background: transparent;")
             row.addWidget(check)
 
             name_lbl = QLabel(text)
             name_lbl.setWordWrap(True)
-            name_lbl.setStyleSheet(f"color: {TEXT}; font-size: 12px; background: transparent;")
+            name_lbl.setStyleSheet(f"color: {_text}; font-size: 12px; background: transparent;")
             row.addWidget(name_lbl, 1)
 
             parts = []
@@ -3349,7 +3352,7 @@ class MainWindow(QMainWindow):
             if dur_str:
                 parts.append(dur_str)
             time_lbl = QLabel(" · ".join(parts))
-            time_lbl.setStyleSheet(f"color: {TEXT_SEC}; font-size: 11px; background: transparent;")
+            time_lbl.setStyleSheet(f"color: {_text_sec}; font-size: 11px; background: transparent;")
             row.addWidget(time_lbl)
 
             layout.addWidget(card)
@@ -5230,6 +5233,16 @@ class MainWindow(QMainWindow):
                 cal.set_dark(self._is_dark_mode)
             except Exception as exc:      # noqa: BLE001
                 print("[Theme] 日历跟随主题失败: %s" % exc)
+
+        # 「日期已做」列表：任务行是在选中日期时**动态生成**的（每行一个
+        # QFrame + 内联样式），不在 _theme_styles 的自动重刷范围内。
+        # 不重跑一次，深色下会留着一整块白底行。
+        date = getattr(self, "_selected_chart_date", "")
+        if date:
+            try:
+                self._on_calendar_date_selected(date)
+            except Exception as exc:      # noqa: BLE001
+                print("[Theme] 日期已做列表跟随主题失败: %s" % exc)
 
         for attr in ("_bead_editor", "_import_dialog", "_settings_dialog_obj"):
             win = getattr(self, attr, None)

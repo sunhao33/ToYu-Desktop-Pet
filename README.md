@@ -28,14 +28,14 @@
 <tr>
 <td width="50%">
 
-**宠物页** — 目标进度环 + 收藏夹 + 状态
+**宠物页** — 今日概览（学习 / 目标 / 屏幕 / 待办）+ 快捷入口 + 收藏夹
 
 <img src="docs/screenshots/01-pet-page.png" alt="宠物页">
 
 </td>
 <td width="50%">
 
-**数据面板** — 学习报告 + 图表 + 日历
+**数据面板** — 学习报告 + 时段/应用图表 + 日历 + 每日目标环
 
 <img src="docs/screenshots/02-data-panel.png" alt="数据面板">
 
@@ -44,14 +44,14 @@
 <tr>
 <td width="50%">
 
-**功能页** — 心流模式、待办、像素创作
+**宠物设置** — 图片处理、宠物行为、番茄钟休息提醒
 
-<img src="docs/screenshots/03-features.png" alt="功能页">
+<img src="docs/screenshots/03-features.png" alt="宠物设置页">
 
 </td>
 <td width="50%">
 
-**AI 助手** — 对话、记忆、工具调用
+**AI 助手** — 对话、长期记忆、10 个本机工具调用
 
 <img src="docs/screenshots/04-ai-page.png" alt="AI 页面">
 
