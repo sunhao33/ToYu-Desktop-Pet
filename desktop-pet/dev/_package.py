@@ -34,7 +34,13 @@ STAGING = os.path.join(PET_DIR, "_staging")
 EXCLUDE_DIRS = {"dist", "dist_dir", "build", "build_dir", "build_debug", "__pycache__",
                 ".git", ".claude", "_staging", "build_dir2", "dist_dir2",
                 "build_debug2", "dist_onedir", "_work", "media", "temp", "backup",
-                "dist_rebuild", "build_rebuild"}
+                "dist_rebuild", "build_rebuild",
+                # 开发工具目录（测试/探针/打包脚本都在里面）。
+                # 必须按**目录名**排除：SKIP_PATTERNS 是按文件名匹配的，
+                # 而 "dev" 这个目录名不匹配任何模式 —— 结果整个 dev/ 被
+                # 拷进发布包，评委打开源码会看到几十个开发脚本，
+                # 里面甚至还可能有运行期产生的 ai_config.json（含 Key）。
+                "dev"}
 EXCLUDE_EXTS = {".zip", ".pyc", ".log", ".bak"}
 
 # 运行时数据文件：**绝不能进发布包**。

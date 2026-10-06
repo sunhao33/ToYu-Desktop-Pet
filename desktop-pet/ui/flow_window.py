@@ -179,7 +179,7 @@ class FlowWindow(QMainWindow):
     def _make_sep(self):
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f"background: {self._c('border')}; max-height: 1px;")
+        sep.setStyleSheet(f"color: {self._c('border')}; max-height: 1px;")
         return sep
 
     def _make_card(self, title):

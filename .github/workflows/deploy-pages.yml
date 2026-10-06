@@ -1,0 +1,50 @@
+name: Deploy site to GitHub Pages
+
+# 只发布 toyu-web/ 这个宣传站，仓库里其它内容（源码、文档）不对外暴露成网页。
+# 触发条件限制在 toyu-web/ 有改动时，避免改代码就重新部署一次。
+on:
+  push:
+    branches: [master]
+    paths:
+      - 'toyu-web/**'
+      - '.github/workflows/deploy-pages.yml'
+  workflow_dispatch:        # 也支持手动触发
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# 同一时间只跑一个部署；新的推送取消排队中的旧任务
+concurrency:
+  group: pages
+  cancel-in-progress: true
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Prepare static site
+        run: |
+          mkdir -p _site
+          # 只拷网站本身；serve.py / dev_server.py 是本地预览工具，不需要上线
+          cp -r toyu-web/. _site/
+          rm -f _site/serve.py _site/dev_server.py _site/.dev_server.json _site/.dev_server.log
+          # 关掉 Jekyll，否则以 _ 开头的文件会被忽略
+          touch _site/.nojekyll
+          echo "--- 将发布的文件 ---"
+          find _site -type f | sort
+      - uses: actions/upload-pages-artifact@v3
+        with:
+          path: _site
+
+  deploy:
+    needs: build
+    runs-on: ubuntu-latest
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v4

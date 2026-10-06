@@ -742,6 +742,10 @@ class MainWindow(QMainWindow):
         preview_card_layout.addWidget(select_btn, alignment=Qt.AlignmentFlag.AlignCenter)
         pet_left.addWidget(preview_card)
 
+        # ── 像素创作卡 ────────────────────────────────────────
+        # 原来是个横排：标题带 border-right 画出一条贯穿卡片的竖线，
+        # 两个按钮被挤在右边、右半张卡留白，整体不像一张卡倒像一条工具条。
+        # 改成「图标 + 标题 + 说明」的头部，按钮在下、等宽两列。
         bead_card = QFrame()
         bead_card.setObjectName("beadCard")
         self._bead_card = bead_card
@@ -752,59 +756,96 @@ class MainWindow(QMainWindow):
                 border-radius: 10px;
             }}
         """)
-        bead_card_layout = QHBoxLayout(bead_card)
-        bead_card_layout.setContentsMargins(12, 10, 12, 10)
-        bead_card_layout.setSpacing(12)
-        bead_label = QLabel("🎨 像素创作")
+        bead_card_layout = QVBoxLayout(bead_card)
+        bead_card_layout.setContentsMargins(14, 12, 14, 12)
+        bead_card_layout.setSpacing(10)
+
+        bead_head = QHBoxLayout()
+        bead_head.setSpacing(10)
+        bead_icon = QLabel("🎨")
+        bead_icon.setFixedSize(34, 34)
+        bead_icon.setAlignment(Qt.AlignmentFlag.AlignCenter)
+        bead_icon.setStyleSheet(
+            f"font-size: 17px; background: {self._c('card')};"
+            f"border: 1px solid {self._c('border')}; border-radius: 9px;")
+        bead_head.addWidget(bead_icon, alignment=Qt.AlignmentFlag.AlignTop)
+
+        bead_title_box = QVBoxLayout()
+        bead_title_box.setSpacing(2)
+        bead_label = QLabel("像素创作")
         bead_label.setStyleSheet(
-            f"font-size: 12px; font-weight: bold; color: {self._c('mid')}; "
-            f"border-right: 1px solid {self._c('border')}; padding-right: 8px;"
-        )
-        bead_card_layout.addWidget(bead_label)
-        bead_editor_btn = QPushButton("✏️ 拼豆编辑器")
+            f"font-size: 13px; font-weight: bold; color: {self._c('text')};")
+        bead_title_box.addWidget(bead_label)
+        bead_sub = QLabel("导入图片自动量化，或自己画一只")
+        bead_sub.setStyleSheet(
+            f"font-size: 10.5px; color: {self._c('text2')};")
+        bead_title_box.addWidget(bead_sub)
+        bead_head.addLayout(bead_title_box, 1)
+        bead_card_layout.addLayout(bead_head)
+
+        _bead_btn_style = f"""
+            QPushButton {{
+                background: {self._c('card')};
+                border: 1px solid {self._c('border')};
+                border-radius: 8px;
+                padding: 8px 10px;
+                font-size: 11.5px;
+                color: {self._c('text')};
+            }}
+            QPushButton:hover {{
+                border-color: {self._c('accent')};
+                background: {self._c('hover_bg')};
+            }}
+        """
+        bead_btn_row = QHBoxLayout()
+        bead_btn_row.setSpacing(8)
+        bead_editor_btn = QPushButton("✏️  拼豆编辑器")
         bead_editor_btn.setObjectName("secondaryBtn")
         bead_editor_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        bead_editor_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: {self._c('card')};
-                border: 1px solid {self._c('border')};
-                border-radius: 6px;
-                padding: 6px 12px;
-                font-size: 11px;
-                color: {self._c('text')};
-            }}
-            QPushButton:hover {{
-                border-color: {self._c('accent')};
-                background: {self._c('hover_bg')};
-            }}
-        """)
+        bead_editor_btn.setStyleSheet(_bead_btn_style)
         bead_editor_btn.clicked.connect(self._on_open_bead_editor)
-        bead_card_layout.addWidget(bead_editor_btn)
-        bead_import_btn = QPushButton("📥 拼豆图导入")
+        bead_btn_row.addWidget(bead_editor_btn)
+
+        bead_import_btn = QPushButton("📥  导入图片")
         bead_import_btn.setObjectName("secondaryBtn")
         bead_import_btn.setCursor(Qt.CursorShape.PointingHandCursor)
-        bead_import_btn.setStyleSheet(f"""
-            QPushButton {{
-                background: {self._c('card')};
-                border: 1px solid {self._c('border')};
-                border-radius: 6px;
-                padding: 6px 12px;
-                font-size: 11px;
-                color: {self._c('text')};
-            }}
-            QPushButton:hover {{
-                border-color: {self._c('accent')};
-                background: {self._c('hover_bg')};
-            }}
-        """)
+        bead_import_btn.setStyleSheet(_bead_btn_style)
         bead_import_btn.clicked.connect(self._on_import_bead_image)
-        bead_card_layout.addWidget(bead_import_btn)
-        bead_card_layout.addStretch()
+        bead_btn_row.addWidget(bead_import_btn)
+        bead_card_layout.addLayout(bead_btn_row)
+
         pet_left.addWidget(bead_card)
 
-        self._fav_label = QLabel("收藏夹 (0/10)")
-        self._fav_label.setObjectName("sectionLabel")
-        pet_left.addWidget(self._fav_label)
+        # ── 收藏夹卡 ──────────────────────────────────────────
+        # 原来只有一个裸标题 + 滚动区，没有卡片边界 —— 跟上面两张卡
+        # 风格不统一。改成卡片：标题行（名称 + 计数徽章）→ 缩略图行。
+        fav_card = self._make_card("")
+        self._fav_card = fav_card
+        fav_layout = fav_card.layout()
+        fav_layout.setSpacing(8)
+
+        # 复用 _make_card 建好的那张卡，但把它的标题换成
+        # 「名称 + 计数徽章」一行 —— 直接把计数塞进标题字符串会显得粗糙
+        card_title = fav_card.findChild(QLabel, "cardTitle")
+        if card_title is not None:
+            card_title.hide()
+        fav_head = QHBoxLayout()
+        fav_head.setSpacing(8)
+        fav_title = QLabel("⭐ 收藏夹")
+        fav_title.setObjectName("cardTitle")
+        fav_head.addWidget(fav_title)
+        self._fav_hint = QLabel("点缩略图即可切换成你的桌面伙伴")
+        self._fav_hint.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 10.5px;")
+        fav_head.addWidget(self._fav_hint)
+        fav_head.addStretch()
+        self._fav_label = QLabel("0 / 10")
+        self._fav_label.setStyleSheet(
+            f"color: {self._c('accent')}; font-size: 11px; font-weight: bold;"
+            f"background: {self._c('tab_bg')}; border-radius: 4px;"
+            "padding: 2px 9px;")
+        fav_head.addWidget(self._fav_label)
+        fav_layout.insertLayout(0, fav_head)
 
         self._fav_scroll = QScrollArea()
         self._fav_scroll.setObjectName("favGallery")
@@ -862,7 +903,9 @@ class MainWindow(QMainWindow):
         self._fav_placeholder = QLabel("还没有收藏的宠物")
         self._fav_placeholder.setStyleSheet(f"color: {self._c('text2')}; font-size: 11px; padding: 18px 10px;")
         self._fav_layout.addWidget(self._fav_placeholder)
-        pet_left.addWidget(self._fav_scroll)
+        # 缩略图行进卡片（原来是裸的滚动区贴在页面上）
+        fav_layout.addWidget(self._fav_scroll)
+        pet_left.addWidget(fav_card)
 
         # ── 快捷入口：主页就能跳到其他页面，不用去点标签 ──────
         pet_left.addWidget(self._make_quick_nav_card())
@@ -872,7 +915,7 @@ class MainWindow(QMainWindow):
 
         divider = QFrame()
         divider.setFrameShape(QFrame.Shape.VLine)
-        divider.setStyleSheet(f"background: {self._c('border')}; max-width: 1px;")
+        divider.setStyleSheet(f"color: {self._c('border')}; max-width: 1px;")
         pet_layout.addWidget(divider)
         pet_layout.addSpacing(24)
 
@@ -2014,9 +2057,17 @@ class MainWindow(QMainWindow):
         return row, caption_lbl
 
     def _h_separator(self):
+        """一条 1px 的水平分隔线。
+
+        必须用 `color` 而不是 `background`：
+        QFrame 设了 HLine 形状后会**自己绘制那条线**，用的是线条颜色
+        （样式表里的 color），而 `background` 被忽略。
+        原来的 `background: #E8D5C0` 完全没生效，画出来是纯黑
+        （实测分隔线像素 #000000），放大窗口后就是用户看到的那条黑框/黑线。
+        """
         sep = QFrame()
         sep.setFrameShape(QFrame.Shape.HLine)
-        sep.setStyleSheet(f"background: {self._c('border')}; max-height: 1px;")
+        sep.setStyleSheet(f"color: {self._c('border')}; max-height: 1px;")
         return sep
 
     def _create_affection_bar(self):
@@ -2215,7 +2266,8 @@ class MainWindow(QMainWindow):
         favs = self.settings.favorites
         has_favs = bool(favs)
         self._fav_placeholder.setVisible(not has_favs)
-        self._fav_label.setText(f"收藏夹 ({len(favs)}/{self.MAX_FAVORITES})")
+        # 计数改成徽章形式「3 / 10」，标题行已经自带「⭐ 收藏夹」
+        self._fav_label.setText(f"{len(favs)} / {self.MAX_FAVORITES}")
         current_path = self.settings.pet_image_path
 
         if has_favs:
@@ -5287,9 +5339,9 @@ class MainWindow(QMainWindow):
 
         for sep in self.findChildren(QFrame):
             if sep.frameShape() == QFrame.Shape.VLine:
-                sep.setStyleSheet(f"background: {self._c('border')}; max-width: 1px;")
+                sep.setStyleSheet(f"color: {self._c('border')}; max-width: 1px;")
             elif sep.frameShape() == QFrame.Shape.HLine:
-                sep.setStyleSheet(f"background: {self._c('border')}; max-height: 1px;")
+                sep.setStyleSheet(f"color: {self._c('border')}; max-height: 1px;")
 
         for attr in ('_house_check', '_action_status', '_mood_status', '_affection_status'):
             w = getattr(self, attr, None)
