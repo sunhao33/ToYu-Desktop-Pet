@@ -117,22 +117,113 @@ class Palette:
 
 
 def is_dark(settings=None):
-    """读持久化的深色模式开关。
+    """读深色模式开关。
 
     独立窗口（拼豆编辑器、导入对话框等）拿不到主窗口的 _is_dark_mode，
-    但它们需要跟当前主题一致，所以从 settings 读。
+    但它们需要跟当前主题一致，所以从设置里读。
+
+    能接受两种入参：
+      · SettingsManager —— 取 dark_mode 属性
+      · QSettings        —— 取 ui/dark_mode 键
     """
     if settings is None:
         try:
             from ui.settings_manager import SettingsManager
-            settings = SettingsManager()
+            return bool(SettingsManager().dark_mode)
         except Exception:      # noqa: BLE001
             return False
+
+    # 1) SettingsManager（正常路径）：dark_mode 是 property
     for attr in ("dark_mode", "is_dark_mode", "dark"):
         val = getattr(settings, attr, None)
         if isinstance(val, bool):
             return val
-    try:
-        return bool(settings.get("dark_mode", False))
-    except Exception:          # noqa: BLE001
-        return False
+
+    # 2) 直接传进来的 QSettings：value() 返回的是字符串 "true"/"false"
+    value = getattr(settings, "value", None)
+    if callable(value):
+        try:
+            raw = value("ui/dark_mode", False)
+            if isinstance(raw, str):
+                return raw.strip().lower() == "true"
+            return bool(raw)
+        except Exception:      # noqa: BLE001
+            return False
+
+    # 3) 带 get() 的映射类对象
+    getter = getattr(settings, "get", None)
+    if callable(getter):
+        try:
+            return bool(getter("dark_mode", False))
+        except Exception:      # noqa: BLE001
+            return False
+    return False
+
+
+def message_box_style(dark):
+    """QMessageBox 的样式表。
+
+    为什么需要它：`QMessageBox.information(...)` 这类**静态便捷方法**
+    没法设样式，于是走 Qt 默认主题 —— 深色模式下会弹出一块**纯黑**
+    的框，跟软件配色完全脱节。
+
+    用法：改用实例化的 QMessageBox，再 setStyleSheet(message_box_style(dark))。
+    """
+    p = Palette(dark)
+    return """
+        QMessageBox { background: %(bg)s; }
+        QMessageBox QLabel { color: %(text)s; font-size: 12px; }
+        QMessageBox QPushButton {
+            background: %(card)s; border: 1px solid %(border)s;
+            border-radius: 6px; padding: 5px 16px;
+            color: %(text)s; font-weight: bold; min-width: 64px;
+        }
+        QMessageBox QPushButton:hover {
+            border-color: %(accent)s; background: %(hover_bg)s;
+        }
+        QMessageBox QPushButton:default { border-color: %(accent)s; }
+    """ % {"bg": p.bg, "card": p.card, "border": p.border,
+           "text": p.text, "accent": p.accent, "hover_bg": p.hover_bg}
+
+
+def ask(parent, title, text, kind="info", dark=False,
+        buttons=("ok",), default="ok"):
+    """弹一个**跟随主题**的消息框，返回被点击按钮的名字。
+
+    替代 QMessageBox.information / warning / critical / question
+    这类静态调用 —— 它们无法设样式，深色模式下是纯黑框。
+    """
+    from PyQt6.QtWidgets import QMessageBox
+
+    icon_map = {
+        "info": QMessageBox.Icon.Information,
+        "warning": QMessageBox.Icon.Warning,
+        "error": QMessageBox.Icon.Critical,
+        "question": QMessageBox.Icon.Question,
+    }
+    btn_map = {
+        "ok": QMessageBox.StandardButton.Ok,
+        "yes": QMessageBox.StandardButton.Yes,
+        "no": QMessageBox.StandardButton.No,
+        "cancel": QMessageBox.StandardButton.Cancel,
+    }
+    back_map = {
+        QMessageBox.StandardButton.Ok: "ok",
+        QMessageBox.StandardButton.Yes: "yes",
+        QMessageBox.StandardButton.No: "no",
+        QMessageBox.StandardButton.Cancel: "cancel",
+    }
+
+    box = QMessageBox(parent)
+    box.setWindowTitle(title)
+    box.setText(text)
+    box.setIcon(icon_map.get(kind, QMessageBox.Icon.Information))
+    combined = btn_map["ok"] if buttons else QMessageBox.StandardButton.Ok
+    for name in buttons:
+        if name in btn_map and name != "ok":
+            combined |= btn_map[name]
+    box.setStandardButtons(combined)
+    if default in btn_map:
+        box.setDefaultButton(btn_map[default])
+    box.setStyleSheet(message_box_style(dark))
+    return back_map.get(box.exec(), "ok")

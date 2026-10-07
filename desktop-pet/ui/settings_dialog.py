@@ -17,6 +17,30 @@ TEXT = "#2C1810"
 TEXT_SEC = "#8B7355"
 BORDER = "#E8D5C0"
 
+def _app_version():
+    """从 changelog.txt 读当前版本号。
+
+    原来"关于"里硬编码 v0.35，早已和实际版本脱节（现在到了 v0.82）。
+    改成读文件，以后发版不用再手工改这里。
+    """
+    import os
+    import re
+    here = os.path.dirname(os.path.abspath(__file__))
+    candidates = [
+        os.path.join(os.path.dirname(here), "changelog.txt"),          # desktop-pet/
+        os.path.join(os.path.dirname(os.path.dirname(here)), "changelog.txt"),
+    ]
+    for path in candidates:
+        try:
+            with open(path, "r", encoding="utf-8") as f:
+                m = re.search(r"^v(\d+\.\d+(?:\.\d+)?)", f.read(), re.M)
+            if m:
+                return "v" + m.group(1)
+        except OSError:
+            continue
+    return ""
+
+
 class SettingsDialog(QDialog):
     """Settings dialog with tabbed interface."""
 
@@ -149,7 +173,7 @@ class SettingsDialog(QDialog):
         layout.setContentsMargins(16, 16, 16, 16)
         layout.setSpacing(12)
 
-        title = QLabel("⚙️ YoTu 设置")
+        title = QLabel("⚙️ ToYu 设置")
         title.setStyleSheet(f"font-size: 18px; font-weight: bold; color: {DARK};")
         title.setAlignment(Qt.AlignmentFlag.AlignCenter)
         layout.addWidget(title)
@@ -441,8 +465,22 @@ class SettingsDialog(QDialog):
         return widget
 
     def _create_advanced_tab(self):
-        """高级设置标签页"""
+        """高级设置标签页。
+
+        这一页内容比其他页高得多 —— 实测需要 680px，而 Tab 内容区只有
+        480px。原来没有滚动区，超出的 200px 被硬压进固定高度，表现就是
+        "刚打开这一栏时排版不自然"（各分组挤在一起、文字重叠）。
+        用 QScrollArea 包一层，按需滚动。
+        """
+        scroll = QScrollArea()
+        scroll.setWidgetResizable(True)
+        scroll.setFrameShape(QFrame.Shape.NoFrame)
+        scroll.setHorizontalScrollBarPolicy(
+            Qt.ScrollBarPolicy.ScrollBarAlwaysOff)
+        scroll.setStyleSheet("QScrollArea { background: transparent; }")
+
         widget = QWidget()
+        widget.setStyleSheet("background: transparent;")
         layout = QVBoxLayout(widget)
         layout.setSpacing(12)
 
@@ -524,10 +562,12 @@ class SettingsDialog(QDialog):
         about_layout = QVBoxLayout(about_group)
 
         about_text = QLabel(
-            "🥔 YoTu 桌面宠物 v0.35\n"
-            "一个可爱的像素风桌面宠物\n\n"
-            "功能：喂食、散步、番茄钟、拼豆编辑、好感度系统\n"
-            "数据存储：~/.desktop_pet/"
+            "🥔 ToYu 桌面智能体 %s\n"
+            "一只住在桌面上的像素宠物，内核是一套完整的智能体运行时\n\n"
+            "功能：多步工具调用 · 长期记忆 · 学习统计与报告\n"
+            "　　　专注计时与心流模式 · 待办与日历 · 像素创作 · 好感度系统\n"
+            "数据存储：~/.desktop_pet/ 与 %%APPDATA%%/ToYu/（全部留在本机）"
+            % _app_version()
         )
         about_text.setWordWrap(True)
         about_text.setStyleSheet(f"color: {TEXT_SEC}; font-size: 11px; line-height: 1.5;")
@@ -536,7 +576,8 @@ class SettingsDialog(QDialog):
         layout.addWidget(about_group)
 
         layout.addStretch()
-        return widget
+        scroll.setWidget(widget)
+        return scroll
 
     def _on_scale_change(self, value):
         self._scale_label.setText(f"{value}%")

@@ -9,6 +9,22 @@ from PyQt6.QtWidgets import (
     QSpinBox, QFrame, QGridLayout, QSizePolicy, QMessageBox
 )
 
+from ui.presets import FOCUS_PRESETS
+from ui.theme import ask, is_dark
+
+
+def _is_dark_now(widget):
+    """判断当前是不是深色模式。
+
+    本控件没有主题状态：它跟着主窗口的样式表走。
+    优先问主窗口要，拿不到再读设置。
+    """
+    win = widget.window()
+    flag = getattr(win, "_is_dark_mode", None)
+    if isinstance(flag, bool):
+        return flag
+    return is_dark()
+
 ACCENT = "#C49A3C"
 ACCENT_HOVER = "#D4AE50"
 DARK = "#3E2723"
@@ -96,11 +112,10 @@ class TimerWidget(QWidget):
         preset_grid = QGridLayout()
         preset_grid.setSpacing(8)
         
-        presets = [
-            ("1分钟", 1), ("3分钟", 3), ("5分钟", 5),
-            ("10分钟", 10), ("15分钟", 15), ("25分钟", 25),
-            ("30分钟", 30), ("45分钟", 45), ("60分钟", 60)
-        ]
+        # 预设从 ui/presets.py 取 —— 原来这里和心流模式各写一套，
+        # 上限还不同（这里 60 分钟、心流 90 分钟），用户看到的就是
+        # "最多只能到 1 小时"以及"两边对不上"。
+        presets = [(f"{m}分钟", m) for m in FOCUS_PRESETS]
         
         self._preset_buttons = []
         for i, (text, mins) in enumerate(presets):
@@ -322,7 +337,7 @@ class TimerWidget(QWidget):
             total = hours * 3600 + minutes * 60 + seconds
 
             if total <= 0:
-                QMessageBox.information(self, "提示", "请设置时间")
+                ask(self, "提示", "请设置时间", dark=_is_dark_now(self))
                 return
 
             self._total_seconds = total

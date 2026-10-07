@@ -41,6 +41,41 @@ os.path.expanduser = _expanduser
 #    也有硬编码的 Roaming 拼接，所以两处都要覆盖）
 os.environ["APPDATA"] = _TMP
 
+# 2.5) QSettings -> 临时 INI 文件
+#
+#     这是**之前漏掉的一处**，而且影响很大：QSettings("DesktopPet",
+#      "DesktopPet") 默认写 Windows 注册表，而上面 HOME / APPDATA 的
+#      重定向只影响文件路径，管不到注册表。于是每个跑测试的脚本都会
+#      读写**用户的真实设置** —— 深色模式、每日动画缩放、宠物图片路径、
+#      收藏夹、番茄钟开关全在里面。
+#
+#      实际踩过的坑：
+#        · 截图脚本把 animation_scale 改成 1.6，用户下次启动宠物变大
+#        · 默认深色模式的脚本循环跑，真实设置被反复切换
+#        · 测试断言"初始深色为 False / 目标未设置"，一旦被污染就失败，
+#          而且失败原因看起来像是代码 bug
+#
+#     为什么不用 QSettings.setDefaultFormat / setPath：
+#     实测无效 —— 代码里显式写了 QSettings("DesktopPet", "DesktopPet")，
+#     带参数的构造会走 NativeFormat，setDefaultFormat 管不到；
+#     setPath 也只在未显式传组织名时生效。所以改成**拦截构造本身**：
+#     把 QSettings(...) 换成指向临时目录的 INI 文件。
+try:
+    from PyQt6.QtCore import QSettings as _QS
+
+    _REAL_QS_INIT = _QS.__init__
+    _INI_PATH = os.path.join(_TMP, "settings.ini")
+
+    def _isolated_init(self, *args, **kwargs):
+        # 保留调用方传的组织名/应用名（代码里可能后面还会读），
+        # 但把存储格式与位置强行换成临时 INI
+        kwargs.pop("format", None)
+        _REAL_QS_INIT(self, _INI_PATH, _QS.Format.IniFormat)
+
+    _QS.__init__ = _isolated_init
+except Exception as _exc:      # noqa: BLE001
+    print("[isolate] QSettings 拦截失败（测试可能污染真实设置）:", _exc)
+
 # 3) 已导入的模块里若有模块级路径常量，尝试重定向
 for mod_name in ("ui.screen_time_tracker", "ui.todo_widget",
                  "pet_engine.focus_log", "pet_engine.report"):
@@ -57,3 +92,4 @@ for mod_name in ("ui.screen_time_tracker", "ui.todo_widget",
                 setattr(mod, attr, new)
 
 print("[isolate] 数据目录已重定向到", _TMP)
+print("[isolate] QSettings 已重定向到", _INI_PATH)

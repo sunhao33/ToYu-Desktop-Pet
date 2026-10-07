@@ -41,6 +41,8 @@ from pet_engine.pet_ai import AICompanion
 from ui.widgets.progress_ring import ProgressRing
 from ui.widgets.report_view import AIPanel, ReportView
 from ui.settings_manager import SettingsManager
+from ui.presets import AI_PROVIDERS
+from ui.theme import ask
 from ui.tray_icon import TrayIcon
 from ui.screen_time_tracker import ScreenTimeTracker
 
@@ -1539,6 +1541,29 @@ class MainWindow(QMainWindow):
         api_layout = api_card.layout()
         api_layout.setSpacing(8)
 
+        api_layout.addWidget(QLabel("服务商:"))
+        # 预设下拉：一点就把「地址 + 常用模型」填好，省得用户去翻各家文档。
+        # 选「自定义」则完全手动填 —— 任何 OpenAI 兼容接口都能接。
+        self._ai_provider_combo = QComboBox()
+        for label, _base, _model in AI_PROVIDERS:
+            self._ai_provider_combo.addItem(label)
+        self._ai_provider_combo.addItem("自定义（手动填写）")
+        self._ai_provider_combo.setStyleSheet(f"""
+            QComboBox {{
+                color: {self._c('text')}; background: {self._c('input_bg')};
+                border: 1px solid {self._c('border')}; border-radius: 6px;
+                padding: 6px 10px; font-size: 12px;
+            }}
+            QComboBox QAbstractItemView {{
+                background: {self._c('card')}; color: {self._c('text')};
+                selection-background-color: {self._c('hover_bg')};
+                selection-color: {self._c('text')};
+            }}
+        """)
+        self._ai_provider_combo.currentIndexChanged.connect(
+            self._on_ai_provider_changed)
+        api_layout.addWidget(self._ai_provider_combo)
+
         api_layout.addWidget(QLabel("API 地址:"))
         self._ai_api_base_input = QLineEdit(self._ai_config.api_base)
         self._ai_api_base_input.setPlaceholderText("https://api.deepseek.com/v1")
@@ -1549,7 +1574,22 @@ class MainWindow(QMainWindow):
                 padding: 6px 10px; font-size: 12px;
             }}
         """)
+        # 用户**手动**改地址后回查该选哪个服务商：填了自建网关地址，
+        # 下拉就不该还显示 DeepSeek（否则用户以为配置没生效）。
+        # 用 textEdited 而不是 textChanged —— 后者在代码里 setText
+        # （切换服务商时）也会触发，会造成下拉与地址互相打架。
+        self._ai_api_base_input.textEdited.connect(self._sync_provider_combo)
+
+        # 地址框建好之后再同步下拉，保证读的是输入框的权威值
+        self._sync_provider_combo()
         api_layout.addWidget(self._ai_api_base_input)
+
+        _https_hint = QLabel("🔒 必须使用 https:// —— API Key 放在请求头里，"
+                             "明文 http 会泄露")
+        _https_hint.setWordWrap(True)
+        _https_hint.setStyleSheet(
+            f"color: {self._c('text2')}; font-size: 10.5px;")
+        api_layout.addWidget(_https_hint)
 
         api_layout.addWidget(QLabel("API Key:"))
         self._ai_api_key_input = QLineEdit(self._ai_config.api_key)
@@ -2409,15 +2449,16 @@ class MainWindow(QMainWindow):
 
     def _on_add_favorite(self):
         if not self._input_path or not os.path.exists(self._input_path):
-            QMessageBox.information(self, "提示", "请先启动一个宠物!")
+            ask(self, "提示", "请先启动一个宠物!", dark=self._is_dark_mode)
             return
         favs = self.settings.favorites
         if any(f["path"] == self._input_path for f in favs):
-            QMessageBox.information(self, "提示", "已在收藏夹中 :)")
+            ask(self, "提示", "已在收藏夹中 :)", dark=self._is_dark_mode)
             return
         if len(favs) >= self.MAX_FAVORITES:
-            QMessageBox.information(self, "提示",
-                f"收藏夹已满!最多 {self.MAX_FAVORITES} 只宠物\n请先移除一些再添加")
+            ask(self, "提示",
+                f"收藏夹已满!最多 {self.MAX_FAVORITES} 只宠物\n请先移除一些再添加",
+                dark=self._is_dark_mode)
             return
         name = self.settings._path_to_name(self._input_path)
         favs.append({"path": self._input_path, "name": name})
@@ -2695,13 +2736,11 @@ class MainWindow(QMainWindow):
 
     def _on_delete_bead_creation(self, creation):
         name = creation.get("display_name") or creation.get("name", "")
-        reply = QMessageBox.question(
-            self, "删除作品",
-            f"确定要删除作品「{name}」吗?\n\n此操作不可撤销。",
-            QMessageBox.StandardButton.Yes | QMessageBox.StandardButton.No,
-            QMessageBox.StandardButton.No
-        )
-        if reply == QMessageBox.StandardButton.Yes:
+        reply = ask(self, "删除作品",
+                    f"确定要删除作品「{name}」吗?\n\n此操作不可撤销。",
+                    kind="question", dark=self._is_dark_mode,
+                    buttons=("yes", "no"), default="no")
+        if reply == "yes":
             for p in [creation.get("json_path", ""), creation.get("png_path", "")]:
                 if p and os.path.exists(p):
                     try:
@@ -2894,7 +2933,8 @@ class MainWindow(QMainWindow):
 
     def _on_start_pet(self):
         if not self._input_path:
-            QMessageBox.warning(self, "提示", "请先选择一张图片!")
+            ask(self, "提示", "请先选择一张图片!", kind="warning",
+                dark=self._is_dark_mode)
             return
 
         self._status.setText("正在处理...")
@@ -2983,7 +3023,8 @@ class MainWindow(QMainWindow):
                     self.settings.pet_image_path = prev_pet_path
                 except Exception:
                     pass
-            QMessageBox.critical(self, "错误", f"处理失败: {str(e)[:200]}\n\n已恢复上次的宠物状态。")
+            ask(self, "错误", f"处理失败: {str(e)[:200]}\n\n已恢复上次的宠物状态。",
+                kind="error", dark=self._is_dark_mode)
             self._status.setText("处理失败,已恢复")
             self._start_btn.setEnabled(True)
 
@@ -3812,7 +3853,8 @@ class MainWindow(QMainWindow):
         try:
             img = process_bead_image(path)
             if img is None:
-                QMessageBox.critical(self, "错误", "无法处理该图片,请换一张试试。")
+                ask(self, "错误", "无法处理该图片,请换一张试试。",
+                kind="error", dark=self._is_dark_mode)
                 self._status.setText("拼豆图转换失败")
                 return
             out_dir = os.path.join(os.path.expanduser("~"), ".desktop_pet", "images")
@@ -3830,7 +3872,8 @@ class MainWindow(QMainWindow):
             self._start_btn.setEnabled(True)
             self._status.setText(f"拼豆图已导入: {os.path.basename(path)} - 点击「启动 ToYu」开始")
         except Exception as e:
-            QMessageBox.critical(self, "错误", f"拼豆图处理失败: {str(e)[:200]}")
+            ask(self, "错误", f"拼豆图处理失败: {str(e)[:200]}",
+                kind="error", dark=self._is_dark_mode)
             self._status.setText("拼豆图转换失败")
 
     def closeEvent(self, event):
@@ -4121,6 +4164,51 @@ class MainWindow(QMainWindow):
                 color: {DARK};
             }}
         """
+
+    def _sync_provider_combo(self, *_args):
+        """按当前**输入框里的地址**反查该选中哪一项服务商。
+
+        打开 AI 页时要显示对的那一项 —— 上次配的是 Kimi，这次不能显示 DeepSeek；
+        用户手输了自建网关地址，就要落到「自定义」。
+
+        注意读的是**输入框的当前文本**而不是 self._ai_config.api_base ——
+        后者只有点保存才更新，用户刚敲进去的地址它还不知道（早先就是这里
+        读错来源，导致手输地址后下拉仍显示旧服务商）。
+        """
+        combo = getattr(self, "_ai_provider_combo", None)
+        if combo is None:
+            return
+        field = getattr(self, "_ai_api_base_input", None)
+        if field is not None:
+            cur_base = (field.text() or "").strip()
+        else:
+            # 构造期：输入框还没建好，先用配置里的值
+            cur_base = (self._ai_config.api_base or "").strip()
+        cur_base = cur_base.rstrip("/").lower()
+
+        idx = combo.count() - 1              # 默认「自定义（手动填写）」
+        for i, (_label, base, _model) in enumerate(AI_PROVIDERS):
+            if base.rstrip("/").lower() == cur_base:
+                idx = i
+                break
+        combo.blockSignals(True)
+        combo.setCurrentIndex(idx)
+        combo.blockSignals(False)
+
+    def _on_ai_provider_changed(self, index):
+        """切换服务商：自动填好地址与常用模型。
+
+        只覆盖「地址」和「模型」两项，**不动 API Key** —— 用户可能已经在
+        这里粘好了 key，切换服务商时清掉会很烦人。
+        选到「自定义」则完全不填，交给用户手输。
+        """
+        if index < 0 or index >= len(AI_PROVIDERS):
+            return
+        _label, base, model = AI_PROVIDERS[index]
+        if hasattr(self, "_ai_api_base_input"):
+            self._ai_api_base_input.setText(base)
+        if hasattr(self, "_ai_model_input"):
+            self._ai_model_input.setText(model)
 
     def _on_open_settings(self):
         """打开设置对话框"""

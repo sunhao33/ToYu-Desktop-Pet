@@ -26,7 +26,13 @@ def openai_tool_transport(config, max_tokens: int = DEFAULT_MAX_TOKENS,
     """返回一个可直接喂给 AgentLoop 的 transport。"""
 
     def call(messages: list[dict], schemas: list[dict]) -> ModelReply:
-        url = config.api_base.rstrip("/") + "/chat/completions"
+        # 走 AIConfig 的统一校验：自动补 https:// 协议，并拒绝明文 http
+        # （API Key 放在 Authorization 头里，明文传输会泄露）
+        try:
+            base = config.resolved_base()
+        except ValueError as exc:
+            raise TransportError(str(exc)) from exc
+        url = base + "/chat/completions"
         headers = {
             "Content-Type": "application/json",
             "Authorization": "Bearer %s" % config.api_key,

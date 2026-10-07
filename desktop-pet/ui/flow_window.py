@@ -19,7 +19,7 @@ from PyQt6.QtWidgets import (
     QFrame, QStackedWidget, QScrollArea, QCheckBox, QLineEdit
 )
 
-FOCUS_PRESETS = (25, 45, 60, 90)
+from ui.presets import FOCUS_PRESETS
 # 宠物区域：够看清动作即可，过高会把计时面板挤扁
 SPRITE_BOX = 118
 TIMER_MIN_HEIGHT = 268

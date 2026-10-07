@@ -12,6 +12,9 @@ from typing import Optional, Callable
 
 from PyQt6.QtCore import QObject, pyqtSignal
 
+# 允许走明文 http 的本机地址白名单（本地模型服务默认就是 http）
+from pet_engine.providers import LOCAL_HOSTS
+
 DEFAULT_SYSTEM_PROMPT = (
     "你是{name}，一个可爱的桌面宠物伴侣。"
     "你的性格：{personality}。"
@@ -52,6 +55,35 @@ class AIConfig:
         self.system_prompt = ""
         self.max_history = 30  # Max messages to keep in context
         self.temperature = 0.8
+
+    def resolved_base(self) -> str:
+        """规范化并校验 API 地址。
+
+        两件事：
+          1. 只填了主机名（如 api.deepseek.com/v1）时补上 https://
+          2. **拒绝明文 http**（本机回环除外）—— API Key 放在请求头里，
+             走 http 等于把它暴露在网络上
+
+        之所以放行本机回环：数据不出本机，没有中间人风险，而本地推理
+        服务（Ollama 等）默认就是 http。
+
+        返回规范化后的地址（不含结尾斜杠）；地址不合法时抛 ValueError。
+        """
+        base = (self.api_base or "").strip()
+        if not base:
+            raise ValueError("API 地址为空，请在设置里填写")
+        low = base.lower()
+        if low.startswith("http://"):
+            from urllib.parse import urlparse
+            host = (urlparse(base).hostname or "").lower()
+            if host not in LOCAL_HOSTS:
+                raise ValueError(
+                    "出于安全考虑，远程 API 地址必须使用 https://\n"
+                    "（明文 http 会让你的 API Key 在网络上暴露）\n"
+                    "本机地址（localhost / 127.0.0.1）不受此限制。")
+        elif not low.startswith("https://"):
+            base = "https://" + base.lstrip("/")
+        return base.rstrip("/")
 
     def get_system_prompt(self) -> str:
         """Get the system prompt with variables filled in."""
@@ -120,7 +152,8 @@ class AIWorker(QObject):
             import urllib.request
             import urllib.error
 
-            url = self._config.api_base.rstrip("/") + "/chat/completions"
+            # 走统一校验：补协议 + 拒绝明文 http（API Key 在请求头里）
+            url = self._config.resolved_base() + "/chat/completions"
             headers = {
                 "Content-Type": "application/json",
                 "Authorization": f"Bearer {self._config.api_key}",
