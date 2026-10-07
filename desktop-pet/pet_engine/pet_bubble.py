@@ -555,11 +555,17 @@ class ChatBubble(QWidget):
     """Chat input bubble — appears when clicking the pet, for AI conversations."""
 
     message_sent = pyqtSignal(str)  # Emits user input when sent
+    # 聊天窗口开/关。宠物据此冻结移动 —— 否则宠物边走、对话框跟着飘，
+    # 用户根本没法打字（每次都要重新瞄准输入框）。
+    chat_opened = pyqtSignal()
+    chat_closed = pyqtSignal()
 
     _RADIUS = 16
     _TAIL_H = 14
     _TAIL_W = 20
     _MARGIN = 10  # gap between window edge and painted bubble
+    # 打字时的最大高度（超过就滚动）
+    _MAX_HEIGHT = 300
 
     def __init__(self, pet_window=None):
         super().__init__(None)  # Top-level window
@@ -570,6 +576,7 @@ class ChatBubble(QWidget):
         self._is_visible = False
         self._drag_pos = None
         self._user_dragged = False  # True after user drags the bubble
+        self._frozen = False        # True while chat is open (不跟随宠物)
         self._paint_rect = QRectF()  # updated in paintEvent
         # 流式显示状态（打字机效果）
         self._stream_label = None
@@ -875,18 +882,31 @@ class ChatBubble(QWidget):
         """Show the chat bubble near the pet."""
         if not self._pet_window:
             return
+        already = self._is_visible
         self._is_visible = True
         self._user_dragged = False  # reset on show
         self.adjustSize()
         self._position_near_pet()
         self.show()
         self.raise_()
+        # 滚到最新一条 —— 之前只在「加消息」时滚动，重新打开对话框就停在
+        # 最上方，用户得手动往下拖才能看到刚才聊的内容。
+        # 延后一点执行：此刻布局还没结算，立刻取 maximum 会拿到 0。
+        QTimer.singleShot(0, self._scroll_to_bottom)
+        QTimer.singleShot(60, self._scroll_to_bottom)
         self._input.setFocus()
+        if not already:
+            self._frozen = True         # 打开期间不跟随宠物
+            self.chat_opened.emit()
 
     def hide_chat(self):
         """Hide the chat bubble."""
+        was = self._is_visible
         self._is_visible = False
+        self._frozen = False
         self.hide()
+        if was:
+            self.chat_closed.emit()
 
     def toggle(self):
         """Toggle chat visibility."""
@@ -909,6 +929,13 @@ class ChatBubble(QWidget):
         self.move(QPoint(x, y))
 
     def update_position(self):
-        """Re-sync position with pet window (only if not user-dragged)."""
+        """Re-sync position with pet window (only if not user-dragged).
+
+        聊天打开期间（_frozen）完全不跟随：宠物已被冻结，这里再跟随只会
+        引入额外抖动。真正需要跟随的场合是「气泡刚弹出、宠物还在动」
+        那一瞬，以及拖动宠物时。
+        """
+        if getattr(self, "_frozen", False):
+            return
         if self._is_visible and self._pet_window and not self._user_dragged:
             self._position_near_pet()

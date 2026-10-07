@@ -1,7 +1,7 @@
 {
-  "version": "v0.83.0",
-  "size": "67.4 MB",
-  "url": "https://github.com/sunhao33/ToYu-Desktop-Pet/releases/download/v0.83.0/ToYu_v0.83.0.zip",
+  "version": "v0.84.0",
+  "size": "67.5 MB",
+  "url": "https://github.com/sunhao33/ToYu-Desktop-Pet/releases/download/v0.84.0/ToYu_v0.84.0.zip",
   "external": true,
   "_说明": "部署前把 url 改成真实下载地址（推荐 GitHub Releases 直链或对象存储 CDN）。url 为空时页面显示『下载通道准备中』而不是报错。",
   "noteEmpty": "下载通道准备中。可先在线体验下面的功能，或通过源码仓库自行构建。",

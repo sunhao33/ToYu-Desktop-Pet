@@ -72,6 +72,9 @@ class PetWindow(QMainWindow):
 
         self._taskbar_info = get_taskbar_info()
         self._sprite_bottom_offset = 0
+        # 窗口两侧的透明内边距（_update_window_size 里按 sprite 实际宽度重算）
+        self._sprite_left_offset = 0
+        self._sprite_right_offset = 0
         self.physics = PetPhysics(
             QApplication.primaryScreen().geometry(),
             (128, 128),
@@ -154,6 +157,10 @@ class PetWindow(QMainWindow):
         self._typing = None
         self._chat_bubble = ChatBubble(self)
         self._chat_bubble.message_sent.connect(self._on_ai_message)
+        # 聊天期间冻结宠物移动：否则宠物边走、对话框跟着飘，用户没法打字
+        self._chat_bubble.chat_opened.connect(self._freeze_for_chat)
+        self._chat_bubble.chat_closed.connect(self._unfreeze_after_chat)
+        self._frozen_mode_before_chat = None
 
         from pet_engine.pet_proactive import ProactiveSystem
         self._proactive = ProactiveSystem(self._ai)
@@ -538,9 +545,20 @@ class PetWindow(QMainWindow):
             sprite_h = int(self._pet_pixmap.height() * self._scale)
             sprite_bottom_in_window = sprite_cy_in_window + sprite_h // 2
             self._sprite_bottom_offset = h - sprite_bottom_in_window
+
+            # 水平方向同理：sprite 居中画在窗口里，两侧各有空白。
+            # 物理边界要扣掉这两段，宠物才真的能走到屏幕边。
+            sprite_w = int(self._pet_pixmap.width() * self._scale)
+            self._sprite_left_offset = max(0, (w - sprite_w) // 2)
+            self._sprite_right_offset = max(0, w - sprite_w - self._sprite_left_offset)
+
             self.physics.update_pet_size(
                 (w, h),
                 sprite_bottom_offset=self._sprite_bottom_offset
+            )
+            self.physics.update_sprite_horizontal_offsets(
+                left=self._sprite_left_offset,
+                right=self._sprite_right_offset,
             )
             # 窗口尺寸变了必须重新钳制：换宠物图或改缩放后窗口会变大，
             # 原来合法的位置可能把宠物顶到屏幕外（宠物会"消失"在任务栏下方）
@@ -567,7 +585,15 @@ class PetWindow(QMainWindow):
         screen = QApplication.primaryScreen().geometry()
         taskbar_h = self._taskbar_info['height'] if self._taskbar_info else 0
         geo = self.geometry()
-        x = max(screen.x(), min(geo.x(), screen.x() + screen.width() - geo.width()))
+        # 水平边界要和 physics.step 用同一套算法，否则这里会把宠物又拽回
+        # 离屏幕 30px 的位置，把 physics 那边刚修好的贴边行为抵消掉。
+        left_off = max(0, min(getattr(self, "_sprite_left_offset", 0), geo.width() / 2.0))
+        right_off = max(0, min(getattr(self, "_sprite_right_offset", 0), geo.width() / 2.0))
+        min_x = int(screen.x() - left_off)
+        max_x = int(screen.x() + screen.width() - geo.width() + right_off)
+        if max_x < min_x:
+            min_x = max_x = screen.x()
+        x = max(min_x, min(geo.x(), max_x))
         max_y = screen.y() + screen.height() - taskbar_h - geo.height() + self._sprite_bottom_offset
         y = max(screen.y(), min(geo.y(), max_y))
         if x != geo.x() or y != geo.y():
@@ -770,6 +796,38 @@ class PetWindow(QMainWindow):
         else:
             self.set_scale(self._scale - 0.1)
         event.accept()
+
+    # ── 聊天期间冻结宠物 ─────────────────────────────────────
+    def _freeze_for_chat(self):
+        """打开对话框时让宠物停下并原地不动。
+
+        为什么要冻结：宠物一直在走，而对话框是贴着宠物定位的
+        （ChatBubble.update_position），于是窗口跟着飘，用户每打几个字
+        就要重新瞄准输入框。冻结后两边都定住，安心打字。
+
+        实现上借用状态机的 STAY 模式（它会把下次行动时间设为无穷），
+        同时停掉物理速度；关闭对话框时恢复用户原来的模式。
+        """
+        if getattr(self, "_frozen_mode_before_chat", None) is not None:
+            return                      # 已经冻结，别覆盖保存的原始模式
+        try:
+            self._frozen_mode_before_chat = self.state_machine.interaction_mode
+            self.state_machine.set_mode(InteractionMode.STAY)
+            self.state_machine.transition_to(PetState.IDLE)
+            self.physics.stop()
+        except Exception as exc:        # noqa: BLE001
+            print("[Chat] 冻结宠物失败（不影响对话）: %s" % exc)
+
+    def _unfreeze_after_chat(self):
+        """关闭对话框后恢复原来的互动模式。"""
+        prev = getattr(self, "_frozen_mode_before_chat", None)
+        if prev is None:
+            return
+        self._frozen_mode_before_chat = None
+        try:
+            self.state_machine.set_mode(prev)
+        except Exception as exc:        # noqa: BLE001
+            print("[Chat] 恢复互动模式失败: %s" % exc)
 
     def mouseDoubleClickEvent(self, event: QMouseEvent):
         """Double-click: open AI chat if enabled, otherwise add affection."""

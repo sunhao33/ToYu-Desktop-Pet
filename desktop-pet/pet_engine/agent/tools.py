@@ -174,6 +174,15 @@ def build_default_registry(main_window) -> ToolRegistry:
             main_window.start_focus_session(int(minutes))
         except RuntimeError:
             return "失败：计时组件已被销毁"
+        # 把这次时长写进长期记忆的 study.focus_duration。
+        # 原来只有「用户口头提到专注时长」才会记（memory_extract 的正则），
+        # 而**实际跑的那一段反而没记** —— 于是记忆里的偏好与真实使用
+        # 长期对不上，读出来的建议时长也就不可信。
+        # 这里在真正开始计时后补记一次，两个来源就一致了。
+        try:
+            main_window.remember_focus_duration(int(minutes))
+        except (AttributeError, RuntimeError):
+            pass
         return "已开始 %d 分钟专注计时（桌面右上角会出现计时小窗）" % int(minutes)
 
     reg.register(ToolSpec(

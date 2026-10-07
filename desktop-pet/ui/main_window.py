@@ -46,6 +46,12 @@ from ui.theme import ask
 from ui.tray_icon import TrayIcon
 from ui.screen_time_tracker import ScreenTimeTracker
 
+# 由"实际开始专注"写入 study.focus_duration 时，evidence 用这个前缀标记。
+# 它让这类**行为观测**能与用户明确表达的偏好区分开 —— 观测值可以随时间
+# 刷新，但不会覆盖用户亲口说的偏好（详见 remember_focus_duration）。
+_FOCUS_OBS_MARK = "（行为观测）用户开始了一段"
+
+
 class _ScaledLabel(QLabel):
     """QLabel that auto-scales its pixmap to fill width on resize."""
     def __init__(self, *args, **kwargs):
@@ -3166,6 +3172,70 @@ class MainWindow(QMainWindow):
         self._pomodoro_status.setText(f"每 {interval} 分钟提醒休息")
 
     # ── 计时控制（主页 / 心流窗口 / 悬浮小窗共用同一套逻辑）────
+    def remember_focus_duration(self, minutes):
+        """把一段专注的时长写进长期记忆（study.focus_duration）。
+
+        为什么需要：记忆里这个槽位原本只有一条来源 —— 用户在对话里口头
+        提到「我一般专注 45 分钟」（memory_extract 的正则）。而**真正跑的
+        那一段时长从来没被记录**，于是记忆里的偏好与真实使用长期不一致，
+        模型据此给的建议也就不可信。这里在计时真正开始后补记一次。
+
+        只记"可推断习惯"的时长：太短（<5 分钟）多半是随手试跑，
+        太长（>480 分钟）超出槽位允许范围，都不写。
+
+        写入走 parse_memory() 工厂，而不是自己拼 MemoryRecord —— 它会
+        自动做槽位校验（必须在受控表内）、值域校验与有效期计算，
+        避免绕过契约写入非法记忆。
+
+        只记"可推断习惯"的时长：太短（<5 分钟）多半是随手试跑，
+        太长（>480 分钟）超出槽位允许范围，都不写。
+
+        覆盖规则（关键）：MemoryStore.upsert 对同一槽位只在"新置信度
+        不低于旧值"时才覆盖。而按契约，无显性信号的记录会被保守封顶到
+        0.60，用户明确说过的（"我一般专注 50 分钟"）则是 0.90。
+        于是会出现：用户说过 50，实际一直跑 45，却**永远覆盖不掉**，
+        记忆与实际长期不一致 —— 这正是"记忆与计时对不上"的来源。
+
+        处理：观测值只在「槽位为空」或「旧值也是观测值」时写入，
+        不覆盖用户的明确表达（那是用户的意图，比行为统计更该尊重）。
+        """
+        minutes = int(minutes or 0)
+        if not (5 <= minutes <= 480):
+            return False
+        store = self._ensure_memory()
+        if store is None:
+            return False
+        try:
+            from pet_engine.agent.memory_contract import parse_memory
+            existing = store.get("study.focus_duration")
+            if existing is not None and not self._is_focus_observation(existing):
+                # 用户明确表达过偏好，保留它
+                return False
+            if existing is not None and int(existing.value or 0) == minutes:
+                return False            # 与上次观测相同，不必重写
+            evidence = "%s %d 分钟的专注" % (_FOCUS_OBS_MARK, minutes)
+            record, err = parse_memory(
+                {"slot_id": "study.focus_duration",
+                 "value": minutes,
+                 "confidence": 0.9,
+                 "evidence": evidence},
+                source_text=evidence)
+            if record is None:
+                print("[Memory] 专注时长未写入: %s" % err)
+                return False
+            return store.upsert(record) in ("added", "updated")
+        except Exception as exc:      # noqa: BLE001
+            print("[Memory] 记录专注时长失败: %s" % exc)
+            return False
+
+    @staticmethod
+    def _is_focus_observation(record):
+        """这条记忆是"行为观测"还是"用户明确表达"。"""
+        try:
+            return str(getattr(record, "evidence", "")).startswith(_FOCUS_OBS_MARK)
+        except Exception:             # noqa: BLE001
+            return False
+
     def start_focus_session(self, minutes):
         """开始一段专注倒计时，并按设置弹出悬浮小窗。"""
         timer = getattr(self, "_timer_widget", None)

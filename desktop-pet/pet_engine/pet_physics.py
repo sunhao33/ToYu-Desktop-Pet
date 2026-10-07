@@ -26,7 +26,8 @@ class PetPhysics:
     FRICTION = 0.95
 
     def __init__(self, screen_geometry: QRect, pet_size: tuple,
-                 taskbar_height: int = 0, sprite_bottom_offset: int = 0):
+                 taskbar_height: int = 0, sprite_bottom_offset: int = 0,
+                 sprite_left_offset: int = 0, sprite_right_offset: int = 0):
         self.screen = screen_geometry
         self.pet_width, self.pet_height = pet_size
         self.vx = 0.0
@@ -34,6 +35,12 @@ class PetPhysics:
         self.grounded = True
         self._taskbar_height = taskbar_height
         self._sprite_bottom_offset = sprite_bottom_offset
+        # 窗口两侧的空白（像素）。窗口比可见的宠物宽 —— sprite 是居中画在
+        # 窗口里的，实测窗口 220px 宽、sprite 可见范围只有 160px，两侧各
+        # 30px。原来水平边界按**窗口**算，于是宠物走到屏幕边时视觉上永远
+        # 差这 30px 就停住，看着像"没走到边"。
+        self._sprite_left_offset = sprite_left_offset
+        self._sprite_right_offset = sprite_right_offset
         self._ground_y = self._calc_ground_y()
 
     def _calc_ground_y(self):
@@ -61,6 +68,13 @@ class PetPhysics:
             self._taskbar_height = taskbar_height
         self._ground_y = self._calc_ground_y()
 
+    def update_sprite_horizontal_offsets(self, left: int = None, right: int = None):
+        """更新窗口两侧的空白量（换宠物图或改缩放后都要重算）。"""
+        if left is not None:
+            self._sprite_left_offset = left
+        if right is not None:
+            self._sprite_right_offset = right
+
     def update_pet_size(self, pet_size: tuple, sprite_bottom_offset: int = None):
         self.pet_width, self.pet_height = pet_size
         if sprite_bottom_offset is not None:
@@ -86,8 +100,19 @@ class PetPhysics:
         new_x = x + self.vx
         new_y = y + self.vy
 
-        min_x = self.screen.x()
-        max_x = self.screen.x() + self.screen.width() - self.pet_width
+        # 水平边界按**可见 sprite** 算，不是按窗口算。
+        # 窗口左右各有 sprite_left/right_offset 的空白，扣掉之后宠物的
+        # 可见边缘才真的能贴到屏幕边（实测原来是差 30px 停住）。
+        # 注意 offset 不能超过窗口宽的一半，否则 min_x > max_x 会让宠物
+        # 卡在错误位置，所以先夹一下。
+        half_w = self.pet_width / 2.0
+        left_off = max(0, min(self._sprite_left_offset, half_w))
+        right_off = max(0, min(self._sprite_right_offset, half_w))
+        min_x = self.screen.x() - left_off
+        max_x = (self.screen.x() + self.screen.width()
+                 - self.pet_width + right_off)
+        if max_x < min_x:               # 极窄屏兜底，避免反向区间
+            min_x = max_x = self.screen.x()
         min_y = self.screen.y()
         ground_y = self._ground_y
 

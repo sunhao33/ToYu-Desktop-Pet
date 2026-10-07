@@ -303,17 +303,60 @@ class TimerWidget(QWidget):
         layout.addStretch()
     
     def _set_preset(self, minutes):
-        """设置倒计时时长。
+        """设置倒计时时长（**真正重设**，不只是改输入框）。
 
         必须**同时**处理小时框：分钟框上限是 59，只设分钟框的话
         60 分钟会被截成 59 分钟、90 分钟也被截成 59 分钟
         （用户选了 90 分钟却只跑 59 分钟，且看不出哪里不对）。
+
+        还要清掉上一段的残留状态 —— 原来只改 spinbox 与显示，不动
+        _total_seconds / _remaining_seconds / _paused，于是：
+
+            跑过 25 分钟 -> 暂停 -> 要求 45 分钟
+
+        会走 _on_start 的「暂停继续」分支、沿用旧的 1500 秒：
+        输入框写着 45，实际只跑 25 分钟（已实测复现）。
+        AI 通过 start_focus(45) 进来时中同样的招 —— 这就是
+        「指定时长与计时对不上」的根源。
         """
         minutes = int(minutes)
+
+        # 1) 停掉正在跑的计时，清掉上一段的状态
+        try:
+            self._timer.stop()
+        except (AttributeError, RuntimeError):
+            pass
+        self._is_running = False
+        self._paused = False
+        self._remaining_seconds = 0
+        self._total_seconds = 0
+
+        # 2) 写入新的时长
         self._hour_spin.setValue(minutes // 60)
         self._min_spin.setValue(minutes % 60)
         self._sec_spin.setValue(0)
         self._update_display(minutes * 60)
+
+        # 3) 按钮与进度条回到「准备开始」的样子
+        for attr, enabled in (("_start_btn", True), ("_pause_btn", False)):
+            btn = getattr(self, attr, None)
+            if btn is not None:
+                try:
+                    btn.setEnabled(enabled)
+                except RuntimeError:
+                    pass
+        label = getattr(self, "_status_label", None)
+        if label is not None:
+            try:
+                label.setText("准备开始")
+            except RuntimeError:
+                pass
+        fill = getattr(self, "_progress_fill", None)
+        if fill is not None:
+            try:
+                fill.setFixedWidth(0)
+            except RuntimeError:
+                pass
     
     def _on_start(self):
         """开始计时，或从暂停处继续。

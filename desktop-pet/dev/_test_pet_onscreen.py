@@ -55,12 +55,25 @@ def allowed_bottom(pet):
 
 
 def check_on_screen(pet, label):
-    ok_x = pet.x() >= -5 and pet.x() + pet.width() <= screen.width() + 5
+    """检查**可见 sprite** 留在屏幕内。
+
+    注意口径：这里看的是可见 sprite，不是窗口本身。窗口比 sprite 宽一圈
+    （两侧各 _sprite_left/right_offset 的透明内边距），为了让宠物能真正
+    贴到屏幕边，窗口允许越界这么多 —— 窗口是透明、无边框、不抢焦点的，
+    越界部分什么也画不出来。若按窗口判，就等于要求"宠物必须离屏幕边
+    一段距离"，正是之前那个 30px 空隙的成因。
+    """
+    lo = getattr(pet, "_sprite_left_offset", 0)
+    ro = getattr(pet, "_sprite_right_offset", 0)
+    vis_left = pet.x() + lo
+    vis_right = pet.x() + pet.width() - ro
+    ok_x = vis_left >= screen.x() - 5 and vis_right <= screen.x() + screen.width() + 5
     bottom = pet_bottom(pet)
     limit = allowed_bottom(pet)
     check("%s 宠物在屏幕内" % label, ok_x and bottom <= limit + 8,
-          "窗口 (%d,%d) %dx%d  可见底边=%d  允许最大=%d"
-          % (pet.x(), pet.y(), pet.width(), pet.height(), bottom, limit))
+          "可见区 %d..%d (屏幕 %d..%d)  可见底边=%d  允许最大=%d"
+          % (vis_left, vis_right, screen.x(), screen.x() + screen.width(),
+             bottom, limit))
 
 
 s = SettingsManager()
