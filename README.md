@@ -65,6 +65,12 @@
 
 <img src="docs/screenshots/05-dark-mode.png" alt="深色模式" width="70%">
 
+<br><br>
+
+**设置** — 高级页内容较多，改用滚动区承载（原先溢出 200px 会挤在一起）
+
+<img src="docs/screenshots/06-settings-advanced.png" alt="设置 · 高级" width="40%">
+
 </div>
 
 ---

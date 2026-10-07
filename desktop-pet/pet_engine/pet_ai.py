@@ -41,9 +41,28 @@ class AIMessage:
     def to_dict(self):
         return {"role": self.role, "content": self.content}
 
+def _default_config_path():
+    """AI 配置的存放位置：%APPDATA%/ToYu/ai_config.json。
+
+    原来是**相对路径** "ai_config.json"，写到哪取决于"当前工作目录"：
+      · 从源码目录启动 -> 写进源码目录（API Key 就落在那儿）
+      · 打包后双击 exe -> 落在 exe 所在目录，而 Program Files 之类
+        位置通常没有写权限，于是保存**静默失败**，用户以为存了其实没存
+    项目里其它用户数据（focus_log / memory_store / metrics）都放
+    %APPDATA%/ToYu，这里跟它们保持一致。
+    """
+    base = os.environ.get("APPDATA") or os.path.expanduser("~")
+    return os.path.join(base, "ToYu", "ai_config.json")
+
+
 class AIConfig:
     """AI configuration stored locally."""
-    DEFAULT_PATH = "ai_config.json"
+
+    DEFAULT_PATH = _default_config_path()
+
+    # 旧版本用的相对路径。升级时要把里面的配置（**含 API Key**）
+    # 迁到新位置，否则用户会以为 key 丢了、要重新填一遍。
+    LEGACY_PATH = "ai_config.json"
 
     def __init__(self):
         self.enabled = False
@@ -110,11 +129,47 @@ class AIConfig:
             "max_history": self.max_history,
             "temperature": self.temperature,
         }
-        with open(path, "w", encoding="utf-8") as f:
-            json.dump(data, f, ensure_ascii=False, indent=2)
+        # 目标目录可能还不存在（%APPDATA%/ToYu 首次运行时没有）
+        parent = os.path.dirname(os.path.abspath(path))
+        if parent:
+            try:
+                os.makedirs(parent, exist_ok=True)
+            except OSError as exc:
+                print("[AIConfig] 创建配置目录失败: %s" % exc)
+        try:
+            with open(path, "w", encoding="utf-8") as f:
+                json.dump(data, f, ensure_ascii=False, indent=2)
+        except OSError as exc:
+            # 原来这里不报错，用户以为存上了其实没有 —— 明确打出来
+            print("[AIConfig] 保存失败（路径不可写？）%s: %s" % (path, exc))
+
+    def _migrate_legacy(self):
+        """把旧版留在「当前工作目录」的 ai_config.json 搬到新位置。
+
+        旧版 DEFAULT_PATH 是相对路径，配置会落在启动目录。升级后如果
+        不迁移，用户会发现 API Key「丢了」，得重新填一次。
+        """
+        try:
+            legacy = os.path.abspath(self.LEGACY_PATH)
+            target = os.path.abspath(self.DEFAULT_PATH)
+            if legacy == target or not os.path.exists(legacy):
+                return
+            if os.path.exists(target):
+                return                      # 新位置已有，不覆盖
+            import shutil
+            parent = os.path.dirname(target)
+            if parent:
+                os.makedirs(parent, exist_ok=True)
+            shutil.move(legacy, target)
+            print("[AIConfig] 已把配置迁移到 %s" % target)
+        except Exception as exc:            # noqa: BLE001
+            print("[AIConfig] 迁移旧配置失败（不影响使用）: %s" % exc)
 
     def load(self, path: str = None) -> bool:
         path = path or self.DEFAULT_PATH
+        if not os.path.exists(path):
+            # 新位置还没有，试试把旧的搬过来
+            self._migrate_legacy()
         if not os.path.exists(path):
             return False
         try:
