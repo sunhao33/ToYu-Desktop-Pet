@@ -1,10 +1,10 @@
 <div align="center">
-  <img src="docs/hero.png" alt="ToYu — 会盯进度的桌面学习智能体" width="820">
+  <img src="docs/hero.png" alt="ToYu 陪学 — 会盯进度的桌面学习智能体" width="820">
 </div>
 
 <div align="center">
 
-# ToYu
+# ToYu 陪学
 
 **会盯进度的桌面学习智能体**
 
