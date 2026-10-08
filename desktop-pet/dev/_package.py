@@ -90,8 +90,8 @@ def _skip_source(item: str) -> bool:
     return any(pat.lower() in lowered for pat in SKIP_PATTERNS)
 
 
-README = r"""ToYu 桌面土豆宠物 — 使用说明
-================================
+README = r"""ToYu · 会盯进度的桌面学习智能体 — 使用说明
+============================================
 
 【怎么启动】
 双击本文件夹里的 ToYu.exe 即可，不需要安装。

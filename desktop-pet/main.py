@@ -70,7 +70,7 @@ def main():
     app.setQuitOnLastWindowClosed(False)
     app.setWindowIcon(QIcon(_resource_path("resources/toyu_icon.ico")))
     app.setApplicationName("ToYu Desktop Pet")
-    app.setApplicationDisplayName("ToYu — 桌面土豆宠物")
+    app.setApplicationDisplayName("ToYu — 会盯进度的桌面学习智能体")
 
     from ui.main_window import MainWindow
     window = MainWindow()

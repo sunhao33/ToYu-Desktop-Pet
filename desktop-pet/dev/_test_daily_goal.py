@@ -67,7 +67,7 @@ cases = [
     ("Weixin.exe", "", False, "微信"),
     ("QQMusic.exe", "", False, "音乐"),
     ("Steam.exe", "", False, "游戏平台"),
-    ("ToYu.exe", "ToYu — 桌面土豆宠物", False, "本程序"),
+    ("ToYu.exe", "ToYu — 会盯进度的桌面学习智能体", False, "本程序"),
     ("", "", False, "空记录"),
 ]
 bad = []

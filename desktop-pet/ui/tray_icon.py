@@ -14,7 +14,7 @@ class TrayIcon(QSystemTrayIcon):
 
         icon = QIcon(get_default_pet_path())
         self.setIcon(icon)
-        self.setToolTip("ToYu — 桌面土豆宠物")
+        self.setToolTip("ToYu — 会盯进度的桌面学习智能体")
 
         self._build_menu()
         self.setVisible(True)

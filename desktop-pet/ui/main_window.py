@@ -567,7 +567,7 @@ class MainWindow(QMainWindow):
         return template.format(c=colors)
 
     def _init_ui(self):
-        self.setWindowTitle("ToYu · 桌面土豆宠物")
+        self.setWindowTitle("ToYu · 会盯进度的桌面学习智能体")
         self.setWindowIcon(QIcon(os.path.join(os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "resources", "toyu_icon.ico")))
         # 起始尺寸与最小尺寸：由实测内容需求决定（见 _apply_content_minimum_width）
         #   AI 页最宽最高：约 962×844（API 配置 + 性格设置 + 保存按钮）
@@ -617,7 +617,7 @@ class MainWindow(QMainWindow):
         title = QLabel("ToYu")
         title.setObjectName("headerTitle")
         title_layout.addWidget(title)
-        subtitle = QLabel("桌面土豆宠物  ·  像素伙伴")
+        subtitle = QLabel("会盯进度的桌面学习智能体  ·  像素伙伴")
         subtitle.setObjectName("headerSub")
         title_layout.addWidget(subtitle)
         logo_layout.addLayout(title_layout)
@@ -3112,7 +3112,7 @@ class MainWindow(QMainWindow):
         if not pix.isNull():
             self._drop_zone.show_pixmap(pix)
         self._start_btn.setEnabled(True)
-        self._status.setText("已恢复 ToYu - 默认土豆宠物")
+        self._status.setText("已恢复 ToYu - 默认宠物")
         self._pulse_timer.stop()
         self._pet_status.setText("")
         self._pet_status.setStyleSheet("")
