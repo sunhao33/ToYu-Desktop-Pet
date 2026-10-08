@@ -81,6 +81,25 @@ class PetPhysics:
             self._sprite_bottom_offset = sprite_bottom_offset
         self._ground_y = self._calc_ground_y()
 
+    def update_speed_range(self, low, high):
+        """按新的速度范围立刻调整**当前**行走速度。
+
+        速度范围本身不缓存在这里 —— 项目里 PetStateMachine 每次开走时都
+        从 settings.walking_speed_min/max 现读（见 pet_state_machine.py
+        的 _random_walk_speed 调用方），所以在 physics 里再存一份只会变成
+        没人读的死数据。
+
+        这里只解决一件事：宠物**正在走**的时候改速度，当前这一帧的 vx 不会
+        自己变，要等下一次状态切换才看得出效果。所以按新范围重算一次。
+        """
+        import random as _random
+        low, high = float(low), float(high)
+        if high < low:
+            low, high = high, low
+        if abs(self.vx) > 1e-6:       # 正在走 -> 立即换成新范围里的速度
+            new_speed = _random.uniform(low, high)
+            self.vx = new_speed if self.vx > 0 else -new_speed
+
     def apply_gravity(self):
         if not self.grounded:
             self.vy = min(self.vy + self.GRAVITY, self.TERMINAL_VELOCITY)

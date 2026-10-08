@@ -132,8 +132,8 @@ check("非列表输入不崩", parse_tool_calls({"weird": True}) == [])
 # 3. 工具注册表
 # ══════════════════════════════════════════════════════════
 reg = build_default_registry(None)
-# 第 1 批 6 个 + 第 2 批 3 个 + 第 3 批之后新增 1 个（学习报告）
-check("工具已注册（共 10 个）", len(reg) == 10,
+# 第 1 批 6 个 + 第 2 批 3 个 + 学习报告 1 个 + 改设置/切页 2 个（共 12）
+check("工具已注册（共 12 个）", len(reg) == 12,
       "实际 %d 个：%s" % (len(reg), reg.names()))
 expected_tools = {
     # 第 1 批
@@ -143,6 +143,8 @@ expected_tools = {
     "get_screen_time_detail", "add_calendar_note", "set_pet_behavior",
     # 后续新增
     "export_learning_report",
+    # 让 AI 能真正改动软件（原先只能查询，改设置无工具可用）
+    "set_preference", "switch_page",
 }
 check("工具名符合预期", set(reg.names()) == expected_tools, str(reg.names()))
 

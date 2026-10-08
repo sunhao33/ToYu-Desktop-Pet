@@ -84,9 +84,9 @@ def _fmt_duration(seconds):
     return "%d 秒" % seconds
 
 def _fmt_clock(seconds):
-    """计划项用时：紧凑的 时:分:秒 形式。"""
-    seconds = int(max(0, seconds))
-    return "%02d:%02d:%02d" % (seconds // 3600, (seconds % 3600) // 60, seconds % 60)
+    """计划项用时。格式化统一走 ui/time_format.py，避免多处写法不一致。"""
+    from ui.time_format import format_clock
+    return format_clock(seconds)
 
 class _PetStage(QLabel):
     """宠物可视化：直接从 PetWindow 取当前精灵图，跟随宠物状态实时更新。"""

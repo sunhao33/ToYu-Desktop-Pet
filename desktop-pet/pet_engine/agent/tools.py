@@ -19,6 +19,280 @@ _TODO_TEXT = {
     "maxLength": 200,
 }
 
+# 「参数不合法」的专用前缀。
+#
+# 为什么要和「失败」区分开：Runtime 用 `text.startswith("失败")` 判断工具
+# 是否失败，并据此累计"连续失败"次数，达到阈值就**熔断**该工具。
+# 但**参数写错**与**工具坏了**是两回事 —— 前者模型看到错误信息后能自己
+# 改对，后者才是真的没救。
+#
+# 不加区分的后果（已实测复现）：
+#     模型把「番茄钟改 0 分钟」当一次失败   -> 记 1 次
+#     接着改「601 分钟」又一次失败         -> 记 2 次，熔断
+#     再改「30 分钟」（完全合法）           -> ★ 被熔断拒绝，无法自我纠正
+#
+# 所以参数类错误用这个前缀，Runtime 见到它不计入熔断，只把错误信息回灌
+# 给模型重试 —— 与 schema 校验失败（arg_error）的既有处理保持一致。
+ARG_ERROR_PREFIX = "参数错误："
+
+
+# ── 偏好设置白名单 ───────────────────────────────────────────
+#
+# AI 能改哪些设置，**在这里一处收口**（同 slots.py 的思路：受控集合，
+# 模型不得自创）。每一项都带一个 apply()，负责"改完立即生效"。
+#
+# 为什么不用「free-form 键值对」：模型可以编出任何键名，写进 QSettings
+# 就是垃圾数据；而且自由键无法保证"改完界面真的跟着变"。
+#
+# 不放进白名单的（有意为之）：
+#   · 自动启动 auto_start      —— 涉及开机行为，风险高
+#   · 宠物坐标 pet_position    —— 用户拖出来的，不该被 AI 挪走
+#   · 收藏夹 / 历史等数据类     —— 不是"设置"
+class _Preference:
+    """一条可被 AI 修改的设置。"""
+
+    def __init__(self, apply_fn, describe, choices=""):
+        self.apply = apply_fn
+        self.describe = describe
+        self.choices = choices
+
+
+def _as_bool(value):
+    """把模型给的值解析成布尔。拿不准就抛错（不猜）。"""
+    v = str(value).strip().lower()
+    if v in ("on", "true", "1", "yes", "开", "开启", "打开", "是"):
+        return True
+    if v in ("off", "false", "0", "no", "关", "关闭", "否"):
+        return False
+    raise ValueError("要 on 或 off，收到「%s」" % value)
+
+
+def _as_int(value, low, high, unit=""):
+    """解析整数并夹在 [low, high]，越界直接报错而不是静默截断。"""
+    try:
+        n = int(float(str(value).strip()))
+    except (TypeError, ValueError):
+        raise ValueError("要一个数字，收到「%s」" % value)
+    if not (low <= n <= high):
+        raise ValueError("范围是 %d~%d%s，收到 %d" % (low, high, unit, n))
+    return n
+
+
+def _apply_theme(mw, value):
+    v = str(value).strip().lower()
+    if v in ("dark", "深色", "暗色", "night"):
+        want = True
+    elif v in ("light", "浅色", "亮色", "day"):
+        want = False
+    else:
+        raise ValueError("要 dark 或 light，收到「%s」" % value)
+    if bool(getattr(mw, "_is_dark_mode", False)) != want:
+        toggle = getattr(mw, "_toggle_dark_mode", None)
+        if not callable(toggle):
+            raise ValueError("主窗口不支持切换主题")
+        toggle()
+    return "深色" if want else "浅色"
+
+
+def _apply_pomodoro(mw, value):
+    on = _as_bool(value)
+    check = getattr(mw, "_pomodoro_enable_check", None)
+    if check is not None:
+        check.setChecked(on)          # 走界面信号，状态与提示文案一起更新
+    else:
+        mw.settings.pomodoro_enabled = on
+    updater = getattr(mw, "_update_pomodoro_status", None)
+    if callable(updater):
+        updater()
+    return "开启" if on else "关闭"
+
+
+def _apply_pomodoro_interval(mw, value):
+    mins = _as_int(value, 5, 600, " 分钟")
+    setter = getattr(mw, "_on_pomodoro_preset", None)
+    if callable(setter):
+        setter(mins)
+    else:
+        mw.settings.pomodoro_interval = mins
+    return "%d 分钟" % mins
+
+
+def _apply_eye_care(mw, value):
+    on = _as_bool(value)
+    hub = getattr(mw, "_tools_hub", None)
+    if hub is not None and getattr(hub, "eye_care", None) is not None:
+        hub.eye_care.set_enabled(on)
+        if on:
+            hub.eye_care.reset()      # 重新计时，避免立刻弹一条过期提醒
+        page = getattr(mw, "_desktop_tools_page", None)
+        refresher = getattr(page, "refresh_eye_care", None)
+        if callable(refresher):
+            refresher(hub.eye_care)
+    else:
+        mw.settings.eye_care_enabled = on
+    return "开启" if on else "关闭"
+
+
+def _apply_flow_mode(mw, value):
+    on = _as_bool(value)
+    active = bool(getattr(mw, "_flow_active", False))
+    if on and not active:
+        enter = getattr(mw, "enter_flow_mode", None)
+        if not callable(enter):
+            raise ValueError("主窗口不支持心流模式")
+        enter()
+    elif not on and active:
+        exit_fn = getattr(mw, "exit_flow_mode", None)
+        if not callable(exit_fn):
+            raise ValueError("主窗口不支持退出心流模式")
+        exit_fn()
+    return "开启" if on else "关闭"
+
+
+def _apply_pet_scale(mw, value):
+    pet = getattr(mw, "_pet", None)
+    if pet is None:
+        raise ValueError("宠物还没启动")
+    try:
+        cur = float(pet._scale)
+    except (AttributeError, TypeError, ValueError):
+        cur = 1.0
+    v = str(value).strip().lower()
+    # 先按"相对说法"折算，再校验范围（不再用 max/min 静默截断）
+    if v in ("bigger", "big", "大", "放大", "大一点"):
+        target = cur + 0.2
+    elif v in ("smaller", "small", "小", "缩小", "小一点"):
+        target = cur - 0.2
+    else:
+        try:
+            target = float(v)
+        except (TypeError, ValueError):
+            raise ValueError("要 0.5~2.0 的数字，或 bigger/smaller")
+
+    if not (0.5 <= target <= 2.0):
+        # 明确拒绝而不是静默截断：模型/用户说 2.1 却变成 2.0，
+        # 回读时对不上，也违背工具描述里承诺的范围语义。
+        raise ValueError("范围是 0.5~2.0，收到 %.2f" % target)
+    pet.set_scale(target)             # set_scale 内部会夹范围并持久化
+    return "%.1f 倍" % float(pet._scale)
+    if not (0.5 <= target <= 2.0):
+        # 明确拒绝而不是静默截断：模型/用户说 2.1 却变成 2.0，
+        # 回读时对不上，也违背工具描述里承诺的范围语义。
+        raise ValueError("范围是 0.5~2.0，收到 %.2f" % target)
+    pet.set_scale(target)             # set_scale 内部会夹范围并持久化
+    return "%.1f 倍" % float(pet._scale)
+
+
+def _apply_pet_speed(mw, value):
+    v = str(value).strip().lower()
+    table = {
+        "slow": (0.6, 1.4), "慢": (0.6, 1.4), "慢一点": (0.6, 1.4),
+        "normal": (1.2, 2.6), "中": (1.2, 2.6), "正常": (1.2, 2.6),
+        "fast": (2.0, 4.0), "快": (2.0, 4.0), "快一点": (2.0, 4.0),
+    }
+    if v not in table:
+        raise ValueError("要 slow / normal / fast")
+    lo, hi = table[v]
+    mw.settings.walking_speed_min = lo
+    mw.settings.walking_speed_max = hi
+    pet = getattr(mw, "_pet", None)
+    if pet is not None:
+        try:
+            pet.physics.update_speed_range(lo, hi)
+        except (AttributeError, RuntimeError):
+            pass                      # 运行中改速度失败不影响设置已保存
+    return {"slow": "慢", "normal": "中", "fast": "快"}[
+        {"慢": "slow", "慢一点": "slow", "中": "normal", "正常": "normal",
+         "快": "fast", "快一点": "fast"}.get(v, v)]
+
+
+def _apply_typing(mw, value):
+    on = _as_bool(value)
+    mw.settings.typing_enabled = on
+    pet = getattr(mw, "_pet", None)
+    if pet is not None:
+        try:
+            pet._typing_enabled = on
+        except (AttributeError, RuntimeError):
+            pass
+    return "开启" if on else "关闭"
+
+
+def _apply_house(mw, value):
+    on = _as_bool(value)
+    mw.settings.house_enabled = on
+    if on:
+        spawn = getattr(mw, "_spawn_house", None)
+        if callable(spawn) and getattr(mw, "_house", None) is None:
+            spawn()
+    else:
+        close = getattr(mw, "_close_house", None)
+        if callable(close):
+            close()
+    return "开启" if on else "关闭"
+
+
+def _apply_mini_timer(mw, value):
+    on = _as_bool(value)
+    mw.settings.mini_timer_enabled = on
+    if not on:
+        hide = getattr(mw, "hide_mini_timer", None)
+        if callable(hide):
+            hide()
+    return "开启" if on else "关闭"
+
+
+def _apply_daily_goal(mw, value):
+    mins = _as_int(value, 10, 1440, " 分钟")
+    ensure = getattr(mw, "_ensure_goal_tracker", None)
+    tracker = ensure() if callable(ensure) else getattr(mw, "_goal_tracker", None)
+    if tracker is None:
+        raise ValueError("目标模块不可用")
+    tracker.set_goal_minutes(mins)
+    refresh = getattr(mw, "_refresh_goal", None)
+    if callable(refresh):
+        refresh()
+    return "%d 分钟（%.1f 小时）" % (mins, mins / 60.0)
+
+
+_PREFERENCE_KEYS = {
+    "theme": _Preference(_apply_theme, "界面主题", "dark / light"),
+    "pomodoro": _Preference(_apply_pomodoro, "番茄钟总开关", "on / off"),
+    "interval": _Preference(_apply_pomodoro_interval,
+                            "番茄钟提醒间隔（分钟）", "5 ~ 600"),
+    "eye_care": _Preference(_apply_eye_care, "护眼提醒开关", "on / off"),
+    "flow": _Preference(_apply_flow_mode, "心流模式开关", "on / off"),
+    "scale": _Preference(_apply_pet_scale, "宠物大小",
+                         "0.5 ~ 2.0 或 bigger/smaller"),
+    "speed": _Preference(_apply_pet_speed, "宠物行走速度",
+                         "slow / normal / fast"),
+    "typing": _Preference(_apply_typing, "自动打字效果", "on / off"),
+    "house": _Preference(_apply_house, "像素小房子开关", "on / off"),
+    "mini": _Preference(_apply_mini_timer, "悬浮计时小窗开关", "on / off"),
+    "goal": _Preference(_apply_daily_goal, "每日学习目标（分钟）", "10 ~ 1440"),
+}
+
+# 工具 schema 里用的短键名 -> 上面完整键名。
+#
+# 为什么两套名字：schema 每次请求都要随 API 发送，enum 里每个名字都会
+# 被完整写一遍。用长键名（pomodoro_interval / daily_goal）时单这一个
+# 工具的 schema 就有 597 字符，占掉全部 12 个工具的近 1/6。
+# 短别名 + 描述里给一句对照表，语义不丢，体积明显下降。
+
+# 页面标签（与 main_window._PAGE_ORDER 一致）与工具子页映射
+_PAGE_LABELS = {
+    "pet": "宠物",
+    "ai": "AI",
+    "tools": "工具",
+    "settings": "宠物设置",
+}
+_TOOLS_SUB = {
+    "todo": 0,
+    "desktop": 1,
+    "data": 2,
+}
+
+
 class ToolRegistry:
     """工具注册表：注册、查询、生成 schema、分派执行。"""
 
@@ -471,6 +745,112 @@ def build_default_registry(main_window) -> ToolRegistry:
         },
         handler=export_learning_report,
         returns="报告正文（或导出结果与路径）",
+    ))
+
+    # ── 偏好设置：让 AI 真的能改软件 ─────────────────────────
+    #
+    # 为什么需要：原来 10 个工具全是"查询 / 业务操作"，**没有任何一个能改
+    # 设置**。用户说「打开深色模式」「番茄钟改成 45 分钟」时，模型只能嘴上
+    # 答应，软件毫无变化 —— 这就是"AI 改了但没落实到软件里"的根源。
+    #
+    # 设计要点（与项目既有的工程纪律一致）：
+    #   1. key 走**受控白名单**，模型不能自创键名（同 slots.py 的思路）
+    #   2. 改完**立即生效**：调用对应的界面/逻辑刷新，而不只是写 QSettings
+    #   3. 返回**改动后的真实值**：模型只能照实复述，不许编造成功
+    #   4. 危险项不进白名单（自动启动、宠物坐标等一概不开放）
+    def set_preference(key: str, value: str) -> str:
+        if main_window is None:
+            return "失败：主窗口不可用"
+        spec = _PREFERENCE_KEYS.get(key)
+        if spec is None:
+            # 用 ARG_ERROR_PREFIX 而不是"失败"：键名写错属于参数问题，
+            # 不该计入熔断（否则模型试错两次就再也改不了设置）
+            return "%s不支持的设置项「%s」。可用：%s" % (
+                ARG_ERROR_PREFIX, key, "、".join(sorted(_PREFERENCE_KEYS)))
+        try:
+            return spec.apply(main_window, value)
+        except ValueError as exc:
+            # 值不合法（越界/类型错/枚举外）—— 同样属于参数问题，让模型重试
+            return "%s设置「%s」的值不合法：%s" % (ARG_ERROR_PREFIX, key, exc)
+        except Exception as exc:      # noqa: BLE001 — 其余异常算真失败
+            return "失败：设置「%s」时出错（%s）" % (key, str(exc)[:80])
+
+    reg.register(ToolSpec(
+        name="set_preference",
+        description=(
+            "修改软件设置并立即生效（真改，不是聊天）。用户要求改动软件本身时用，"
+            "如「打开深色模式」「番茄钟改 45 分钟」「宠物走慢点」。布尔值用 on/off。"
+            "改完照实复述返回的实际值。"),
+        parameters={
+            "type": "object",
+            "properties": {
+                "key": {
+                    "type": "string",
+                    "enum": sorted(_PREFERENCE_KEYS),
+                },
+                "value": {
+                    "type": "string",
+                    "maxLength": 24,
+                },
+            },
+            "required": ["key", "value"],
+        },
+        handler=set_preference,
+        returns="改动结果与生效后的实际值",
+    ))
+
+    # ── 切换页面：让 AI 把界面带到用户面前 ───────────────────
+    def switch_page(page: str, tools_sub: str = "") -> str:
+        if main_window is None:
+            return "失败：主窗口不可用"
+        label = _PAGE_LABELS.get(page)
+        if label is None:
+            return "%s没有「%s」这个页面。可用：%s" % (
+                ARG_ERROR_PREFIX, page, "、".join(sorted(_PAGE_LABELS)))
+        if tools_sub and tools_sub not in _TOOLS_SUB:
+            # 原来这里静默忽略非法子页名然后照常切页，模型会以为"切到
+            # desktop 了"其实停在别的子页。明确报错让它改。
+            return "%s「%s」不是有效的工具子页。可用：%s" % (
+                ARG_ERROR_PREFIX, tools_sub, "、".join(sorted(_TOOLS_SUB)))
+        try:
+            # 主窗口可能被收起（悬浮小窗模式），先恢复出来
+            restore = getattr(main_window, "_restore_main_window", None)
+            if callable(restore):
+                try:
+                    restore()
+                except Exception:      # noqa: BLE001
+                    pass
+            sub = _TOOLS_SUB.get(tools_sub) if tools_sub else None
+            goto = getattr(main_window, "_goto_page", None)
+            if not callable(goto):
+                return "失败：主窗口不支持切页"
+            goto(label, tools_sub=sub)
+        except RuntimeError:
+            return "失败：主窗口已被销毁"
+        if sub is not None and tools_sub:
+            return "已切到「%s」页的「%s」" % (label, tools_sub)
+        return "已切到「%s」页" % label
+
+    reg.register(ToolSpec(
+        name="switch_page",
+        description=(
+            "把主窗口切到指定页面并置前。用户说「打开数据面板」「进心流模式」时用。"),
+        parameters={
+            "type": "object",
+            "properties": {
+                "page": {
+                    "type": "string",
+                    "enum": sorted(_PAGE_LABELS),
+                },
+                "tools_sub": {
+                    "type": "string",
+                    "enum": sorted(_TOOLS_SUB),
+                },
+            },
+            "required": ["page"],
+        },
+        handler=switch_page,
+        returns="是否成功切页",
     ))
 
     return reg

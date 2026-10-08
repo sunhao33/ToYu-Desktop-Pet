@@ -10,6 +10,7 @@ from PyQt6.QtWidgets import (
 )
 
 from ui.presets import FOCUS_PRESETS
+from ui.time_format import format_clock
 from ui.theme import ask, is_dark
 
 
@@ -41,9 +42,16 @@ COMPACT_MAX_HEIGHT = 340
 
 class TimerWidget(QWidget):
     """Countdown timer widget with pet notifications."""
-    
+
     timer_complete = pyqtSignal()
     started = pyqtSignal()
+    # 每过一秒发出一次，携带新的剩余秒数。
+    #
+    # 悬浮小窗原来自己跑一个 QTimer(1000) 去读 _remaining_seconds，
+    # 两个定时器各自独立启动、相位不同 —— 实测小窗恒定**慢 1 秒**
+    # （主窗口 00:02:59 时小窗还显示 03:00，50 次采样 49 次不一致）。
+    # 改成由本组件主动广播，小窗跟着这个信号刷新，两边必然同拍。
+    ticked = pyqtSignal(int)
     
     def __init__(self, parent=None):
         super().__init__(parent)
@@ -357,6 +365,11 @@ class TimerWidget(QWidget):
                 fill.setFixedWidth(0)
             except RuntimeError:
                 pass
+
+        # 4) 广播新时长，让跟随窗口（悬浮小窗）立刻跟上。
+        #    广播的是**新的总时长**而不是 0：此刻还没开始跑，
+        #    小窗应显示"准备中 + 新时长"，而不是留着上一段的旧数字。
+        self.ticked.emit(minutes * 60)
     
     def _on_start(self):
         """开始计时，或从暂停处继续。
@@ -398,6 +411,7 @@ class TimerWidget(QWidget):
 
         self._update_display(self._remaining_seconds)
         self._timer.start(1000)  # Update every second
+        self.ticked.emit(self._remaining_seconds)   # 立刻同步跟随窗口
         # 通知外部（主窗口据此弹出悬浮计时小窗）
         self.started.emit()
 
@@ -429,6 +443,7 @@ class TimerWidget(QWidget):
         
         self._update_display(0)
         self._progress_fill.setFixedWidth(0)
+        self.ticked.emit(0)          # 归零也要同步，否则小窗留着上一次的数字
     
     def _on_tick(self):
         """Called every second when timer is running."""
@@ -445,7 +460,8 @@ class TimerWidget(QWidget):
             
             self._update_display(0)
             self._progress_fill.setFixedWidth(self._progress_bar.width())
-            
+
+            self.ticked.emit(0)        # 先广播新值，再通知结束
             self.timer_complete.emit()
         else:
             self._update_display(self._remaining_seconds)
@@ -454,14 +470,16 @@ class TimerWidget(QWidget):
                 progress = 1 - (self._remaining_seconds / self._total_seconds)
                 bar_width = int(progress * self._progress_bar.width())
                 self._progress_fill.setFixedWidth(bar_width)
+
+            # 广播给跟随显示的窗口（悬浮小窗）。放在最后：
+            # 此时 _remaining_seconds 与主显示都已更新，订阅方读到的必然一致。
+            self.ticked.emit(self._remaining_seconds)
     
     def _update_display(self, seconds):
         """Update the time display."""
-        hours = seconds // 3600
-        minutes = (seconds % 3600) // 60
-        secs = seconds % 60
-        
-        time_str = f"{hours:02d}:{minutes:02d}:{secs:02d}"
+        # 格式化统一走 ui/time_format.py：与悬浮小窗、心流窗口同一实现，
+        # 不会出现"同一个数在不同窗口写成两种样子"。
+        time_str = format_clock(seconds)
         self._time_display.setText(time_str)
         
         if seconds <= 10 and seconds > 0:

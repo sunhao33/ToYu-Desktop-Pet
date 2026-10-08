@@ -1,4 +1,4 @@
-"""Settings dialog for YoTu desktop pet."""
+"""Settings dialog for ToYu — 会盯进度的桌面学习智能体。"""
 
 from PyQt6.QtCore import Qt, pyqtSignal
 from PyQt6.QtGui import QColor, QFont
@@ -562,10 +562,13 @@ class SettingsDialog(QDialog):
         about_layout = QVBoxLayout(about_group)
 
         about_text = QLabel(
-            "🥔 ToYu 桌面智能体 %s\n"
-            "一只住在桌面上的像素宠物，内核是一套完整的智能体运行时\n\n"
-            "功能：多步工具调用 · 长期记忆 · 学习统计与报告\n"
-            "　　　专注计时与心流模式 · 待办与日历 · 像素创作 · 好感度系统\n"
+            "🥔 ToYu %s\n"
+            "会盯进度的桌面学习智能体\n\n"
+            "它从屏幕时间里实测你的有效学习时长，盯着每日目标，到点提醒、欠账补上。\n"
+            "外壳是一只住在桌面上的像素宠物，内核是一套完整的智能体运行时。\n\n"
+            "能力：本机 10 个工具 · 最多自主执行 5 轮 · 20 个受控记忆槽位\n"
+            "　　　学习报告与统计 · 专注计时与心流模式 · 待办与日历 · 像素创作\n"
+            "原则：不该用模型的地方不用 · 不信模型自报的数 · 出问题不拖垮主流程\n\n"
             "数据存储：~/.desktop_pet/ 与 %%APPDATA%%/ToYu/（全部留在本机）"
             % _app_version()
         )

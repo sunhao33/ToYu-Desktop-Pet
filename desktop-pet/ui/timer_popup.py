@@ -184,10 +184,9 @@ class TodoTimerPopup(QWidget):
     def _tick(self):
         if self._running and not self._paused:
             self._elapsed += 1
-            h = self._elapsed // 3600
-            m = (self._elapsed % 3600) // 60
-            s = self._elapsed % 60
-            self._time_label.setText(f"{h:02d}:{m:02d}:{s:02d}")
+            # 格式化统一走 ui/time_format.py，不与其它计时窗口各写一套
+            from ui.time_format import format_clock
+            self._time_label.setText(format_clock(self._elapsed))
 
     def _on_pause(self):
         self._paused = not self._paused

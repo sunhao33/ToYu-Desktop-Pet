@@ -24,16 +24,10 @@ HEIGHT = 150
 CORNER = 18
 RING = 74
 
-def _clock(seconds):
-    seconds = int(max(0, seconds))
-    return "%02d:%02d:%02d" % (seconds // 3600, (seconds % 3600) // 60, seconds % 60)
-
-def _compact(seconds):
-    """剩余时间不足 1 小时时用 mm:ss，更醒目。"""
-    seconds = int(max(0, seconds))
-    if seconds >= 3600:
-        return _clock(seconds)
-    return "%02d:%02d" % (seconds // 60, seconds % 60)
+# 时长格式化统一走 ui/time_format.py —— 原来这里自带 _clock/_compact，
+# 与主计时器的格式不同（00:25:00 vs 25:00），看着像"计时不同步"。
+from ui.time_format import format_clock as _clock          # noqa: E402
+from ui.time_format import format_compact as _compact      # noqa: E402
 
 class MiniTimerWindow(QWidget):
     """圆角矩形悬浮计时窗。"""
@@ -63,9 +57,40 @@ class MiniTimerWindow(QWidget):
         self._build_ui()
         self._restore_position()
 
+        # 自己不跑秒定时器：改为**跟随主计时器的 tick**。
+        #
+        # 原来这里也是 QTimer(1000)，与 TimerWidget 的 QTimer(1000) 各自
+        # 独立启动、相位不同 —— 实测小窗恒定**慢 1 秒**（主窗口显示
+        # 00:02:59 时小窗还停在 03:00，50 次采样 49 次不一致）。
+        # 现在主计时器每秒广播 ticked，这里订阅它，两边必然同拍。
         self._timer = QTimer(self)
         self._timer.timeout.connect(self._tick)
+        # 仍保留一个低频兜底：小窗在"计划项计时"（countup）等不由
+        # TimerWidget 驱动的模式下也能刷新；间隔放长，不与主计时器争相位。
         self._timer.start(1000)
+        self._bind_timer_source()
+
+    def _bind_timer_source(self):
+        """订阅主计时器的秒广播（拿不到就退回自己的定时器）。"""
+        timer = getattr(self._main, "_timer_widget", None)
+        if timer is None:
+            return
+        signal = getattr(timer, "ticked", None)
+        if signal is None:
+            return
+        try:
+            signal.connect(self._on_source_tick)
+            self._follows_main_timer = True
+        except (TypeError, RuntimeError):
+            self._follows_main_timer = False
+
+    def _on_source_tick(self, _remaining=None):
+        """主计时器每跳一秒就刷新一次 —— 只刷倒计时模式。"""
+        if self._mode == "countdown":
+            try:
+                self._tick_countdown()
+            except RuntimeError:
+                pass
 
     # ── 界面 ────────────────────────────────────────────────
     def _build_ui(self):
@@ -177,7 +202,20 @@ class MiniTimerWindow(QWidget):
         self._stop_cb = stop
         self._title_label.setText(title)
         self._apply_theme()
+        # 倒计时模式由主计时器的 ticked 驱动，这里就关掉自己的秒定时器，
+        # 避免两个来源各刷一次、相位不同又把 1 秒偏差带回来。
+        self._sync_tick_source()
         self._tick()          # 立刻按真实状态同步按钮文案，不用等下一秒
+
+    def _sync_tick_source(self):
+        """倒计时模式停掉自带定时器（跟随主计时器），其余模式才用它。"""
+        try:
+            if getattr(self, "_follows_main_timer", False) and self._mode == "countdown":
+                self._timer.stop()
+            elif not self._timer.isActive():
+                self._timer.start(1000)
+        except RuntimeError:
+            pass
 
     # ── 位置 ────────────────────────────────────────────────
     def _restore_position(self):
@@ -235,7 +273,10 @@ class MiniTimerWindow(QWidget):
         # 紧急提示要走 accent 而不是 full_color：ProgressRing 只在
         # ratio >= 1 时才用 full_color，而倒计时最后 10 秒 ratio 必然 < 1，
         # 传 full_color 等于永远不生效（"最后 10 秒变红"从未出现）。
-        self._ring.set_state(ratio, _compact(remaining),
+        # 主读数用 format_clock（HH:MM:SS），与软件内计时器**完全一致**：
+        # 原来这里是 _compact（25:00），主窗口是 00:25:00，同一个数看着不一样。
+        # 副标题那行空间小，才用 _compact。
+        self._ring.set_state(ratio, _clock(remaining),
                              "#E05A4F" if urgent else accent, track, fg)
 
         if remaining <= 0 and not running:
@@ -248,7 +289,7 @@ class MiniTimerWindow(QWidget):
         elif running:
             self._state_label.setText("专注中")
             self._detail_label.setText("剩余 %s / 共 %s"
-                                       % (_compact(remaining), _compact(total)))
+                                       % (_clock(remaining), _clock(total)))
             self._pause_btn.setText("⏸ 暂停")
             self._paused = False
         else:

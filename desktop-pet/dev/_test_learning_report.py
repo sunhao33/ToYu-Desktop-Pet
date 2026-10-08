@@ -637,7 +637,8 @@ finally:
 
 # AI 工具
 reg = mw._tool_registry
-check("工具数增至 10", len(reg) == 10, "%d 个：%s" % (len(reg), reg.names()))
+check("工具数增至 12（含改设置与切页）", len(reg) == 12,
+      "%d 个：%s" % (len(reg), reg.names()))
 spec = reg.get("export_learning_report")
 check("报告工具已注册", spec is not None)
 if spec is not None:

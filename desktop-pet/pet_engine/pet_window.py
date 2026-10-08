@@ -994,6 +994,12 @@ class PetWindow(QMainWindow):
     def _check_pomodoro(self):
         if not self.settings.pomodoro_enabled:
             return
+        # 专注倒计时正在跑时不弹番茄提醒：那段时间本来就是一个完整的工作段，
+        # 中途插一句"该休息了"会和用户自己设的时长直接冲突（反馈里的
+        # 「番茄钟也和本身的计时功能有冲突」）。倒计时结束时会由它自己
+        # 提醒休息，不需要番茄钟再插一脚。
+        if self._focus_timer_running():
+            return
         interval_seconds = self.settings.pomodoro_interval * 60
         if interval_seconds <= 0:
             return
@@ -1001,6 +1007,26 @@ class PetWindow(QMainWindow):
         now = time.time()
         if now - last >= interval_seconds:
             self._fire_pomodoro()
+
+    def _focus_timer_running(self):
+        """主倒计时是否正在跑。
+
+        用**注入的回调**取状态，而不是直接摸主窗口：PetWindow 只通过
+        set_bubble_callbacks / set_focus_timer_probe 之类的接口与主窗口
+        通信，没有 _main_window 属性（早期版本里我误以为有）。
+        回调缺失时一律返回 False —— 独立跑 PetWindow 的测试不受影响。
+        """
+        cb = getattr(self, "_focus_timer_probe", None)
+        if cb is None:
+            return False
+        try:
+            return bool(cb())
+        except Exception:      # noqa: BLE001
+            return False
+
+    def set_focus_timer_probe(self, probe):
+        """注入"主倒计时是否在跑"的查询回调（由主窗口在创建宠物后调用）。"""
+        self._focus_timer_probe = probe
 
     def _fire_pomodoro(self):
         self.settings.pomodoro_last_fired = time.time()

@@ -146,11 +146,25 @@ class ToolRuntime(QObject):
                               content="调用工具「%s」的参数不对：%s" % (name, exc))
 
         text = "" if output is None else str(output)
-        ok = not text.startswith("失败")
-        if not ok:
-            self._bump_failure(name)
-        else:
+
+        # 参数类错误与"工具坏了"要分开计数。
+        #
+        # 熔断的本意是"这个工具连着几次都不成功，别再死循环"。
+        # 但**参数写错**属于模型自己的问题，把错误信息回灌后它下一轮就能
+        # 改对；如果也计入熔断，模型试错两次后连合法调用都会被拒，
+        # 反而没法自我纠正（实测：改「0 分钟」+「601 分钟」两次非法值后，
+        # 再改「30 分钟」这种完全合法的值也被熔断挡掉）。
+        #
+        # 这里与 schema 校验失败（req.arg_error）的处理保持一致：
+        # 都是 ok=False 但不累计失败次数。
+        from pet_engine.agent.tools import ARG_ERROR_PREFIX
+        is_arg_error = text.startswith(ARG_ERROR_PREFIX)
+
+        ok = not text.startswith("失败") and not is_arg_error
+        if ok:
             self._fail_streak[name] = 0
+        elif not is_arg_error:
+            self._bump_failure(name)
         return ToolResult(call_id=req.call_id, name=name, ok=ok,
                           content=text or "（工具没有返回内容）",
                           error="" if ok else text)

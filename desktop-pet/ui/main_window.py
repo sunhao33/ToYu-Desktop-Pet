@@ -291,6 +291,12 @@ class MainWindow(QMainWindow):
         self._flow_active = False
         self._flow_window = None          # 心流模式是一个独立的顶层窗口
         self._mini_timer = None           # 悬浮计时小窗
+        # 提醒气泡的统一出口：倒计时结束 / 番茄钟休息 / 护眼提醒三个来源
+        # 共用它排队显示，避免同时到点时气泡叠在一起。
+        # 用回调取宠物而不是持有引用 —— 宠物会被销毁重建。
+        from ui.reminder_notify import ReminderNotifier
+        self._reminder = ReminderNotifier()
+        self._reminder.set_pet_getter(lambda: self._pet)
         # 懒加载组件显式置空：它们原来只在宠物**启动成功**后才被创建，
         # 而 AI 页的按钮（如「全部忘掉」）从程序一打开就能点 ——
         # 属性不存在时会抛 AttributeError 冲出 Qt 槽（可能终止进程），
@@ -2804,20 +2810,43 @@ class MainWindow(QMainWindow):
         self._desktop_tools_page.refresh_clipboard(self._tools_hub.clipboard.history)
         self._desktop_tools_page.refresh_eye_care(self._tools_hub.eye_care)
 
+    def _focus_timer_active(self):
+        """主倒计时是否正在跑（给宠物查，用于番茄钟避让）。"""
+        timer = getattr(self, "_timer_widget", None)
+        if timer is None:
+            return False
+        try:
+            return bool(timer.get_is_running())
+        except (RuntimeError, AttributeError):
+            return False
+
     def _on_tools_notify(self, kind, title, body):
         pet = self._pet if self._pet and self._pet.isVisible() else None
         if not pet:
             self._status.setText(f"{title} {body}")
             return
-        from pet_engine.pet_bubble import PomodoroNotificationBubble
-
-        bubble = PomodoroNotificationBubble(pet, title=title, subtitle=body)
-        bubble.show_near(pet)
-        setattr(self, f"_notify_bubble_{kind}", bubble)
+        # 统一出口：三个提醒源（倒计时 / 番茄钟 / 护眼）共用一套队列，
+        # 避免两个提醒同时到点时气泡叠在一起（反馈里的"严重冲突、
+        # 位置也不在一起"就是这个）。
+        shown = self._reminder.notify(title, body, kind=kind,
+                                      on_finish=self._on_reminder_finished)
+        if not shown and self._reminder.pending_count() >= 1 and pet is not None:
+            pass          # 已排队，等前一个淡出后自动显示
         if kind == "eye_rest":
             pet.trigger_dance(2.5)
         elif kind == "eye_resume":
             pet.trigger_sparkle_burst()
+
+    def _on_reminder_finished(self, kind):
+        """提醒气泡淡出后的小动作（不依赖气泡是否还在）。"""
+        pet = self._pet
+        if pet is None:
+            return
+        try:
+            if kind == "focus_done":
+                pet.trigger_dance(2.0)
+        except (RuntimeError, AttributeError):
+            pass
 
     def _on_page_switch(self, idx, label):
         """Switch page and enforce mutually exclusive tab highlighting."""
@@ -2980,6 +3009,9 @@ class MainWindow(QMainWindow):
             self._pet.start_accessory_brain(self.settings)
             self._pet.set_pet_image(processed_path)
             self._pet.set_scale(scale)
+            # 让宠物知道"主倒计时是否在跑"：番茄钟据此避让，
+            # 不在专注时段中途插一句"该休息了"（那会和用户设的时长冲突）
+            self._pet.set_focus_timer_probe(self._focus_timer_active)
             # 给宠物内置的 AI 伴侣注入工具能力（加待办 / 开计时 / 查学习数据）
             self._bind_agent_tools()
 
@@ -3343,12 +3375,11 @@ class MainWindow(QMainWindow):
                 except Exception as exc:  # noqa: BLE001
                     print("[Flow] 番茄记账失败: %s" % exc)
         if self._pet:
-            from pet_engine.pet_bubble import PomodoroNotificationBubble
-            self._timer_notif = PomodoroNotificationBubble(
-                title="⏰  时间到!",
-                subtitle="倒计时结束啦~"
-            )
-            self._timer_notif.show_near(self._pet)
+            # 走统一提醒出口（原来这里直接 new 一个气泡，漏传 pet_window，
+            # 与番茄钟/护眼的气泡各自定位，同时出现时位置不一致）
+            self._reminder.notify(
+                "⏰  时间到!", "倒计时结束啦~", kind="focus_done",
+                on_finish=self._on_reminder_finished)
         date = getattr(self, '_selected_chart_date', '')
         if date:
             self._refresh_charts_for_date(date)

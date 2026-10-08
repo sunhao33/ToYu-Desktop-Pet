@@ -1,13 +1,18 @@
 <div align="center">
-  <img src="docs/hero.png" alt="ToYu — 桌面土豆宠物 · 桌面智能体内核" width="820">
+  <img src="docs/hero.png" alt="ToYu — 会盯进度的桌面学习智能体" width="820">
 </div>
 
 <div align="center">
 
-**一只住在桌面上的像素宠物，内核是一套完整的 AI 智能体运行时**
+# ToYu
 
-它能调用本机工具、最多自主执行 5 轮、记住你的长期习惯 ——
+**会盯进度的桌面学习智能体**
+
+它从屏幕时间里**实测**你的有效学习时长，盯着每日目标，到点提醒、欠账补上 ——
 你说一句「帮我安排下周的复习计划」，它真的会去查记录、写待办、设目标。
+
+<sub>外壳是一只住在桌面上的像素宠物，内核是一套完整的 AI 智能体运行时：<br>
+本机 12 个工具 · 最多自主执行 5 轮 · 20 个受控记忆槽位</sub>
 
 [![Release](https://img.shields.io/github/v/release/sunhao33/ToYu-Desktop-Pet?color=C49A3C&label=release)](https://github.com/sunhao33/ToYu-Desktop-Pet/releases)
 [![Platform](https://img.shields.io/badge/platform-Windows%2010%2F11-5C3D1E)](#-快速开始)
@@ -51,7 +56,7 @@
 </td>
 <td width="50%">
 
-**AI 助手** — 对话、长期记忆、10 个本机工具调用
+**AI 助手** — 对话、长期记忆、12 个本机工具（能真改设置、能切页）
 
 <img src="docs/screenshots/04-ai-page.png" alt="AI 页面">
 
@@ -106,7 +111,7 @@
 
 | 能力 | 实现要点 |
 |---|---|
-| **多步工具调用** | **10 个**本机工具（待办 / 专注 / 统计 / 日历 / 报告 / 宠物行为）；最多 **5 轮**循环，每轮观察真实结果再决策 |
+| **多步工具调用** | **12 个**本机工具（待办 / 专注 / 统计 / 日历 / 报告 / 宠物行为 / **改设置** / **切页面**）；最多 **5 轮**循环，每轮观察真实结果再决策 |
 | **受控长期记忆** | **20 个槽位**（15 偏好 / 3 目标 / 2 事实）。不信模型自报的置信度 —— 从证据文本重新估算 |
 | **上下文注入** | 6 个优先级块的桌面状态，token 预算内自动裁剪 |
 | **线程安全执行** | Agent 循环在子线程，需要碰 Qt 的工具排队回主线程 |
@@ -198,7 +203,7 @@ python main.py
 │  智能体运行时  pet_engine/agent/                               │
 │    loop.py            多轮主循环 + 三条刹车                    │
 │    runtime.py         线程安全工具执行桥（子线程 → 主线程队列）  │
-│    tools.py           工具注册表（10 个本机工具）               │
+│    tools.py           工具注册表（12 个本机工具）               │
 │    protocol.py        工具调用契约（JSON Schema 强校验）        │
 │    context.py         上下文注入（6 优先级块 + token 预算）      │
 │    memory_store.py    长期记忆（20 受控槽位）                   │

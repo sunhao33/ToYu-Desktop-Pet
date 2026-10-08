@@ -1,4 +1,4 @@
-"""YoTu Code Audit — Walk through all major code paths"""
+"""ToYu Code Audit — Walk through all major code paths"""
 import sys, os, json, time, traceback
 sys.stdout.reconfigure(encoding='utf-8')
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -28,7 +28,7 @@ def warn(msg):
     ISSUES.append(f'WARN: {msg}')
 
 print("=" * 60)
-print("YoTu Code Audit")
+print("ToYu Code Audit")
 print("=" * 60)
 
 # ── 1. Import all modules ──
